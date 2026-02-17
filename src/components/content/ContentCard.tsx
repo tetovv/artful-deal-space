@@ -1,4 +1,5 @@
-import { ContentItem, contentTypeLabels } from "@/data/mockData";
+import { ContentItem } from "@/types";
+import { contentTypeLabels } from "@/data/mockData";
 import { Eye, Heart } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
