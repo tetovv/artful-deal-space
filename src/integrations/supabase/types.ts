@@ -46,48 +46,84 @@ export type Database = {
       }
       content_items: {
         Row: {
+          age_restricted: boolean | null
+          chapters: Json | null
           created_at: string
           creator_avatar: string | null
           creator_id: string | null
           creator_name: string
           description: string | null
+          geo: string | null
           id: string
+          language: string | null
           likes: number | null
+          monetization_type: string | null
+          pinned_comment: string | null
           price: number | null
+          price_min: number | null
+          scheduled_at: string | null
+          status: string
+          subtitles_url: string | null
           tags: string[] | null
           thumbnail: string | null
           title: string
           type: string
+          updated_at: string
+          video_url: string | null
           views: number | null
         }
         Insert: {
+          age_restricted?: boolean | null
+          chapters?: Json | null
           created_at?: string
           creator_avatar?: string | null
           creator_id?: string | null
           creator_name?: string
           description?: string | null
+          geo?: string | null
           id?: string
+          language?: string | null
           likes?: number | null
+          monetization_type?: string | null
+          pinned_comment?: string | null
           price?: number | null
+          price_min?: number | null
+          scheduled_at?: string | null
+          status?: string
+          subtitles_url?: string | null
           tags?: string[] | null
           thumbnail?: string | null
           title: string
           type: string
+          updated_at?: string
+          video_url?: string | null
           views?: number | null
         }
         Update: {
+          age_restricted?: boolean | null
+          chapters?: Json | null
           created_at?: string
           creator_avatar?: string | null
           creator_id?: string | null
           creator_name?: string
           description?: string | null
+          geo?: string | null
           id?: string
+          language?: string | null
           likes?: number | null
+          monetization_type?: string | null
+          pinned_comment?: string | null
           price?: number | null
+          price_min?: number | null
+          scheduled_at?: string | null
+          status?: string
+          subtitles_url?: string | null
           tags?: string[] | null
           thumbnail?: string | null
           title?: string
           type?: string
+          updated_at?: string
+          video_url?: string | null
           views?: number | null
         }
         Relationships: []
