@@ -18,6 +18,7 @@ import TrustRating from "./pages/TrustRating";
 import AIWorkspace from "./pages/AIWorkspace";
 import AdminPanel from "./pages/AdminPanel";
 import Auth from "./pages/Auth";
+import ResetPassword from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -38,6 +39,7 @@ const App = () => (
           <AuthProvider>
             <Routes>
               <Route path="/auth" element={<Auth />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/" element={<Protected><Home /></Protected>} />
               <Route path="/explore" element={<Protected><Explore /></Protected>} />
               <Route path="/product/:id" element={<Protected><ProductPage /></Protected>} />
