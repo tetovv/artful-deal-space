@@ -280,7 +280,7 @@ const Home = () => {
                   </div>
                   <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-7 divide-x divide-border">
                     {contentTypeOptions.map((ct) => (
-                      <button key={ct.type} onClick={() => navigate("/creator-studio")} className="flex flex-col items-center gap-2 py-5 hover:bg-muted/50 transition-colors group">
+                      <button key={ct.type} onClick={() => navigate("/creator-studio", { state: { openEditor: true, contentType: ct.type } })} className="flex flex-col items-center gap-2 py-5 hover:bg-muted/50 transition-colors group">
                         <ct.icon className={cn("h-6 w-6 transition-transform group-hover:scale-110", ct.color)} />
                         <span className="text-[11px] text-muted-foreground group-hover:text-foreground">{ct.label}</span>
                       </button>
