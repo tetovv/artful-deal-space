@@ -5,7 +5,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     <div className="flex flex-col min-h-screen w-full bg-background">
       <TopHeader />
       <main className="flex-1 overflow-x-hidden">
-        {children}
+        <div className="max-w-6xl mx-auto w-full">
+          {children}
+        </div>
       </main>
     </div>
   );
