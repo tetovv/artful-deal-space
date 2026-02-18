@@ -23,6 +23,8 @@ import Auth from "./pages/Auth";
 import ResetPassword from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
 import Library from "./pages/Library";
+import Authors from "./pages/Authors";
+import Subscriptions from "./pages/Subscriptions";
 
 const queryClient = new QueryClient();
 
@@ -46,6 +48,8 @@ const App = () => (
               <Route path="/" element={<Protected><Home /></Protected>} />
               <Route path="/explore" element={<Protected><Explore /></Protected>} />
               <Route path="/library" element={<Protected><Library /></Protected>} />
+              <Route path="/authors" element={<Protected><Authors /></Protected>} />
+              <Route path="/subscriptions" element={<Protected><Subscriptions /></Protected>} />
               <Route path="/product/:id" element={<Protected><ProductPage /></Protected>} />
               <Route path="/creator-studio" element={<Protected><CreatorStudio /></Protected>} />
               <Route path="/creator/:id" element={<Protected><CreatorProfile /></Protected>} />

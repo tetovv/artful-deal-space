@@ -1,4 +1,4 @@
-import { Home, Compass, Palette, Megaphone, Store, Shield, Brain, Settings, Bell, Sun, Moon, LogOut, Menu, X, User, ShoppingBag, Check, CheckCheck } from "lucide-react";
+import { Home, Compass, Palette, Megaphone, Store, Shield, Brain, Settings, Bell, Sun, Moon, LogOut, Menu, X, User, ShoppingBag, Check, CheckCheck, Users, Rss } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -26,8 +26,10 @@ interface NavItem {
 }
 
 const allNavItems: NavItem[] = [
-  { title: "Дашборд", url: "/", icon: Home },
-  { title: "Каталог", url: "/explore", icon: Compass },
+  { title: "Главная", titleCreator: "Дашборд", url: "/", icon: Home },
+  { title: "Каталог", url: "/explore", icon: Compass, roles: ["creator", "advertiser", "moderator"] },
+  { title: "Авторы", url: "/authors", icon: Users, roles: ["user"] },
+  { title: "Подписки", url: "/subscriptions", icon: Rss, roles: ["user"] },
   { title: "Студия", url: "/creator-studio", icon: Palette, roles: ["creator", "moderator"] },
   { title: "Предложения", url: "/ad-studio", icon: Megaphone, roles: ["advertiser", "creator", "moderator"] },
   { title: "Биржа", url: "/marketplace", icon: Store, roles: ["creator", "advertiser", "moderator"] },
@@ -66,9 +68,11 @@ export function TopHeader() {
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  const isRegularUser = !isCreator && !isAdvertiser && !isModerator;
   const visibleItems = allNavItems.filter((item) => {
     if (!item.roles) return true;
     if (isModerator) return true;
+    if (item.roles.includes("user")) return isRegularUser;
     return item.roles.some((r) =>
       r === "creator" ? isCreator : r === "advertiser" ? isAdvertiser : false
     );
