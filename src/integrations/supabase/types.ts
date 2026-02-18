@@ -205,6 +205,35 @@ export type Database = {
           },
         ]
       }
+      download_history: {
+        Row: {
+          content_id: string
+          downloaded_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          content_id: string
+          downloaded_at?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          content_id?: string
+          downloaded_at?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "download_history_content_id_fkey"
+            columns: ["content_id"]
+            isOneToOne: false
+            referencedRelation: "content_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       messages: {
         Row: {
           attachment: string | null
@@ -307,6 +336,78 @@ export type Database = {
           read?: boolean
           title?: string
           type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      playlist_items: {
+        Row: {
+          added_at: string
+          content_id: string
+          id: string
+          playlist_id: string
+          sort_order: number
+        }
+        Insert: {
+          added_at?: string
+          content_id: string
+          id?: string
+          playlist_id: string
+          sort_order?: number
+        }
+        Update: {
+          added_at?: string
+          content_id?: string
+          id?: string
+          playlist_id?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "playlist_items_content_id_fkey"
+            columns: ["content_id"]
+            isOneToOne: false
+            referencedRelation: "content_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "playlist_items_playlist_id_fkey"
+            columns: ["playlist_id"]
+            isOneToOne: false
+            referencedRelation: "playlists"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      playlists: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_public: boolean
+          thumbnail: string | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_public?: boolean
+          thumbnail?: string | null
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_public?: boolean
+          thumbnail?: string | null
+          title?: string
+          updated_at?: string
           user_id?: string
         }
         Relationships: []
@@ -467,6 +568,41 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      view_history: {
+        Row: {
+          content_id: string
+          id: string
+          total_seconds: number | null
+          user_id: string
+          viewed_at: string
+          watched_seconds: number | null
+        }
+        Insert: {
+          content_id: string
+          id?: string
+          total_seconds?: number | null
+          user_id: string
+          viewed_at?: string
+          watched_seconds?: number | null
+        }
+        Update: {
+          content_id?: string
+          id?: string
+          total_seconds?: number | null
+          user_id?: string
+          viewed_at?: string
+          watched_seconds?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "view_history_content_id_fkey"
+            columns: ["content_id"]
+            isOneToOne: false
+            referencedRelation: "content_items"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
