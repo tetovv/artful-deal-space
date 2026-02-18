@@ -19,7 +19,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 
 /* ── Types ── */
 interface Chapter {
@@ -106,10 +106,20 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
   const [isDraggingVideo, setIsDraggingVideo] = useState(false);
   const [isDraggingThumb, setIsDraggingThumb] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
-    basic: true, media: true, chapters: false, monetization: false, audience: false, schedule: false,
+    media: true, basic: false, chapters: false, monetization: false, audience: false, schedule: false,
   });
   const [isPlaying, setIsPlaying] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [videoProgress, setVideoProgress] = useState(0);
+  const [videoDuration, setVideoDuration] = useState(0);
+  const [videoVolume, setVideoVolume] = useState(100);
+  const [videoSpeed, setVideoSpeed] = useState(1);
+
+  const formatTime = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${sec.toString().padStart(2, "0")}`;
+  };
 
   const toggleSection = (key: string) => setExpandedSections((p) => ({ ...p, [key]: !p[key] }));
 
@@ -313,15 +323,16 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
         </div>
         {expandedSections[id] ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
       </button>
-      <AnimatePresence>
-        {expandedSections[id] && (
-          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }}>
-            <CardContent className="px-5 pb-5 pt-0 space-y-4">
-              {children}
-            </CardContent>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <div
+        className="grid transition-all duration-200 ease-in-out"
+        style={{ gridTemplateRows: expandedSections[id] ? "1fr" : "0fr" }}
+      >
+        <div className="overflow-hidden">
+          <CardContent className="px-5 pb-5 pt-0 space-y-4">
+            {children}
+          </CardContent>
+        </div>
+      </div>
     </Card>
   );
 
@@ -384,14 +395,85 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
               </div>
             ) : (
               <div className="space-y-3">
-                <div className="relative rounded-xl overflow-hidden bg-black aspect-video">
-                  <video ref={videoPreviewRef} src={videoPreviewUrl} className="w-full h-full object-contain" />
-                  <div className="absolute bottom-3 left-3 flex items-center gap-2">
+                <div className="relative rounded-xl overflow-hidden bg-black aspect-video group">
+                  <video
+                    ref={videoPreviewRef}
+                    src={videoPreviewUrl}
+                    className="w-full h-full object-contain"
+                    onTimeUpdate={() => {
+                      const v = videoPreviewRef.current;
+                      if (v && v.duration) setVideoProgress((v.currentTime / v.duration) * 100);
+                    }}
+                    onLoadedMetadata={() => {
+                      const v = videoPreviewRef.current;
+                      if (v) setVideoDuration(v.duration);
+                    }}
+                    onEnded={() => setIsPlaying(false)}
+                  />
+                  {/* Progress bar */}
+                  <div className="absolute bottom-12 left-0 right-0 px-3">
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      step={0.1}
+                      value={videoProgress}
+                      onChange={(e) => {
+                        const v = videoPreviewRef.current;
+                        if (v && v.duration) {
+                          v.currentTime = (Number(e.target.value) / 100) * v.duration;
+                          setVideoProgress(Number(e.target.value));
+                        }
+                      }}
+                      className="w-full h-1 accent-primary cursor-pointer appearance-none bg-white/30 rounded-full [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white"
+                    />
+                  </div>
+                  {/* Controls bar */}
+                  <div className="absolute bottom-3 left-3 right-3 flex items-center gap-2">
                     <Button size="icon" variant="secondary" className="h-8 w-8 rounded-full bg-black/60 hover:bg-black/80 text-white" onClick={togglePlay}>
                       {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
                     </Button>
-                    <Button size="sm" variant="secondary" className="h-8 rounded-full bg-black/60 hover:bg-black/80 text-white text-xs" onClick={captureFrame}>
-                      <ImageIcon className="h-3 w-3 mr-1" /> Захватить кадр
+                    {/* Time */}
+                    <span className="text-[11px] text-white/80 font-mono tabular-nums">
+                      {formatTime(videoPreviewRef.current?.currentTime || 0)} / {formatTime(videoDuration)}
+                    </span>
+                    <div className="flex-1" />
+                    {/* Volume */}
+                    <div className="flex items-center gap-1">
+                      <Button size="icon" variant="secondary" className="h-7 w-7 rounded-full bg-black/60 hover:bg-black/80 text-white"
+                        onClick={() => {
+                          const v = videoPreviewRef.current;
+                          if (v) { v.muted = !v.muted; setVideoVolume(v.muted ? 0 : v.volume * 100); }
+                        }}>
+                        {videoVolume === 0 ? <Music className="h-3 w-3" /> : <Music className="h-3 w-3" />}
+                      </Button>
+                      <input
+                        type="range" min={0} max={100} value={videoVolume}
+                        onChange={(e) => {
+                          const v = videoPreviewRef.current;
+                          const val = Number(e.target.value);
+                          if (v) { v.volume = val / 100; v.muted = val === 0; }
+                          setVideoVolume(val);
+                        }}
+                        className="w-16 h-1 accent-white cursor-pointer appearance-none bg-white/30 rounded-full [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white"
+                      />
+                    </div>
+                    {/* Speed */}
+                    <select
+                      value={videoSpeed}
+                      onChange={(e) => {
+                        const val = Number(e.target.value);
+                        setVideoSpeed(val);
+                        if (videoPreviewRef.current) videoPreviewRef.current.playbackRate = val;
+                      }}
+                      className="h-7 px-1.5 text-[11px] bg-black/60 text-white rounded-md border-0 cursor-pointer focus:ring-0"
+                    >
+                      {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((s) => (
+                        <option key={s} value={s}>{s}x</option>
+                      ))}
+                    </select>
+                    <Button size="sm" variant="secondary" className="h-7 rounded-full bg-black/60 hover:bg-black/80 text-white text-[11px]" onClick={captureFrame}>
+                      <ImageIcon className="h-3 w-3 mr-1" /> Кадр
                     </Button>
                   </div>
                   <Button size="icon" variant="secondary" className="absolute top-3 right-3 h-8 w-8 rounded-full bg-black/60 hover:bg-black/80 text-white"
