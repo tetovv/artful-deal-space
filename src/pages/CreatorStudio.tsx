@@ -271,7 +271,7 @@ const CreatorStudio = () => {
       {/* ─── MAIN AREA ─── */}
       <main className="flex-1 overflow-y-auto">
         {editorMode !== "none" ? (
-          <div className="p-6 lg:p-8 max-w-6xl mx-auto">
+          <div className="h-full">
             <VideoEditor
               editItem={editingItem}
               onClose={() => { setEditorMode("none"); setEditingItem(null); }}
@@ -583,91 +583,116 @@ const CreatorStudio = () => {
                   <p className="text-sm text-muted-foreground">Подробная статистика и динамика</p>
                 </div>
 
-                {/* Mini stats row */}
+                {/* Hero stats row with gradient cards */}
                 <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
                   {[
-                    { label: "Просмотры", value: fmtNum(totalViews), trend: "+12%" },
-                    { label: "Лайки", value: fmtNum(totalLikes), trend: "+8%" },
-                    { label: "ER", value: `${engagementRate}%`, trend: "+0.3%" },
-                    { label: "Публикации", value: String(myItems.length), trend: "+3" },
-                    { label: "Доход", value: `₽${fmtNum(totalRevenue + dealsEarned)}`, trend: "+15%" },
+                    { label: "Просмотры", value: fmtNum(totalViews), trend: "+12%", icon: Eye, gradient: "from-primary/15 to-primary/5", iconColor: "text-primary" },
+                    { label: "Лайки", value: fmtNum(totalLikes), trend: "+8%", icon: Heart, gradient: "from-destructive/15 to-destructive/5", iconColor: "text-destructive" },
+                    { label: "ER", value: `${engagementRate}%`, trend: "+0.3%", icon: TrendingUp, gradient: "from-warning/15 to-warning/5", iconColor: "text-warning" },
+                    { label: "Публикации", value: String(myItems.length), trend: "+3", icon: Package, gradient: "from-accent/15 to-accent/5", iconColor: "text-accent-foreground" },
+                    { label: "Доход", value: `₽${fmtNum(totalRevenue + dealsEarned)}`, trend: "+15%", icon: DollarSign, gradient: "from-success/15 to-success/5", iconColor: "text-success" },
                   ].map((s) => (
-                    <div key={s.label} className="rounded-lg border border-border bg-card p-3 text-center space-y-1">
-                      <p className="text-lg font-bold text-card-foreground">{s.value}</p>
-                      <p className="text-[11px] text-muted-foreground">{s.label}</p>
-                      <span className="text-[10px] text-success">{s.trend}</span>
-                    </div>
+                    <motion.div key={s.label} variants={fade}
+                      className={cn("rounded-xl border border-border bg-gradient-to-br p-4 space-y-3 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300", s.gradient)}>
+                      <div className="flex items-center justify-between">
+                        <div className="h-9 w-9 rounded-lg bg-background/80 backdrop-blur flex items-center justify-center shadow-sm">
+                          <s.icon className={cn("h-4 w-4", s.iconColor)} />
+                        </div>
+                        <span className="text-[11px] font-semibold text-success flex items-center gap-0.5 bg-success/10 px-1.5 py-0.5 rounded-md">
+                          <ArrowUpRight className="h-3 w-3" />{s.trend}
+                        </span>
+                      </div>
+                      <div>
+                        <p className="text-2xl font-bold text-card-foreground tracking-tight">{s.value}</p>
+                        <p className="text-xs text-muted-foreground">{s.label}</p>
+                      </div>
+                    </motion.div>
                   ))}
                 </div>
 
-                {/* Views & Likes */}
-                <Card>
-                  <CardHeader className="pb-2 pt-4 px-5">
+                {/* Main chart - Views & Likes */}
+                <Card className="overflow-hidden border-0 shadow-md">
+                  <CardHeader className="pb-1 pt-5 px-6 flex flex-row items-center justify-between">
                     <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                      <Eye className="h-4 w-4 text-primary" /> Динамика просмотров и лайков
+                      <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center">
+                        <Eye className="h-3.5 w-3.5 text-primary" />
+                      </div>
+                      Динамика просмотров и лайков
                     </CardTitle>
+                    <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                      <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-primary" /> Просмотры</span>
+                      <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-destructive" /> Лайки</span>
+                    </div>
                   </CardHeader>
-                  <CardContent className="px-5 pb-5">
-                    <ResponsiveContainer width="100%" height={260}>
+                  <CardContent className="px-6 pb-5 pt-2">
+                    <ResponsiveContainer width="100%" height={280}>
                       <AreaChart data={viewsChart}>
                         <defs>
                           <linearGradient id="vg2" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.25} />
-                            <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                            <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+                            <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                          </linearGradient>
+                          <linearGradient id="lg2" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="hsl(var(--destructive))" stopOpacity={0.2} />
+                            <stop offset="100%" stopColor="hsl(var(--destructive))" stopOpacity={0} />
                           </linearGradient>
                         </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                        <XAxis dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
-                        <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
-                        <Tooltip {...TT} />
-                        <Area type="monotone" dataKey="views" stroke="hsl(var(--primary))" fill="url(#vg2)" strokeWidth={2} name="Просмотры" />
-                        <Area type="monotone" dataKey="likes" stroke="hsl(var(--destructive))" fill="transparent" strokeWidth={2} strokeDasharray="4 4" name="Лайки" />
-                        <Legend wrapperStyle={{ fontSize: 11 }} />
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5} />
+                        <XAxis dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                        <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                        <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12, boxShadow: "0 8px 30px -12px hsl(var(--foreground) / 0.15)" }} />
+                        <Area type="monotone" dataKey="views" stroke="hsl(var(--primary))" fill="url(#vg2)" strokeWidth={2.5} dot={{ r: 4, fill: "hsl(var(--primary))", strokeWidth: 2, stroke: "hsl(var(--background))" }} name="Просмотры" />
+                        <Area type="monotone" dataKey="likes" stroke="hsl(var(--destructive))" fill="url(#lg2)" strokeWidth={2} dot={{ r: 3, fill: "hsl(var(--destructive))", strokeWidth: 2, stroke: "hsl(var(--background))" }} name="Лайки" />
                       </AreaChart>
                     </ResponsiveContainer>
                   </CardContent>
                 </Card>
 
-                {/* Revenue + Engagement */}
+                {/* Revenue + Engagement side by side */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  <Card>
-                    <CardHeader className="pb-2 pt-4 px-5">
+                  <Card className="overflow-hidden border-0 shadow-md">
+                    <CardHeader className="pb-1 pt-5 px-6">
                       <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                        <DollarSign className="h-4 w-4 text-success" /> Доходы
+                        <div className="h-7 w-7 rounded-lg bg-success/10 flex items-center justify-center">
+                          <DollarSign className="h-3.5 w-3.5 text-success" />
+                        </div>
+                        Доходы
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="px-5 pb-5">
-                      <ResponsiveContainer width="100%" height={220}>
-                        <BarChart data={revenueChart}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                          <XAxis dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
-                          <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
-                          <Tooltip {...TT} formatter={(v: number) => `₽${v.toLocaleString()}`} />
-                          <Bar dataKey="sales" fill="hsl(var(--success))" radius={[4, 4, 0, 0]} name="Продажи" />
-                          <Bar dataKey="deals" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} name="Сделки" />
-                          <Legend wrapperStyle={{ fontSize: 11 }} />
+                    <CardContent className="px-6 pb-5 pt-2">
+                      <ResponsiveContainer width="100%" height={240}>
+                        <BarChart data={revenueChart} barGap={4}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5} />
+                          <XAxis dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                          <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                          <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12, boxShadow: "0 8px 30px -12px hsl(var(--foreground) / 0.15)" }}
+                            formatter={(v: number) => `₽${v.toLocaleString()}`} />
+                          <Bar dataKey="sales" fill="hsl(var(--success))" radius={[6, 6, 0, 0]} name="Продажи" />
+                          <Bar dataKey="deals" fill="hsl(var(--primary))" radius={[6, 6, 0, 0]} name="Сделки" />
                         </BarChart>
                       </ResponsiveContainer>
                     </CardContent>
                   </Card>
 
-                  <Card>
-                    <CardHeader className="pb-2 pt-4 px-5">
+                  <Card className="overflow-hidden border-0 shadow-md">
+                    <CardHeader className="pb-1 pt-5 px-6">
                       <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                        <TrendingUp className="h-4 w-4 text-warning" /> Engagement & Аудитория
+                        <div className="h-7 w-7 rounded-lg bg-warning/10 flex items-center justify-center">
+                          <TrendingUp className="h-3.5 w-3.5 text-warning" />
+                        </div>
+                        Engagement & Аудитория
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="px-5 pb-5">
-                      <ResponsiveContainer width="100%" height={220}>
+                    <CardContent className="px-6 pb-5 pt-2">
+                      <ResponsiveContainer width="100%" height={240}>
                         <LineChart data={engagementChart}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                          <XAxis dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
-                          <YAxis yAxisId="l" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
-                          <YAxis yAxisId="r" orientation="right" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
-                          <Tooltip {...TT} />
-                          <Line yAxisId="l" type="monotone" dataKey="er" stroke="hsl(var(--warning))" strokeWidth={2} name="ER %" dot={{ r: 3 }} />
-                          <Line yAxisId="r" type="monotone" dataKey="subs" stroke="hsl(var(--primary))" strokeWidth={2} name="Подписчики" dot={{ r: 3 }} />
-                          <Legend wrapperStyle={{ fontSize: 11 }} />
+                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5} />
+                          <XAxis dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                          <YAxis yAxisId="l" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                          <YAxis yAxisId="r" orientation="right" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                          <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12, boxShadow: "0 8px 30px -12px hsl(var(--foreground) / 0.15)" }} />
+                          <Line yAxisId="l" type="monotone" dataKey="er" stroke="hsl(var(--warning))" strokeWidth={2.5} name="ER %" dot={{ r: 4, fill: "hsl(var(--warning))", strokeWidth: 2, stroke: "hsl(var(--background))" }} />
+                          <Line yAxisId="r" type="monotone" dataKey="subs" stroke="hsl(var(--primary))" strokeWidth={2} name="Подписчики" dot={{ r: 3, fill: "hsl(var(--primary))", strokeWidth: 2, stroke: "hsl(var(--background))" }} />
                         </LineChart>
                       </ResponsiveContainer>
                     </CardContent>
@@ -676,39 +701,48 @@ const CreatorStudio = () => {
 
                 {/* Pie + Categories */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                  <Card>
-                    <CardHeader className="pb-2 pt-4 px-5">
+                  <Card className="overflow-hidden border-0 shadow-md">
+                    <CardHeader className="pb-1 pt-5 px-6">
                       <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                        <PieChart className="h-4 w-4 text-primary" /> По типам
+                        <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center">
+                          <PieChart className="h-3.5 w-3.5 text-primary" />
+                        </div>
+                        По типам
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="px-5 pb-5">
+                    <CardContent className="px-6 pb-5 pt-2">
                       <ResponsiveContainer width="100%" height={220}>
                         <RePieChart>
-                          <Pie data={typePie} cx="50%" cy="45%" innerRadius={40} outerRadius={68} paddingAngle={3} dataKey="value"
+                          <Pie data={typePie} cx="50%" cy="45%" innerRadius={45} outerRadius={72} paddingAngle={4} dataKey="value" cornerRadius={4}
                             label={({ name, value }) => `${name}: ${value}`} labelLine={{ stroke: "hsl(var(--muted-foreground))", strokeWidth: 0.5 }}>
                             {typePie.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
                           </Pie>
-                          <Tooltip {...TT} />
+                          <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }} />
                         </RePieChart>
                       </ResponsiveContainer>
                     </CardContent>
                   </Card>
 
-                  <Card className="lg:col-span-2">
-                    <CardHeader className="pb-2 pt-4 px-5">
+                  <Card className="lg:col-span-2 overflow-hidden border-0 shadow-md">
+                    <CardHeader className="pb-1 pt-5 px-6">
                       <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                        <Flame className="h-4 w-4 text-warning" /> Топ категорий
+                        <div className="h-7 w-7 rounded-lg bg-warning/10 flex items-center justify-center">
+                          <Flame className="h-3.5 w-3.5 text-warning" />
+                        </div>
+                        Топ категорий
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="px-5 pb-5">
+                    <CardContent className="px-6 pb-5 pt-2">
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                         {topCategories.map((cat, i) => (
-                          <div key={cat.name} className="rounded-lg border border-border p-3 text-center space-y-1 hover:border-primary/20 transition-all">
-                            <span className="text-xs font-bold text-muted-foreground">#{i + 1}</span>
-                            <p className="text-sm font-semibold text-foreground leading-tight">{cat.name}</p>
-                            <div className="text-[11px] text-muted-foreground">
-                              <p>{fmtNum(cat.views)} просм. · {cat.count} публ.</p>
+                          <div key={cat.name} className="rounded-xl border border-border bg-gradient-to-br from-muted/30 to-transparent p-4 space-y-2 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-primary bg-primary/10 h-6 w-6 rounded-md flex items-center justify-center">#{i + 1}</span>
+                              <p className="text-sm font-semibold text-foreground leading-tight">{cat.name}</p>
+                            </div>
+                            <div className="text-[11px] text-muted-foreground space-y-0.5">
+                              <p>{fmtNum(cat.views)} просм.</p>
+                              <p>{cat.count} публ.</p>
                             </div>
                           </div>
                         ))}
@@ -720,45 +754,51 @@ const CreatorStudio = () => {
 
                 {/* Top content */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  <Card>
-                    <CardHeader className="pb-3 pt-4 px-5">
+                  <Card className="overflow-hidden border-0 shadow-md">
+                    <CardHeader className="pb-3 pt-5 px-6">
                       <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                        <Crown className="h-4 w-4 text-warning" /> Топ по просмотрам
+                        <div className="h-7 w-7 rounded-lg bg-warning/10 flex items-center justify-center">
+                          <Crown className="h-3.5 w-3.5 text-warning" />
+                        </div>
+                        Топ по просмотрам
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="px-5 pb-4 space-y-1">
+                    <CardContent className="px-6 pb-5 space-y-1">
                       {topByViews.map((item, i) => (
                         <div key={item.id} onClick={() => navigate(`/product/${item.id}`)}
-                          className="flex items-center gap-3 rounded-lg p-2 hover:bg-muted/50 cursor-pointer transition-colors">
-                          <span className="text-sm font-bold w-5 text-center shrink-0">
+                          className="flex items-center gap-3 rounded-xl p-2.5 hover:bg-muted/50 cursor-pointer transition-all hover:shadow-sm group">
+                          <span className="text-sm font-bold w-6 text-center shrink-0">
                             {i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : <span className="text-muted-foreground">#{i + 1}</span>}
                           </span>
-                          <img src={item.thumbnail} alt="" className="h-8 w-11 rounded object-cover shrink-0" />
+                          <img src={item.thumbnail} alt="" className="h-9 w-13 rounded-lg object-cover shrink-0 group-hover:scale-105 transition-transform" />
                           <p className="text-sm font-medium truncate flex-1">{item.title}</p>
-                          <span className="text-xs font-semibold text-primary tabular-nums">{fmtNum(item.views)}</span>
+                          <span className="text-xs font-semibold text-primary tabular-nums bg-primary/10 px-2 py-0.5 rounded-md">{fmtNum(item.views)}</span>
                         </div>
                       ))}
                     </CardContent>
                   </Card>
 
-                  <Card>
-                    <CardHeader className="pb-3 pt-4 px-5">
+                  <Card className="overflow-hidden border-0 shadow-md">
+                    <CardHeader className="pb-3 pt-5 px-6">
                       <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                        <DollarSign className="h-4 w-4 text-success" /> Топ по доходу
+                        <div className="h-7 w-7 rounded-lg bg-success/10 flex items-center justify-center">
+                          <DollarSign className="h-3.5 w-3.5 text-success" />
+                        </div>
+                        Топ по доходу
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="px-5 pb-4 space-y-1">
+                    <CardContent className="px-6 pb-5 space-y-1">
                       {topByRevenue.length === 0 ? (
                         <p className="text-sm text-muted-foreground text-center py-6">Нет платного контента</p>
                       ) : topByRevenue.map((item, i) => (
                         <div key={item.id} onClick={() => navigate(`/product/${item.id}`)}
-                          className="flex items-center gap-3 rounded-lg p-2 hover:bg-muted/50 cursor-pointer transition-colors">
-                          <span className="text-sm font-bold w-5 text-center shrink-0">
+                          className="flex items-center gap-3 rounded-xl p-2.5 hover:bg-muted/50 cursor-pointer transition-all hover:shadow-sm group">
+                          <span className="text-sm font-bold w-6 text-center shrink-0">
                             {i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : <span className="text-muted-foreground">#{i + 1}</span>}
                           </span>
-                          <img src={item.thumbnail} alt="" className="h-8 w-11 rounded object-cover shrink-0" />
+                          <img src={item.thumbnail} alt="" className="h-9 w-13 rounded-lg object-cover shrink-0 group-hover:scale-105 transition-transform" />
                           <p className="text-sm font-medium truncate flex-1">{item.title}</p>
-                          <span className="text-xs font-semibold text-success tabular-nums">₽{item.price?.toLocaleString()}</span>
+                          <span className="text-xs font-semibold text-success tabular-nums bg-success/10 px-2 py-0.5 rounded-md">₽{item.price?.toLocaleString()}</span>
                         </div>
                       ))}
                     </CardContent>

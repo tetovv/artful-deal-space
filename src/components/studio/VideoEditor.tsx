@@ -458,11 +458,24 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
 
   /* Section component is now defined outside VideoEditor as EditorSection */
 
+  /* ── Editor sidebar sections ── */
+  type EditorTab = "media" | "basic" | "chapters" | "monetization" | "audience" | "schedule";
+  const [activeTab, setActiveTab] = useState<EditorTab>("media");
+
+  const EDITOR_TABS: { id: EditorTab; label: string; icon: React.ElementType }[] = [
+    { id: "media", label: "Видео", icon: Film },
+    { id: "basic", label: "Информация", icon: FileText },
+    { id: "chapters", label: "Таймкоды", icon: Clock },
+    { id: "monetization", label: "Монетизация", icon: DollarSign },
+    { id: "audience", label: "Аудитория", icon: Shield },
+    { id: "schedule", label: "Публикация", icon: Calendar },
+  ];
+
   /* ════════════ RENDER ════════════ */
   return (
-    <div className="space-y-6">
+    <div className="space-y-0 -m-6 lg:-m-8">
       {/* ── Top bar ── */}
-      <div className="flex items-center justify-between gap-4 flex-wrap sticky top-0 z-10 bg-background/95 backdrop-blur py-3 -mt-3 border-b border-border -mx-6 lg:-mx-8 px-6 lg:px-8">
+      <div className="flex items-center justify-between gap-4 flex-wrap sticky top-0 z-10 bg-background/95 backdrop-blur py-3 border-b border-border px-6">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="sm" onClick={onClose}>← Назад</Button>
           <Separator orientation="vertical" className="h-6" />
@@ -484,559 +497,439 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
 
       {/* Upload progress */}
       {uploading && (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-2">
+        <div className="px-6 pt-3 space-y-2">
           <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span className="flex items-center gap-1.5"><Loader2 className="h-3 w-3 animate-spin" /> Загрузка...</span>
             <span>{uploadProgress}%</span>
           </div>
           <Progress value={uploadProgress} className="h-2" />
-        </motion.div>
+        </div>
       )}
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        {/* ── LEFT: Main form ── */}
-        <div className="xl:col-span-2 space-y-4">
-
-          {/* Video Upload */}
-          <EditorSection icon={Film} title="Видео" expanded={!!expandedSections.media} onToggle={() => toggleSection("media")}>
-            {!videoPreviewUrl ? (
-              <div
-                onDragOver={(e) => { e.preventDefault(); setIsDraggingVideo(true); }}
-                onDragLeave={() => setIsDraggingVideo(false)}
-                onDrop={handleVideoDrop}
-                onClick={() => videoInputRef.current?.click()}
+      {/* ── Main layout: sidebar + content + right panel ── */}
+      <div className="flex h-[calc(100vh-7.5rem)]">
+        {/* Left sidebar - section tabs */}
+        <aside className="w-48 shrink-0 border-r border-border bg-card/50 flex flex-col overflow-y-auto">
+          <nav className="py-2 px-2 space-y-0.5 flex-1">
+            {EDITOR_TABS.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
                 className={cn(
-                  "border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-all",
-                  isDraggingVideo ? "border-primary bg-primary/5" : "border-border hover:border-primary/40 hover:bg-muted/30"
+                  "flex items-center gap-2.5 w-full px-3 py-2.5 rounded-lg text-sm transition-all text-left",
+                  activeTab === tab.id
+                    ? "bg-primary/10 text-primary font-medium"
+                    : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
                 )}
               >
-                <Upload className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-                <p className="text-sm font-medium text-foreground">Перетащите видео сюда</p>
-                <p className="text-xs text-muted-foreground mt-1">или нажмите для выбора файла</p>
-                <p className="text-[11px] text-muted-foreground/60 mt-2">MP4, WebM, MOV · до 2 ГБ</p>
+                <tab.icon className="h-4 w-4 shrink-0" />
+                <span>{tab.label}</span>
+              </button>
+            ))}
+          </nav>
+          {/* Checklist */}
+          <div className="p-3 border-t border-border space-y-2">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Чеклист</p>
+            {[
+              { done: !!videoPreviewUrl, label: "Видео" },
+              { done: !!form.title.trim(), label: "Название" },
+              { done: !!form.description.trim(), label: "Описание" },
+              { done: !!thumbnailPreviewUrl, label: "Обложка" },
+              { done: form.tags.length > 0, label: "Теги" },
+            ].map((c) => (
+              <div key={c.label} className="flex items-center gap-1.5 text-[11px]">
+                {c.done ? <CheckCircle className="h-3 w-3 text-success" /> : <div className="h-3 w-3 rounded-full border border-border" />}
+                <span className={cn(c.done ? "text-foreground" : "text-muted-foreground")}>{c.label}</span>
               </div>
-            ) : (
-              <div className="space-y-3">
-                <div className="relative rounded-xl overflow-hidden bg-black aspect-video">
-                  <video
-                    ref={videoRef}
-                    src={videoPreviewUrl}
-                    className="w-full h-full object-contain"
-                    onLoadedMetadata={() => {
-                      const v = videoRef.current;
-                      if (v) {
-                        setVideoDuration(v.duration);
-                        durationRef.current = v.duration;
-                      }
-                    }}
-                    onEnded={() => setIsPlaying(false)}
-                    onClick={togglePlay}
-                  />
-                  
-                  {/* Controls overlay */}
-                  <div
-                    className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent pt-8 pb-2 px-3 space-y-1.5"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {/* Progress bar */}
-                    <Slider
-                      min={0}
-                      max={100}
-                      step={0.1}
-                      value={[displayProgress]}
-                      onPointerDown={() => setIsSeeking(true)}
-                      onValueChange={(val) => {
-                        setDisplayProgress(val[0]);
-                        const v = videoRef.current;
-                        if (v && v.duration) {
-                          v.currentTime = (val[0] / 100) * v.duration;
-                        }
-                      }}
-                      onValueCommit={() => setIsSeeking(false)}
-                      className="w-full [&_[data-radix-slider-track]]:h-1 [&_[data-radix-slider-track]]:bg-white/30 [&_[data-radix-slider-range]]:bg-white [&_[data-radix-slider-thumb]]:h-3 [&_[data-radix-slider-thumb]]:w-3 [&_[data-radix-slider-thumb]]:bg-white [&_[data-radix-slider-thumb]]:border-0"
-                    />
+            ))}
+          </div>
+        </aside>
 
-                    {/* Controls row */}
-                    <div className="flex items-center gap-2">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-8 w-8 text-white hover:bg-white/20"
-                        onClick={togglePlay}
-                      >
-                        {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-                      </Button>
+        {/* Center content area */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-4xl mx-auto p-6 space-y-6">
 
-                      {/* Time */}
-                      <span className="text-[11px] text-white/80 font-mono tabular-nums select-none">
-                        {formatTime(videoRef.current?.currentTime || 0)} / {formatTime(videoDuration)}
-                      </span>
-
-                      <div className="flex-1" />
-
-                      {/* Volume */}
-                      <div className="flex items-center gap-1.5">
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-7 w-7 text-white hover:bg-white/20"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const v = videoRef.current;
-                            if (v) {
-                              v.muted = !v.muted;
-                              setVideoVolume(v.muted ? 0 : Math.round(v.volume * 100));
-                            }
-                          }}
-                        >
-                          {videoVolume === 0 ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
-                        </Button>
-                        <div className="w-20" onClick={(e) => e.stopPropagation()}>
-                          <Slider
-                            min={0}
-                            max={100}
-                            step={1}
-                            value={[videoVolume]}
-                            onValueChange={(val) => {
-                              const v = videoRef.current;
-                              if (v) {
-                                v.volume = val[0] / 100;
-                                v.muted = val[0] === 0;
-                              }
-                              setVideoVolume(val[0]);
-                            }}
-                            className="[&_[data-radix-slider-track]]:h-1 [&_[data-radix-slider-track]]:bg-white/30 [&_[data-radix-slider-range]]:bg-white [&_[data-radix-slider-thumb]]:h-2.5 [&_[data-radix-slider-thumb]]:w-2.5 [&_[data-radix-slider-thumb]]:bg-white [&_[data-radix-slider-thumb]]:border-0"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Speed */}
-                      <select
-                        value={videoSpeed}
-                        onChange={(e) => {
-                          const val = Number(e.target.value);
-                          setVideoSpeed(val);
-                          if (videoRef.current) videoRef.current.playbackRate = val;
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                        className="h-7 px-1.5 text-[11px] bg-white/10 text-white rounded-md border-0 cursor-pointer focus:outline-none focus:ring-0"
-                      >
-                        {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((s) => (
-                          <option key={s} value={s} className="bg-black text-white">{s}x</option>
-                        ))}
-                      </select>
-
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 text-white hover:bg-white/20 text-[11px]"
-                        onClick={(e) => { e.stopPropagation(); captureFrame(); }}
-                      >
-                        <ImageIcon className="h-3 w-3 mr-1" /> Кадр
-                      </Button>
-                    </div>
-                  </div>
-
-                  <Button
-                    size="icon"
-                    variant="secondary"
-                    className="absolute top-3 right-3 h-8 w-8 rounded-full bg-black/60 hover:bg-black/80 text-white"
-                    onClick={(e) => { e.stopPropagation(); setVideoFile(null); setVideoPreviewUrl(""); setIsPlaying(false); }}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-                {videoFile && (
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <Film className="h-3 w-3" />
-                    <span>{videoFile.name}</span>
-                    <span className="text-muted-foreground/50">·</span>
-                    <span>{(videoFile.size / 1024 / 1024).toFixed(1)} МБ</span>
-                  </div>
-                )}
-              </div>
-            )}
-            <input ref={videoInputRef} type="file" accept="video/*" className="hidden" onChange={handleVideoSelect} />
-          </EditorSection>
-
-          {/* Basic Info */}
-          <EditorSection icon={FileText} title="Основная информация" expanded={!!expandedSections.basic} onToggle={() => toggleSection("basic")}>
-            <div className="space-y-4">
-              <div>
-                <Label className="text-xs font-medium mb-1.5 block">Название *</Label>
-                <Input
-                  value={form.title}
-                  onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))}
-                  placeholder="Введите название видео"
-                  className="text-sm"
-                  maxLength={100}
-                />
-                <p className="text-[11px] text-muted-foreground mt-1">{form.title.length}/100</p>
-              </div>
-              <div>
-                <Label className="text-xs font-medium mb-1.5 block">Описание</Label>
-                <Textarea
-                  value={form.description}
-                  onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
-                  placeholder="Расскажите о видео…"
-                  className="min-h-[140px] text-sm resize-y"
-                  maxLength={5000}
-                />
-                <p className="text-[11px] text-muted-foreground mt-1">{form.description.length}/5000</p>
-              </div>
-              {/* Tags */}
-              <div>
-                <Label className="text-xs font-medium mb-1.5 block">Теги</Label>
-                <div className="flex flex-wrap gap-1.5 mb-2">
-                  {form.tags.map((tag) => (
-                    <Badge key={tag} variant="secondary" className="text-xs gap-1 pr-1">
-                      {tag}
-                      <button onClick={() => removeTag(tag)} className="hover:text-destructive"><X className="h-3 w-3" /></button>
-                    </Badge>
-                  ))}
-                </div>
-                <div className="flex gap-2">
-                  <Input
-                    value={tagInput}
-                    onChange={(e) => setTagInput(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addTag())}
-                    placeholder="Добавить тег…"
-                    className="text-sm flex-1"
-                  />
-                  <Button variant="outline" size="sm" onClick={addTag} disabled={!tagInput.trim()}>
-                    <Plus className="h-3 w-3" />
-                  </Button>
-                </div>
-                <div className="flex flex-wrap gap-1 mt-2">
-                  {CATEGORIES.filter((c) => !form.tags.includes(c)).slice(0, 8).map((cat) => (
-                    <button
-                      key={cat}
-                      onClick={() => setForm((p) => ({ ...p, tags: [...p.tags, cat] }))}
-                      className="text-[11px] px-2 py-0.5 rounded-full border border-border text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors"
-                    >
-                      + {cat}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </EditorSection>
-
-          {/* Chapters */}
-          <EditorSection icon={Clock} title="Таймкоды / Главы" badge={form.chapters.length > 0 ? String(form.chapters.length) : undefined} expanded={!!expandedSections.chapters} onToggle={() => toggleSection("chapters")}>
-            <p className="text-xs text-muted-foreground">Добавьте главы для навигации по видео</p>
-            <div className="space-y-2">
-              {form.chapters.map((ch, i) => (
-                <div key={ch.id} className="flex items-center gap-2">
-                  <GripVertical className="h-4 w-4 text-muted-foreground/40 shrink-0 cursor-grab" />
-                  <Input value={ch.time} onChange={(e) => updateChapter(ch.id, "time", e.target.value)} placeholder="00:00" className="w-20 text-sm text-center font-mono" />
-                  <Input value={ch.title} onChange={(e) => updateChapter(ch.id, "title", e.target.value)} placeholder={`Глава ${i + 1}`} className="text-sm flex-1" />
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive shrink-0" onClick={() => removeChapter(ch.id)}>
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              ))}
-            </div>
-            <Button variant="outline" size="sm" onClick={addChapter}>
-              <Plus className="h-3 w-3 mr-1.5" /> Добавить главу
-            </Button>
-          </EditorSection>
-
-          {/* Monetization */}
-          <EditorSection icon={DollarSign} title="Монетизация" expanded={!!expandedSections.monetization} onToggle={() => toggleSection("monetization")}>
-            <div className="space-y-4">
-              <div>
-                <Label className="text-xs font-medium mb-1.5 block">Модель доступа</Label>
-                <Select value={form.monetization_type} onValueChange={(v) => setForm((p) => ({ ...p, monetization_type: v }))}>
-                  <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="free">Бесплатно</SelectItem>
-                    <SelectItem value="paid">Разовая покупка</SelectItem>
-                    <SelectItem value="subscription">По подписке</SelectItem>
-                    <SelectItem value="pay_what_you_want">Pay-what-you-want</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {form.monetization_type === "paid" && (
-                <div>
-                  <Label className="text-xs font-medium mb-1.5 block">Цена (₽)</Label>
-                  <Input type="number" value={form.price || ""} onChange={(e) => setForm((p) => ({ ...p, price: Number(e.target.value) || null }))} placeholder="299" className="text-sm w-40" min={1} />
-                </div>
-              )}
-              {form.monetization_type === "pay_what_you_want" && (
-                <div>
-                  <Label className="text-xs font-medium mb-1.5 block">Минимальная цена (₽)</Label>
-                  <Input type="number" value={form.price_min || ""} onChange={(e) => setForm((p) => ({ ...p, price_min: Number(e.target.value) || null }))} placeholder="100" className="text-sm w-40" min={0} />
-                </div>
-              )}
-              {form.monetization_type === "subscription" && (
-                <div className="rounded-lg bg-muted/50 border border-border p-3 text-xs text-muted-foreground">
-                  <AlertCircle className="h-3.5 w-3.5 inline mr-1" />
-                  Видео будет доступно только вашим подписчикам
-                </div>
-              )}
-            </div>
-          </EditorSection>
-
-          {/* Audience */}
-          <EditorSection icon={Shield} title="Аудитория и настройки" expanded={!!expandedSections.audience} onToggle={() => toggleSection("audience")}>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-foreground">Возрастное ограничение (18+)</p>
-                  <p className="text-xs text-muted-foreground">Контент для взрослой аудитории</p>
-                </div>
-                <Switch checked={form.age_restricted} onCheckedChange={(v) => setForm((p) => ({ ...p, age_restricted: v }))} />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-xs font-medium mb-1.5 block">Язык</Label>
-                  <Select value={form.language} onValueChange={(v) => setForm((p) => ({ ...p, language: v }))}>
-                    <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {LANGUAGES.map((l) => <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="text-xs font-medium mb-1.5 block">Геолокация</Label>
-                  <Input value={form.geo} onChange={(e) => setForm((p) => ({ ...p, geo: e.target.value }))} placeholder="Россия" className="text-sm" />
-                </div>
-              </div>
-              {/* Subtitles */}
-              <div>
-                <Label className="text-xs font-medium mb-1.5 block">Субтитры</Label>
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" onClick={() => subtitleInputRef.current?.click()}>
-                    <Upload className="h-3 w-3 mr-1.5" /> Загрузить .srt / .vtt
-                  </Button>
-                  {subtitleFile && (
-                    <span className="text-xs text-muted-foreground flex items-center gap-1">
-                      <CheckCircle className="h-3 w-3 text-success" /> {subtitleFile.name}
-                    </span>
-                  )}
-                </div>
-                <input ref={subtitleInputRef} type="file" accept=".srt,.vtt" className="hidden"
-                  onChange={(e) => { if (e.target.files?.[0]) setSubtitleFile(e.target.files[0]); }} />
-              </div>
-              {/* Pinned comment */}
-              <div>
-                <Label className="text-xs font-medium mb-1.5 block">Закреплённый комментарий</Label>
-                <Textarea
-                  value={form.pinned_comment}
-                  onChange={(e) => setForm((p) => ({ ...p, pinned_comment: e.target.value }))}
-                  placeholder="Этот комментарий будет закреплён сверху…"
-                  className="min-h-[60px] text-sm resize-y"
-                  maxLength={500}
-                />
-              </div>
-            </div>
-          </EditorSection>
-
-          {/* Schedule */}
-          <EditorSection icon={Calendar} title="Публикация" expanded={!!expandedSections.schedule} onToggle={() => toggleSection("schedule")}>
-            <div className="space-y-4">
-              <div>
-                <Label className="text-xs font-medium mb-1.5 block">Статус</Label>
-                <Select value={form.status} onValueChange={(v) => setForm((p) => ({ ...p, status: v }))}>
-                  <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="draft">Черновик</SelectItem>
-                    <SelectItem value="scheduled">Запланировано</SelectItem>
-                    <SelectItem value="published">Опубликовано</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {form.status === "scheduled" && (
-                <div className="space-y-2">
-                  <Label className="text-xs font-medium mb-1.5 block">Дата и время публикации (МСК)</Label>
-                  <Input
-                    type="datetime-local"
-                    value={form.scheduled_at}
-                    onChange={(e) => setForm((p) => ({ ...p, scheduled_at: e.target.value }))}
-                    className="text-sm w-64"
-                  />
-                  {form.scheduled_at && (
-                    <div className="rounded-lg bg-primary/5 border border-primary/20 p-3 text-xs text-foreground flex items-center gap-2">
-                      <Clock className="h-3.5 w-3.5 text-primary shrink-0" />
-                      <span>
-                        Публикация: <strong>{formatMSKDisplay(form.scheduled_at)}</strong>
-                      </span>
-                    </div>
-                  )}
-                  <p className="text-[11px] text-muted-foreground">
-                    Время указывается по московскому времени (UTC+3)
-                  </p>
-                </div>
-              )}
-            </div>
-          </EditorSection>
-        </div>
-
-        {/* ── RIGHT: Preview, A/B Covers & Thumbnail ── */}
-        <div className="space-y-4">
-          {/* Thumbnail */}
-          <Card>
-            <CardHeader className="pb-2 pt-4 px-5">
-              <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <ImageIcon className="h-4 w-4 text-primary" /> Обложка
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-5 pb-5">
-              {thumbnailPreviewUrl ? (
-                <div className="relative rounded-lg overflow-hidden aspect-video mb-3">
-                  <img src={thumbnailPreviewUrl} alt="Обложка" className="w-full h-full object-cover" />
-                  <Button size="icon" variant="secondary" className="absolute top-2 right-2 h-7 w-7 rounded-full bg-black/60 hover:bg-black/80 text-white"
-                    onClick={() => { setThumbnailFile(null); setThumbnailPreviewUrl(""); setActiveAbCover(null); }}>
-                    <X className="h-3 w-3" />
-                  </Button>
-                </div>
-              ) : (
+            {/* Video player always visible at top */}
+            <div className="space-y-3">
+              {!videoPreviewUrl ? (
                 <div
-                  onDragOver={(e) => { e.preventDefault(); setIsDraggingThumb(true); }}
-                  onDragLeave={() => setIsDraggingThumb(false)}
-                  onDrop={handleThumbnailDrop}
-                  onClick={() => thumbnailInputRef.current?.click()}
+                  onDragOver={(e) => { e.preventDefault(); setIsDraggingVideo(true); }}
+                  onDragLeave={() => setIsDraggingVideo(false)}
+                  onDrop={handleVideoDrop}
+                  onClick={() => videoInputRef.current?.click()}
                   className={cn(
-                    "border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-all aspect-video flex flex-col items-center justify-center",
-                    isDraggingThumb ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"
+                    "border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-all aspect-video flex flex-col items-center justify-center",
+                    isDraggingVideo ? "border-primary bg-primary/5" : "border-border hover:border-primary/40 hover:bg-muted/30"
                   )}
                 >
-                  <ImageIcon className="h-8 w-8 text-muted-foreground mb-2" />
-                  <p className="text-xs text-muted-foreground">Загрузите или перетащите</p>
-                  <p className="text-[11px] text-muted-foreground/60 mt-0.5">JPG, PNG · 16:9</p>
+                  <Upload className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+                  <p className="text-sm font-medium text-foreground">Перетащите видео сюда</p>
+                  <p className="text-xs text-muted-foreground mt-1">или нажмите для выбора файла</p>
+                  <p className="text-[11px] text-muted-foreground/60 mt-2">MP4, WebM, MOV · до 2 ГБ</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="relative rounded-xl overflow-hidden bg-black aspect-video">
+                    <video
+                      ref={videoRef}
+                      src={videoPreviewUrl}
+                      className="w-full h-full object-contain"
+                      onLoadedMetadata={() => {
+                        const v = videoRef.current;
+                        if (v) { setVideoDuration(v.duration); durationRef.current = v.duration; }
+                      }}
+                      onEnded={() => setIsPlaying(false)}
+                      onClick={togglePlay}
+                    />
+                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent pt-8 pb-2 px-3 space-y-1.5" onClick={(e) => e.stopPropagation()}>
+                      <Slider min={0} max={100} step={0.1} value={[displayProgress]}
+                        onPointerDown={() => setIsSeeking(true)}
+                        onValueChange={(val) => { setDisplayProgress(val[0]); const v = videoRef.current; if (v && v.duration) v.currentTime = (val[0] / 100) * v.duration; }}
+                        onValueCommit={() => setIsSeeking(false)}
+                        className="w-full [&_[data-radix-slider-track]]:h-1 [&_[data-radix-slider-track]]:bg-white/30 [&_[data-radix-slider-range]]:bg-white [&_[data-radix-slider-thumb]]:h-3 [&_[data-radix-slider-thumb]]:w-3 [&_[data-radix-slider-thumb]]:bg-white [&_[data-radix-slider-thumb]]:border-0"
+                      />
+                      <div className="flex items-center gap-2">
+                        <Button size="icon" variant="ghost" className="h-8 w-8 text-white hover:bg-white/20" onClick={togglePlay}>
+                          {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                        </Button>
+                        <span className="text-[11px] text-white/80 font-mono tabular-nums select-none">
+                          {formatTime(videoRef.current?.currentTime || 0)} / {formatTime(videoDuration)}
+                        </span>
+                        <div className="flex-1" />
+                        <div className="flex items-center gap-1.5">
+                          <Button size="icon" variant="ghost" className="h-7 w-7 text-white hover:bg-white/20"
+                            onClick={(e) => { e.stopPropagation(); const v = videoRef.current; if (v) { v.muted = !v.muted; setVideoVolume(v.muted ? 0 : Math.round(v.volume * 100)); } }}>
+                            {videoVolume === 0 ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
+                          </Button>
+                          <div className="w-20" onClick={(e) => e.stopPropagation()}>
+                            <Slider min={0} max={100} step={1} value={[videoVolume]}
+                              onValueChange={(val) => { const v = videoRef.current; if (v) { v.volume = val[0] / 100; v.muted = val[0] === 0; } setVideoVolume(val[0]); }}
+                              className="[&_[data-radix-slider-track]]:h-1 [&_[data-radix-slider-track]]:bg-white/30 [&_[data-radix-slider-range]]:bg-white [&_[data-radix-slider-thumb]]:h-2.5 [&_[data-radix-slider-thumb]]:w-2.5 [&_[data-radix-slider-thumb]]:bg-white [&_[data-radix-slider-thumb]]:border-0"
+                            />
+                          </div>
+                        </div>
+                        <select value={videoSpeed} onChange={(e) => { const val = Number(e.target.value); setVideoSpeed(val); if (videoRef.current) videoRef.current.playbackRate = val; }}
+                          onClick={(e) => e.stopPropagation()}
+                          className="h-7 px-1.5 text-[11px] bg-white/10 text-white rounded-md border-0 cursor-pointer focus:outline-none focus:ring-0">
+                          {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((s) => (
+                            <option key={s} value={s} className="bg-black text-white">{s}x</option>
+                          ))}
+                        </select>
+                        <Button size="sm" variant="ghost" className="h-7 text-white hover:bg-white/20 text-[11px]"
+                          onClick={(e) => { e.stopPropagation(); captureFrame(); }}>
+                          <ImageIcon className="h-3 w-3 mr-1" /> Кадр
+                        </Button>
+                      </div>
+                    </div>
+                    <Button size="icon" variant="secondary" className="absolute top-3 right-3 h-8 w-8 rounded-full bg-black/60 hover:bg-black/80 text-white"
+                      onClick={(e) => { e.stopPropagation(); setVideoFile(null); setVideoPreviewUrl(""); setIsPlaying(false); }}>
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  {videoFile && (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Film className="h-3 w-3" /><span>{videoFile.name}</span><span className="text-muted-foreground/50">·</span><span>{(videoFile.size / 1024 / 1024).toFixed(1)} МБ</span>
+                    </div>
+                  )}
                 </div>
               )}
-              <input ref={thumbnailInputRef} type="file" accept="image/*" className="hidden" onChange={handleThumbnailSelect} />
-              {videoPreviewUrl && (
-                <Button variant="outline" size="sm" className="w-full text-xs mt-2" onClick={captureFrame}>
-                  <Film className="h-3 w-3 mr-1.5" /> Захватить из видео
-                </Button>
-              )}
-            </CardContent>
-          </Card>
+              <input ref={videoInputRef} type="file" accept="video/*" className="hidden" onChange={handleVideoSelect} />
+            </div>
 
-          {/* A/B Cover Testing */}
-          <Card>
-            <CardHeader className="pb-2 pt-4 px-5">
-              <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <Layers className="h-4 w-4 text-primary" /> A/B тест обложек
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-5 pb-5 space-y-3">
-              <p className="text-[11px] text-muted-foreground">
-                Загрузите несколько вариантов обложки — система покажет их разным зрителям и определит лучшую по CTR.
-              </p>
-
-              {abCovers.length > 0 && (
-                <div className="grid grid-cols-2 gap-2">
-                  {abCovers.map((cover) => (
-                    <div
-                      key={cover.id}
-                      onClick={() => selectAbCover(cover)}
-                      className={cn(
-                        "relative rounded-lg overflow-hidden aspect-video cursor-pointer border-2 transition-all group",
-                        activeAbCover === cover.id ? "border-primary ring-2 ring-primary/20" : "border-border hover:border-primary/40"
-                      )}
-                    >
-                      <img src={cover.previewUrl} alt={cover.label} className="w-full h-full object-cover" />
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
-                      <Badge className="absolute bottom-1.5 left-1.5 text-[9px] bg-black/60 text-white border-0">
-                        {cover.label}
-                      </Badge>
-                      {activeAbCover === cover.id && (
-                        <div className="absolute top-1.5 left-1.5">
-                          <CheckCircle className="h-4 w-4 text-primary drop-shadow-md" />
+            {/* Active tab content below video */}
+            <motion.div key={activeTab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15 }}>
+              {activeTab === "media" && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {/* Thumbnail */}
+                  <Card>
+                    <CardHeader className="pb-2 pt-4 px-5">
+                      <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                        <ImageIcon className="h-4 w-4 text-primary" /> Обложка
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="px-5 pb-5">
+                      {thumbnailPreviewUrl ? (
+                        <div className="relative rounded-lg overflow-hidden aspect-video mb-3">
+                          <img src={thumbnailPreviewUrl} alt="Обложка" className="w-full h-full object-cover" />
+                          <Button size="icon" variant="secondary" className="absolute top-2 right-2 h-7 w-7 rounded-full bg-black/60 hover:bg-black/80 text-white"
+                            onClick={() => { setThumbnailFile(null); setThumbnailPreviewUrl(""); setActiveAbCover(null); }}>
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <div
+                          onDragOver={(e) => { e.preventDefault(); setIsDraggingThumb(true); }}
+                          onDragLeave={() => setIsDraggingThumb(false)}
+                          onDrop={handleThumbnailDrop}
+                          onClick={() => thumbnailInputRef.current?.click()}
+                          className={cn(
+                            "border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-all aspect-video flex flex-col items-center justify-center",
+                            isDraggingThumb ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"
+                          )}
+                        >
+                          <ImageIcon className="h-8 w-8 text-muted-foreground mb-2" />
+                          <p className="text-xs text-muted-foreground">Загрузите или перетащите</p>
+                          <p className="text-[11px] text-muted-foreground/60 mt-0.5">JPG, PNG · 16:9</p>
                         </div>
                       )}
-                      <button
-                        onClick={(e) => { e.stopPropagation(); removeAbCover(cover.id); }}
-                        className="absolute top-1.5 right-1.5 h-5 w-5 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </div>
-                  ))}
+                      <input ref={thumbnailInputRef} type="file" accept="image/*" className="hidden" onChange={handleThumbnailSelect} />
+                      {videoPreviewUrl && (
+                        <Button variant="outline" size="sm" className="w-full text-xs mt-2" onClick={captureFrame}>
+                          <Film className="h-3 w-3 mr-1.5" /> Захватить из видео
+                        </Button>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* A/B Cover Testing */}
+                  <Card>
+                    <CardHeader className="pb-2 pt-4 px-5">
+                      <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                        <Layers className="h-4 w-4 text-primary" /> A/B тест обложек
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="px-5 pb-5 space-y-3">
+                      <p className="text-[11px] text-muted-foreground">
+                        Загрузите несколько вариантов — система определит лучшую по CTR.
+                      </p>
+                      {abCovers.length > 0 && (
+                        <div className="grid grid-cols-2 gap-2">
+                          {abCovers.map((cover) => (
+                            <div key={cover.id} onClick={() => selectAbCover(cover)}
+                              className={cn(
+                                "relative rounded-lg overflow-hidden aspect-video cursor-pointer border-2 transition-all group",
+                                activeAbCover === cover.id ? "border-primary ring-2 ring-primary/20" : "border-border hover:border-primary/40"
+                              )}>
+                              <img src={cover.previewUrl} alt={cover.label} className="w-full h-full object-cover" />
+                              <Badge className="absolute bottom-1.5 left-1.5 text-[9px] bg-black/60 text-white border-0">{cover.label}</Badge>
+                              {activeAbCover === cover.id && <CheckCircle className="absolute top-1.5 left-1.5 h-4 w-4 text-primary drop-shadow-md" />}
+                              <button onClick={(e) => { e.stopPropagation(); removeAbCover(cover.id); }}
+                                className="absolute top-1.5 right-1.5 h-5 w-5 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                <X className="h-3 w-3" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <Button variant="outline" size="sm" className="w-full text-xs" onClick={addAbCover} disabled={abCovers.length >= 4}>
+                        <Plus className="h-3 w-3 mr-1.5" />
+                        {abCovers.length === 0 ? "Добавить варианты обложки" : `Добавить вариант (${abCovers.length}/4)`}
+                      </Button>
+                      <input ref={abCoverInputRef} type="file" accept="image/*" className="hidden" onChange={handleAbCoverSelect} />
+                      {abCovers.length >= 2 && (
+                        <div className="rounded-lg bg-primary/5 border border-primary/20 p-3 text-xs text-foreground flex items-start gap-2">
+                          <Shuffle className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
+                          <span>A/B тест активен — <strong>{abCovers.length} варианта</strong> будут показаны зрителям.</span>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Preview Card */}
+                  <Card className="lg:col-span-2">
+                    <CardHeader className="pb-2 pt-4 px-5">
+                      <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                        <Eye className="h-4 w-4 text-primary" /> Предпросмотр карточки
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="px-5 pb-5">
+                      <div className="rounded-lg border border-border overflow-hidden max-w-sm">
+                        <div className="aspect-video bg-muted relative">
+                          {thumbnailPreviewUrl ? (
+                            <img src={thumbnailPreviewUrl} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-muted-foreground"><Film className="h-8 w-8" /></div>
+                          )}
+                          {form.age_restricted && <Badge variant="destructive" className="absolute top-2 left-2 text-[9px]">18+</Badge>}
+                          {form.monetization_type !== "free" && (
+                            <Badge className="absolute top-2 right-2 text-[9px] bg-success text-white">
+                              {form.monetization_type === "paid" ? `₽${form.price || 0}` : form.monetization_type === "subscription" ? "Подписка" : "PWYW"}
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="p-3 space-y-1">
+                          <p className="text-sm font-semibold text-foreground line-clamp-2">{form.title || "Название видео"}</p>
+                          <p className="text-xs text-muted-foreground">{profile?.display_name || "Автор"}</p>
+                          <div className="flex flex-wrap gap-1 mt-1.5">
+                            {form.tags.slice(0, 3).map((t) => <Badge key={t} variant="secondary" className="text-[10px]">{t}</Badge>)}
+                            {form.tags.length > 3 && <Badge variant="secondary" className="text-[10px]">+{form.tags.length - 3}</Badge>}
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
                 </div>
               )}
 
-              <Button variant="outline" size="sm" className="w-full text-xs" onClick={addAbCover} disabled={abCovers.length >= 4}>
-                <Plus className="h-3 w-3 mr-1.5" />
-                {abCovers.length === 0 ? "Добавить варианты обложки" : `Добавить вариант (${abCovers.length}/4)`}
-              </Button>
-              <input ref={abCoverInputRef} type="file" accept="image/*" className="hidden" onChange={handleAbCoverSelect} />
-
-              {abCovers.length >= 2 && (
-                <div className="rounded-lg bg-primary/5 border border-primary/20 p-3 text-xs text-foreground flex items-start gap-2">
-                  <Shuffle className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
-                  <span>
-                    A/B тест активен — <strong>{abCovers.length} варианта</strong> будут показаны зрителям в равных пропорциях.
-                    Результаты появятся в аналитике через 24ч.
-                  </span>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Preview Card */}
-          <Card>
-            <CardHeader className="pb-2 pt-4 px-5">
-              <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <Eye className="h-4 w-4 text-primary" /> Предпросмотр карточки
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-5 pb-5">
-              <div className="rounded-lg border border-border overflow-hidden">
-                <div className="aspect-video bg-muted relative">
-                  {thumbnailPreviewUrl ? (
-                    <img src={thumbnailPreviewUrl} alt="" className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-                      <Film className="h-8 w-8" />
+              {activeTab === "basic" && (
+                <Card>
+                  <CardContent className="p-5 space-y-4">
+                    <div>
+                      <Label className="text-xs font-medium mb-1.5 block">Название *</Label>
+                      <Input value={form.title} onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))} placeholder="Введите название видео" className="text-sm" maxLength={100} />
+                      <p className="text-[11px] text-muted-foreground mt-1">{form.title.length}/100</p>
                     </div>
-                  )}
-                  {form.age_restricted && (
-                    <Badge variant="destructive" className="absolute top-2 left-2 text-[9px]">18+</Badge>
-                  )}
-                  {form.monetization_type !== "free" && (
-                    <Badge className="absolute top-2 right-2 text-[9px] bg-success text-white">
-                      {form.monetization_type === "paid" ? `₽${form.price || 0}` :
-                       form.monetization_type === "subscription" ? "Подписка" : "PWYW"}
-                    </Badge>
-                  )}
-                </div>
-                <div className="p-3 space-y-1">
-                  <p className="text-sm font-semibold text-foreground line-clamp-2">{form.title || "Название видео"}</p>
-                  <p className="text-xs text-muted-foreground">{profile?.display_name || "Автор"}</p>
-                  <div className="flex flex-wrap gap-1 mt-1.5">
-                    {form.tags.slice(0, 3).map((t) => (
-                      <Badge key={t} variant="secondary" className="text-[10px]">{t}</Badge>
-                    ))}
-                    {form.tags.length > 3 && <Badge variant="secondary" className="text-[10px]">+{form.tags.length - 3}</Badge>}
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+                    <div>
+                      <Label className="text-xs font-medium mb-1.5 block">Описание</Label>
+                      <Textarea value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} placeholder="Расскажите о видео…" className="min-h-[140px] text-sm resize-y" maxLength={5000} />
+                      <p className="text-[11px] text-muted-foreground mt-1">{form.description.length}/5000</p>
+                    </div>
+                    <div>
+                      <Label className="text-xs font-medium mb-1.5 block">Теги</Label>
+                      <div className="flex flex-wrap gap-1.5 mb-2">
+                        {form.tags.map((tag) => (
+                          <Badge key={tag} variant="secondary" className="text-xs gap-1 pr-1">
+                            {tag}<button onClick={() => removeTag(tag)} className="hover:text-destructive"><X className="h-3 w-3" /></button>
+                          </Badge>
+                        ))}
+                      </div>
+                      <div className="flex gap-2">
+                        <Input value={tagInput} onChange={(e) => setTagInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addTag())} placeholder="Добавить тег…" className="text-sm flex-1" />
+                        <Button variant="outline" size="sm" onClick={addTag} disabled={!tagInput.trim()}><Plus className="h-3 w-3" /></Button>
+                      </div>
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {CATEGORIES.filter((c) => !form.tags.includes(c)).slice(0, 8).map((cat) => (
+                          <button key={cat} onClick={() => setForm((p) => ({ ...p, tags: [...p.tags, cat] }))}
+                            className="text-[11px] px-2 py-0.5 rounded-full border border-border text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">
+                            + {cat}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
 
-          {/* Quick stats */}
-          <Card>
-            <CardContent className="p-4 space-y-2.5">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Чеклист</p>
-              {[
-                { done: !!videoPreviewUrl, label: "Видео загружено" },
-                { done: !!form.title.trim(), label: "Название заполнено" },
-                { done: !!form.description.trim(), label: "Описание добавлено" },
-                { done: !!thumbnailPreviewUrl, label: "Обложка загружена" },
-                { done: form.tags.length > 0, label: "Теги добавлены" },
-              ].map((c) => (
-                <div key={c.label} className="flex items-center gap-2 text-xs">
-                  {c.done ? <CheckCircle className="h-3.5 w-3.5 text-success" /> : <div className="h-3.5 w-3.5 rounded-full border border-border" />}
-                  <span className={cn(c.done ? "text-foreground" : "text-muted-foreground")}>{c.label}</span>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
+              {activeTab === "chapters" && (
+                <Card>
+                  <CardContent className="p-5 space-y-4">
+                    <p className="text-xs text-muted-foreground">Добавьте главы для навигации по видео</p>
+                    <div className="space-y-2">
+                      {form.chapters.map((ch, i) => (
+                        <div key={ch.id} className="flex items-center gap-2">
+                          <GripVertical className="h-4 w-4 text-muted-foreground/40 shrink-0 cursor-grab" />
+                          <Input value={ch.time} onChange={(e) => updateChapter(ch.id, "time", e.target.value)} placeholder="00:00" className="w-20 text-sm text-center font-mono" />
+                          <Input value={ch.title} onChange={(e) => updateChapter(ch.id, "title", e.target.value)} placeholder={`Глава ${i + 1}`} className="text-sm flex-1" />
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive shrink-0" onClick={() => removeChapter(ch.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                        </div>
+                      ))}
+                    </div>
+                    <Button variant="outline" size="sm" onClick={addChapter}><Plus className="h-3 w-3 mr-1.5" /> Добавить главу</Button>
+                  </CardContent>
+                </Card>
+              )}
+
+              {activeTab === "monetization" && (
+                <Card>
+                  <CardContent className="p-5 space-y-4">
+                    <div>
+                      <Label className="text-xs font-medium mb-1.5 block">Модель доступа</Label>
+                      <Select value={form.monetization_type} onValueChange={(v) => setForm((p) => ({ ...p, monetization_type: v }))}>
+                        <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="free">Бесплатно</SelectItem>
+                          <SelectItem value="paid">Разовая покупка</SelectItem>
+                          <SelectItem value="subscription">По подписке</SelectItem>
+                          <SelectItem value="pay_what_you_want">Pay-what-you-want</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {form.monetization_type === "paid" && (
+                      <div>
+                        <Label className="text-xs font-medium mb-1.5 block">Цена (₽)</Label>
+                        <Input type="number" value={form.price || ""} onChange={(e) => setForm((p) => ({ ...p, price: Number(e.target.value) || null }))} placeholder="299" className="text-sm w-40" min={1} />
+                      </div>
+                    )}
+                    {form.monetization_type === "pay_what_you_want" && (
+                      <div>
+                        <Label className="text-xs font-medium mb-1.5 block">Минимальная цена (₽)</Label>
+                        <Input type="number" value={form.price_min || ""} onChange={(e) => setForm((p) => ({ ...p, price_min: Number(e.target.value) || null }))} placeholder="100" className="text-sm w-40" min={0} />
+                      </div>
+                    )}
+                    {form.monetization_type === "subscription" && (
+                      <div className="rounded-lg bg-muted/50 border border-border p-3 text-xs text-muted-foreground">
+                        <AlertCircle className="h-3.5 w-3.5 inline mr-1" /> Видео будет доступно только вашим подписчикам
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {activeTab === "audience" && (
+                <Card>
+                  <CardContent className="p-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-foreground">Возрастное ограничение (18+)</p>
+                        <p className="text-xs text-muted-foreground">Контент для взрослой аудитории</p>
+                      </div>
+                      <Switch checked={form.age_restricted} onCheckedChange={(v) => setForm((p) => ({ ...p, age_restricted: v }))} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label className="text-xs font-medium mb-1.5 block">Язык</Label>
+                        <Select value={form.language} onValueChange={(v) => setForm((p) => ({ ...p, language: v }))}>
+                          <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {LANGUAGES.map((l) => <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label className="text-xs font-medium mb-1.5 block">Геолокация</Label>
+                        <Input value={form.geo} onChange={(e) => setForm((p) => ({ ...p, geo: e.target.value }))} placeholder="Россия" className="text-sm" />
+                      </div>
+                    </div>
+                    <div>
+                      <Label className="text-xs font-medium mb-1.5 block">Субтитры</Label>
+                      <div className="flex items-center gap-2">
+                        <Button variant="outline" size="sm" onClick={() => subtitleInputRef.current?.click()}>
+                          <Upload className="h-3 w-3 mr-1.5" /> Загрузить .srt / .vtt
+                        </Button>
+                        {subtitleFile && <span className="text-xs text-muted-foreground flex items-center gap-1"><CheckCircle className="h-3 w-3 text-success" /> {subtitleFile.name}</span>}
+                      </div>
+                      <input ref={subtitleInputRef} type="file" accept=".srt,.vtt" className="hidden" onChange={(e) => { if (e.target.files?.[0]) setSubtitleFile(e.target.files[0]); }} />
+                    </div>
+                    <div>
+                      <Label className="text-xs font-medium mb-1.5 block">Закреплённый комментарий</Label>
+                      <Textarea value={form.pinned_comment} onChange={(e) => setForm((p) => ({ ...p, pinned_comment: e.target.value }))} placeholder="Этот комментарий будет закреплён сверху…" className="min-h-[60px] text-sm resize-y" maxLength={500} />
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {activeTab === "schedule" && (
+                <Card>
+                  <CardContent className="p-5 space-y-4">
+                    <div>
+                      <Label className="text-xs font-medium mb-1.5 block">Статус</Label>
+                      <Select value={form.status} onValueChange={(v) => setForm((p) => ({ ...p, status: v }))}>
+                        <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="draft">Черновик</SelectItem>
+                          <SelectItem value="scheduled">Запланировано</SelectItem>
+                          <SelectItem value="published">Опубликовано</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {form.status === "scheduled" && (
+                      <div className="space-y-2">
+                        <Label className="text-xs font-medium mb-1.5 block">Дата и время публикации (МСК)</Label>
+                        <Input type="datetime-local" value={form.scheduled_at} onChange={(e) => setForm((p) => ({ ...p, scheduled_at: e.target.value }))} className="text-sm w-64" />
+                        {form.scheduled_at && (
+                          <div className="rounded-lg bg-primary/5 border border-primary/20 p-3 text-xs text-foreground flex items-center gap-2">
+                            <Clock className="h-3.5 w-3.5 text-primary shrink-0" />
+                            <span>Публикация: <strong>{formatMSKDisplay(form.scheduled_at)}</strong></span>
+                          </div>
+                        )}
+                        <p className="text-[11px] text-muted-foreground">Время указывается по московскому времени (UTC+3)</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+            </motion.div>
+          </div>
         </div>
       </div>
     </div>
