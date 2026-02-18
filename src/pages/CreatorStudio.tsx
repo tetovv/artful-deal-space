@@ -3,12 +3,14 @@ import { ContentCard } from "@/components/content/ContentCard";
 import {
   Plus, DollarSign, BarChart3, Package, Eye, Heart, TrendingUp, Clock, Star,
   Trash2, Edit, PieChart, Activity, ArrowUpRight, ArrowDownRight, Crown, Flame,
-  FileText, Video, Image, Music, Mic, BookOpen, Layout, ChevronRight,
+  FileText, Video, Image, Music, Mic, BookOpen, Layout, ChevronRight, ArrowUpDown, Filter, Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/AuthContext";
 import { useContentItems } from "@/hooks/useDbData";
 import { supabase } from "@/integrations/supabase/client";
@@ -69,6 +71,9 @@ const CreatorStudio = () => {
   const navigate = useNavigate();
   const { data: dbItems } = useContentItems();
   const [analyticsItemId, setAnalyticsItemId] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<string>("date");
+  const [filterType, setFilterType] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const allItems = (dbItems && dbItems.length > 0 ? dbItems : contentItems).map(mapItem);
   const myItems = allItems.filter((i) => i.creatorId === user?.id || i.creatorId === "u1");
@@ -350,11 +355,56 @@ const CreatorStudio = () => {
           )}
 
           <h2 className="text-lg font-semibold text-foreground">Управление контентом</h2>
-          {myItems.length === 0 ? (
-            <div className="text-center py-16 text-muted-foreground">У вас пока нет контента</div>
-          ) : (
+          {/* Filters & Sort */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative flex-1 min-w-[200px] max-w-xs">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input placeholder="Поиск по названию..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9" />
+            </div>
+            <Select value={filterType} onValueChange={setFilterType}>
+              <SelectTrigger className="w-[140px]"><Filter className="h-3.5 w-3.5 mr-1.5" /><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Все типы</SelectItem>
+                <SelectItem value="video">Видео</SelectItem>
+                <SelectItem value="post">Пост</SelectItem>
+                <SelectItem value="image">Фото</SelectItem>
+                <SelectItem value="music">Музыка</SelectItem>
+                <SelectItem value="podcast">Подкаст</SelectItem>
+                <SelectItem value="book">Книга</SelectItem>
+                <SelectItem value="template">Шаблон</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={sortBy} onValueChange={setSortBy}>
+              <SelectTrigger className="w-[160px]"><ArrowUpDown className="h-3.5 w-3.5 mr-1.5" /><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="date">По дате</SelectItem>
+                <SelectItem value="views">По просмотрам</SelectItem>
+                <SelectItem value="likes">По лайкам</SelectItem>
+                <SelectItem value="price">По цене</SelectItem>
+                <SelectItem value="title">По названию</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {(() => {
+            let filtered = myItems.filter((i) => filterType === "all" || i.type === filterType);
+            if (searchQuery.trim()) {
+              const q = searchQuery.toLowerCase();
+              filtered = filtered.filter((i) => i.title.toLowerCase().includes(q));
+            }
+            filtered = [...filtered].sort((a, b) => {
+              switch (sortBy) {
+                case "views": return b.views - a.views;
+                case "likes": return b.likes - a.likes;
+                case "price": return (b.price || 0) - (a.price || 0);
+                case "title": return a.title.localeCompare(b.title);
+                default: return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+              }
+            });
+            if (filtered.length === 0) return <div className="text-center py-12 text-muted-foreground">Ничего не найдено</div>;
+            return (
             <div className="space-y-3">
-              {myItems.map((item) => {
+              {filtered.map((item) => {
                 const TypeIcon = TYPE_ICONS[item.type] || FileText;
                 return (
                   <motion.div
@@ -407,7 +457,8 @@ const CreatorStudio = () => {
                 );
               })}
             </div>
-          )}
+            );
+          })()}
         </TabsContent>
 
         {/* ===== TOP TAB ===== */}
