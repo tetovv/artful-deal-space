@@ -1,8 +1,9 @@
-import { Home, Compass, Palette, Megaphone, Store, Shield, Brain, Settings, Bell, Search, Sun, Moon, LogOut, Menu, X, User } from "lucide-react";
+import { Home, Compass, Palette, Megaphone, Store, Shield, Brain, Settings, Bell, Sun, Moon, LogOut, Menu, X, User, ShoppingBag, Check, CheckCheck } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useNotifications } from "@/hooks/useNotifications";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -14,12 +15,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface NavItem {
   title: string;
   url: string;
   icon: React.ElementType;
-  roles?: string[]; // if empty — visible to all
+  roles?: string[];
 }
 
 const allNavItems: NavItem[] = [
@@ -48,10 +50,18 @@ const roleBadgeColors: Record<string, string> = {
   support: "bg-info/10 text-info",
 };
 
+const notifTypeIcons: Record<string, string> = {
+  deal: "🤝",
+  message: "💬",
+  purchase: "🛒",
+  info: "ℹ️",
+};
+
 export function TopHeader() {
   const { profile, signOut } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const { primaryRole, isCreator, isAdvertiser, isModerator } = useUserRole();
+  const { notifications, unreadCount, markAsRead, markAllRead } = useNotifications();
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -71,12 +81,10 @@ export function TopHeader() {
   return (
     <>
       <header className="sticky top-0 z-50 h-14 border-b border-border bg-card/80 backdrop-blur-xl flex items-center px-4 lg:px-6 gap-4">
-        {/* Logo */}
         <NavLink to="/" className="flex items-center gap-2 shrink-0 mr-2">
           <span className="text-lg font-bold gradient-text tracking-tight">MediaOS</span>
         </NavLink>
 
-        {/* Desktop nav */}
         <nav className="hidden md:flex items-center gap-1 flex-1">
           {visibleItems.map((item) => (
             <NavLink
@@ -92,14 +100,11 @@ export function TopHeader() {
           ))}
         </nav>
 
-        {/* Right section */}
         <div className="flex items-center gap-2 ml-auto">
-          {/* Role badge */}
           <span className={cn("hidden sm:inline-flex text-[10px] font-medium px-2 py-0.5 rounded-full", roleBadgeColors[primaryRole] || roleBadgeColors.user)}>
             {roleLabels[primaryRole] || "Пользователь"}
           </span>
 
-          {/* Theme toggle */}
           <button
             onClick={toggleTheme}
             className="h-8 w-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
@@ -107,11 +112,59 @@ export function TopHeader() {
             {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </button>
 
-          {/* Notifications */}
-          <button className="h-8 w-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors relative">
-            <Bell className="h-4 w-4" />
-            <span className="absolute top-1 right-1 h-2 w-2 bg-primary rounded-full" />
-          </button>
+          {/* Notifications dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="h-8 w-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors relative">
+                <Bell className="h-4 w-4" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 h-4 min-w-4 px-1 flex items-center justify-center bg-primary text-primary-foreground text-[10px] font-bold rounded-full">
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </span>
+                )}
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-80">
+              <div className="flex items-center justify-between px-3 py-2">
+                <p className="text-sm font-semibold">Уведомления</p>
+                {unreadCount > 0 && (
+                  <button
+                    onClick={() => markAllRead.mutate()}
+                    className="text-xs text-primary hover:underline flex items-center gap-1"
+                  >
+                    <CheckCheck className="h-3 w-3" /> Прочитать все
+                  </button>
+                )}
+              </div>
+              <DropdownMenuSeparator />
+              <ScrollArea className="max-h-72">
+                {notifications.length === 0 ? (
+                  <div className="px-3 py-6 text-center text-xs text-muted-foreground">Нет уведомлений</div>
+                ) : (
+                  notifications.map((n) => (
+                    <DropdownMenuItem
+                      key={n.id}
+                      className={cn("flex items-start gap-3 px-3 py-2.5 cursor-pointer", !n.read && "bg-primary/5")}
+                      onClick={() => {
+                        if (!n.read) markAsRead.mutate(n.id);
+                        if (n.link) navigate(n.link);
+                      }}
+                    >
+                      <span className="text-lg shrink-0 mt-0.5">{notifTypeIcons[n.type] || "ℹ️"}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className={cn("text-xs", !n.read && "font-semibold")}>{n.title}</p>
+                        <p className="text-[11px] text-muted-foreground truncate">{n.message}</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          {new Date(n.created_at).toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                        </p>
+                      </div>
+                      {!n.read && <div className="h-2 w-2 bg-primary rounded-full shrink-0 mt-1.5" />}
+                    </DropdownMenuItem>
+                  ))
+                )}
+              </ScrollArea>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           {/* User menu */}
           <DropdownMenu>
@@ -126,6 +179,10 @@ export function TopHeader() {
                 <p className="text-xs text-muted-foreground">{profile?.email || ""}</p>
               </div>
               <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => navigate("/my-purchases")}>
+                <ShoppingBag className="h-4 w-4 mr-2" />
+                Мои покупки
+              </DropdownMenuItem>
               {isModerator && (
                 <DropdownMenuItem onClick={() => navigate("/admin")}>
                   <Settings className="h-4 w-4 mr-2" />
@@ -144,7 +201,6 @@ export function TopHeader() {
             </DropdownMenuContent>
           </DropdownMenu>
 
-          {/* Mobile menu toggle */}
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             className="md:hidden h-8 w-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted"
@@ -154,7 +210,6 @@ export function TopHeader() {
         </div>
       </header>
 
-      {/* Mobile menu */}
       <AnimatePresence>
         {mobileMenuOpen && (
           <motion.div

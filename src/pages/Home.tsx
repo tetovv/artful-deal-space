@@ -1,6 +1,6 @@
 import { contentItems as mockItems, deals, creators } from "@/data/mockData";
 import { ContentCard } from "@/components/content/ContentCard";
-import { TrendingUp, Users, DollarSign, Zap, Sparkles, ArrowRight, BarChart3, Target } from "lucide-react";
+import { TrendingUp, Users, DollarSign, Zap, Sparkles, ArrowRight, BarChart3, Target, Loader2 } from "lucide-react";
 import { useContentItems } from "@/hooks/useDbData";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAuth } from "@/contexts/AuthContext";
@@ -9,6 +9,8 @@ import { OnboardingWizard } from "@/components/layout/OnboardingWizard";
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
 
 const statsByRole: Record<string, { label: string; value: string; icon: React.ElementType; change: string }[]> = {
   user: [
@@ -43,6 +45,24 @@ const stagger = {
   item: { hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0, transition: { duration: 0.35 } } },
 };
 
+function mapItem(item: any) {
+  return {
+    id: item.id,
+    title: item.title,
+    description: item.description || "",
+    type: item.type,
+    thumbnail: item.thumbnail || "",
+    creatorId: item.creator_id || item.creatorId || "",
+    creatorName: item.creator_name || item.creatorName || "",
+    creatorAvatar: item.creator_avatar || item.creatorAvatar || "",
+    price: item.price ?? null,
+    views: item.views || 0,
+    likes: item.likes || 0,
+    createdAt: item.created_at || item.createdAt || "",
+    tags: item.tags || [],
+  };
+}
+
 const Home = () => {
   const { data: dbItems } = useContentItems();
   const { primaryRole } = useUserRole();
@@ -62,24 +82,34 @@ const Home = () => {
     setShowOnboarding(false);
   };
 
+  const allItems = (dbItems && dbItems.length > 0 ? dbItems : mockItems).map(mapItem);
+
+  // AI recommendations
+  const interests = JSON.parse(localStorage.getItem("mediaos-interests") || "[]");
+  const { data: aiRecommendations, isLoading: aiLoading } = useQuery({
+    queryKey: ["ai-recommendations", interests, primaryRole],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke("recommend-content", {
+        body: { interests, userRole: primaryRole },
+      });
+      if (error) throw error;
+      return (data?.recommendations || []) as string[];
+    },
+    staleTime: 10 * 60 * 1000,
+    enabled: interests.length > 0,
+  });
+
+  // Sort items by AI recommendations
+  const recommendedItems = aiRecommendations
+    ? allItems
+        .filter((item) => aiRecommendations.some((t: string) => t.toLowerCase() === item.title.toLowerCase()))
+        .slice(0, 6)
+    : [];
+
+  const fallbackItems = allItems.slice(0, 4);
+  const displayItems = recommendedItems.length > 0 ? recommendedItems : fallbackItems;
+
   const stats = statsByRole[primaryRole] || statsByRole.user;
-
-  const items = (dbItems && dbItems.length > 0 ? dbItems : mockItems).slice(0, 4).map((item: any) => ({
-    id: item.id,
-    title: item.title,
-    description: item.description || "",
-    type: item.type,
-    thumbnail: item.thumbnail || "",
-    creatorId: item.creator_id || item.creatorId || "",
-    creatorName: item.creator_name || item.creatorName || "",
-    creatorAvatar: item.creator_avatar || item.creatorAvatar || "",
-    price: item.price ?? null,
-    views: item.views || 0,
-    likes: item.likes || 0,
-    createdAt: item.created_at || item.createdAt || "",
-    tags: item.tags || [],
-  }));
-
   const displayName = profile?.display_name || "друг";
   const hour = new Date().getHours();
   const timeGreeting = hour < 12 ? "Доброе утро" : hour < 18 ? "Добрый день" : "Добрый вечер";
@@ -89,7 +119,6 @@ const Home = () => {
       {showOnboarding && <OnboardingWizard onComplete={handleOnboardingComplete} />}
 
       <div className="p-6 lg:p-8 space-y-8 max-w-7xl mx-auto">
-        {/* Greeting */}
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="space-y-1">
           <h1 className="text-3xl font-bold text-foreground">
             {timeGreeting}, <span className="gradient-text">{displayName}</span> 👋
@@ -97,7 +126,6 @@ const Home = () => {
           <p className="text-muted-foreground">{greetings[primaryRole] || greetings.user}</p>
         </motion.div>
 
-        {/* Stats */}
         <motion.div variants={stagger.container} initial="hidden" animate="show" className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {stats.map((s) => (
             <motion.div
@@ -123,27 +151,34 @@ const Home = () => {
           className="rounded-xl border border-primary/20 bg-gradient-to-r from-primary/5 via-accent/5 to-primary/5 p-5 flex items-center gap-4"
         >
           <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-            <Sparkles className="h-5 w-5 text-primary" />
+            {aiLoading ? <Loader2 className="h-5 w-5 text-primary animate-spin" /> : <Sparkles className="h-5 w-5 text-primary" />}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-foreground">Персональная подборка</p>
-            <p className="text-xs text-muted-foreground">На основе ваших интересов и активности мы подобрали контент специально для вас</p>
+            <p className="text-sm font-medium text-foreground">
+              {aiLoading ? "AI подбирает контент..." : recommendedItems.length > 0 ? "Персональная AI-подборка" : "Персональная подборка"}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {recommendedItems.length > 0
+                ? `AI подобрал ${recommendedItems.length} рекомендаций на основе ваших интересов`
+                : "На основе ваших интересов и активности мы подобрали контент специально для вас"}
+            </p>
           </div>
-          <button className="hidden sm:flex items-center gap-1 text-xs font-medium text-primary hover:underline shrink-0">
+          <button onClick={() => window.location.href = "/explore"} className="hidden sm:flex items-center gap-1 text-xs font-medium text-primary hover:underline shrink-0">
             Смотреть <ArrowRight className="h-3 w-3" />
           </button>
         </motion.div>
 
-        {/* Popular content */}
         <section className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-foreground">Рекомендации для вас</h2>
+            <h2 className="text-lg font-semibold text-foreground">
+              {recommendedItems.length > 0 ? "🤖 AI рекомендации для вас" : "Рекомендации для вас"}
+            </h2>
             <button onClick={() => window.location.href = "/explore"} className="text-xs text-primary hover:underline flex items-center gap-1">
               Все <ArrowRight className="h-3 w-3" />
             </button>
           </div>
           <motion.div variants={stagger.container} initial="hidden" animate="show" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {items.map((item: any) => (
+            {displayItems.map((item: any) => (
               <motion.div key={item.id} variants={stagger.item}>
                 <ContentCard item={item} />
               </motion.div>
@@ -151,7 +186,6 @@ const Home = () => {
           </motion.div>
         </section>
 
-        {/* Active deals */}
         <section className="space-y-4">
           <h2 className="text-lg font-semibold text-foreground">Активные сделки</h2>
           <motion.div variants={stagger.container} initial="hidden" animate="show" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
