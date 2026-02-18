@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Mail, Lock, ArrowRight, UserPlus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { useEffect } from "react";
+
 
 const Auth = () => {
   const [email, setEmail] = useState("");
@@ -100,6 +100,25 @@ const Auth = () => {
             {loading ? "Загрузка..." : isSignUp ? "Зарегистрироваться" : "Войти"}
             <ArrowRight className="h-4 w-4 ml-2" />
           </Button>
+
+          {!isSignUp && (
+            <button
+              type="button"
+              onClick={async () => {
+                if (!email) { setError("Введите email"); return; }
+                setLoading(true);
+                const { error } = await supabase.auth.resetPasswordForEmail(email, {
+                  redirectTo: `${window.location.origin}/reset-password`,
+                });
+                setLoading(false);
+                if (error) setError(error.message);
+                else setError("Ссылка для сброса отправлена на " + email);
+              }}
+              className="text-xs text-primary hover:underline w-full text-center"
+            >
+              Забыли пароль?
+            </button>
+          )}
         </form>
 
         <p className="text-center text-xs text-muted-foreground">
