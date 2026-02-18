@@ -243,12 +243,7 @@ const Home = () => {
               {isCreator ? "Управляйте контентом и отслеживайте статистику" : isAdvertiser ? "Ваши кампании и аналитика" : "Откройте для себя лучший контент"}
             </p>
           </div>
-          {(isCreator || isAdvertiser) && (
-            <Button onClick={() => navigate(isCreator ? "/creator-studio" : "/ad-studio")} className="shrink-0">
-              <Plus className="h-4 w-4 mr-2" />
-              {isCreator ? "Новый контент" : "Новая кампания"}
-            </Button>
-          )}
+        
         </motion.div>
 
         {/* ============ CREATOR DASHBOARD ============ */}

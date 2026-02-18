@@ -545,213 +545,97 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
           </div>
         </aside>
 
-        {/* Center content area */}
-        <div className="flex-1 overflow-y-auto">
-          <div className="p-6 space-y-6">
-
-            {/* Top row: Video + Covers side by side */}
-            <div className="flex gap-4">
-              {/* Video player */}
-              <div className="flex-1 min-w-0 max-w-2xl space-y-3">
-                {!videoPreviewUrl ? (
-                  <div
-                    onDragOver={(e) => { e.preventDefault(); setIsDraggingVideo(true); }}
-                    onDragLeave={() => setIsDraggingVideo(false)}
-                    onDrop={handleVideoDrop}
-                    onClick={() => videoInputRef.current?.click()}
-                    className={cn(
-                      "border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-all aspect-video flex flex-col items-center justify-center",
-                      isDraggingVideo ? "border-primary bg-primary/5" : "border-border hover:border-primary/40 hover:bg-muted/30"
-                    )}
-                  >
-                    <ImageIcon className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-                    <p className="text-sm font-medium text-foreground">Загрузите или перетащите</p>
-                    <p className="text-xs text-muted-foreground mt-1">JPG, PNG · 16:9</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    <div className="relative rounded-xl overflow-hidden bg-black aspect-video">
-                      <video
-                        ref={videoRef}
-                        src={videoPreviewUrl}
-                        className="w-full h-full object-contain"
-                        onLoadedMetadata={() => {
-                          const v = videoRef.current;
-                          if (v) { setVideoDuration(v.duration); durationRef.current = v.duration; }
-                        }}
-                        onEnded={() => setIsPlaying(false)}
-                        onClick={togglePlay}
-                      />
-                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent pt-8 pb-2 px-3 space-y-1.5" onClick={(e) => e.stopPropagation()}>
-                        <Slider min={0} max={100} step={0.1} value={[displayProgress]}
-                          onPointerDown={() => setIsSeeking(true)}
-                          onValueChange={(val) => { setDisplayProgress(val[0]); const v = videoRef.current; if (v && v.duration) v.currentTime = (val[0] / 100) * v.duration; }}
-                          onValueCommit={() => setIsSeeking(false)}
-                          className="w-full [&_[data-radix-slider-track]]:h-1 [&_[data-radix-slider-track]]:bg-white/30 [&_[data-radix-slider-range]]:bg-white [&_[data-radix-slider-thumb]]:h-3 [&_[data-radix-slider-thumb]]:w-3 [&_[data-radix-slider-thumb]]:bg-white [&_[data-radix-slider-thumb]]:border-0"
-                        />
-                        <div className="flex items-center gap-2">
-                          <Button size="icon" variant="ghost" className="h-8 w-8 text-white hover:bg-white/20" onClick={togglePlay}>
-                            {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-                          </Button>
-                          <span className="text-[11px] text-white/80 font-mono tabular-nums select-none">
-                            {formatTime(videoRef.current?.currentTime || 0)} / {formatTime(videoDuration)}
-                          </span>
-                          <div className="flex-1" />
-                          <div className="flex items-center gap-1.5">
-                            <Button size="icon" variant="ghost" className="h-7 w-7 text-white hover:bg-white/20"
-                              onClick={(e) => { e.stopPropagation(); const v = videoRef.current; if (v) { v.muted = !v.muted; setVideoVolume(v.muted ? 0 : Math.round(v.volume * 100)); } }}>
-                              {videoVolume === 0 ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
-                            </Button>
-                            <div className="w-20" onClick={(e) => e.stopPropagation()}>
-                              <Slider min={0} max={100} step={1} value={[videoVolume]}
-                                onValueChange={(val) => { const v = videoRef.current; if (v) { v.volume = val[0] / 100; v.muted = val[0] === 0; } setVideoVolume(val[0]); }}
-                                className="[&_[data-radix-slider-track]]:h-1 [&_[data-radix-slider-track]]:bg-white/30 [&_[data-radix-slider-range]]:bg-white [&_[data-radix-slider-thumb]]:h-2.5 [&_[data-radix-slider-thumb]]:w-2.5 [&_[data-radix-slider-thumb]]:bg-white [&_[data-radix-slider-thumb]]:border-0"
-                              />
-                            </div>
-                          </div>
-                          <select value={videoSpeed} onChange={(e) => { const val = Number(e.target.value); setVideoSpeed(val); if (videoRef.current) videoRef.current.playbackRate = val; }}
-                            onClick={(e) => e.stopPropagation()}
-                            className="h-7 px-1.5 text-[11px] bg-white/10 text-white rounded-md border-0 cursor-pointer focus:outline-none focus:ring-0">
-                            {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((s) => (
-                              <option key={s} value={s} className="bg-black text-white">{s}x</option>
-                            ))}
-                          </select>
-                          <Button size="sm" variant="ghost" className="h-7 text-white hover:bg-white/20 text-[11px]"
-                            onClick={(e) => { e.stopPropagation(); captureFrame(); }}>
-                            <ImageIcon className="h-3 w-3 mr-1" /> Кадр
-                          </Button>
+        {/* Center: Video + tab content */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {/* Video upload/player */}
+          <div className="space-y-3">
+            {!videoPreviewUrl ? (
+              <div
+                onDragOver={(e) => { e.preventDefault(); setIsDraggingVideo(true); }}
+                onDragLeave={() => setIsDraggingVideo(false)}
+                onDrop={handleVideoDrop}
+                onClick={() => videoInputRef.current?.click()}
+                className={cn(
+                  "border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-all aspect-video flex flex-col items-center justify-center",
+                  isDraggingVideo ? "border-primary bg-primary/5" : "border-border hover:border-primary/40 hover:bg-muted/30"
+                )}
+              >
+                <Upload className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+                <p className="text-sm font-medium text-foreground">Перетащите видео сюда</p>
+                <p className="text-xs text-muted-foreground mt-1">или нажмите для выбора файла</p>
+                <p className="text-[11px] text-muted-foreground/60 mt-2">MP4, WebM, MOV · до 2 ГБ</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="relative rounded-xl overflow-hidden bg-black aspect-video">
+                  <video
+                    ref={videoRef}
+                    src={videoPreviewUrl}
+                    className="w-full h-full object-contain"
+                    onLoadedMetadata={() => {
+                      const v = videoRef.current;
+                      if (v) { setVideoDuration(v.duration); durationRef.current = v.duration; }
+                    }}
+                    onEnded={() => setIsPlaying(false)}
+                    onClick={togglePlay}
+                  />
+                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent pt-8 pb-2 px-3 space-y-1.5" onClick={(e) => e.stopPropagation()}>
+                    <Slider min={0} max={100} step={0.1} value={[displayProgress]}
+                      onPointerDown={() => setIsSeeking(true)}
+                      onValueChange={(val) => { setDisplayProgress(val[0]); const v = videoRef.current; if (v && v.duration) v.currentTime = (val[0] / 100) * v.duration; }}
+                      onValueCommit={() => setIsSeeking(false)}
+                      className="w-full [&_[data-radix-slider-track]]:h-1 [&_[data-radix-slider-track]]:bg-white/30 [&_[data-radix-slider-range]]:bg-white [&_[data-radix-slider-thumb]]:h-3 [&_[data-radix-slider-thumb]]:w-3 [&_[data-radix-slider-thumb]]:bg-white [&_[data-radix-slider-thumb]]:border-0"
+                    />
+                    <div className="flex items-center gap-2">
+                      <Button size="icon" variant="ghost" className="h-8 w-8 text-white hover:bg-white/20" onClick={togglePlay}>
+                        {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                      </Button>
+                      <span className="text-[11px] text-white/80 font-mono tabular-nums select-none">
+                        {formatTime(videoRef.current?.currentTime || 0)} / {formatTime(videoDuration)}
+                      </span>
+                      <div className="flex-1" />
+                      <div className="flex items-center gap-1.5">
+                        <Button size="icon" variant="ghost" className="h-7 w-7 text-white hover:bg-white/20"
+                          onClick={(e) => { e.stopPropagation(); const v = videoRef.current; if (v) { v.muted = !v.muted; setVideoVolume(v.muted ? 0 : Math.round(v.volume * 100)); } }}>
+                          {videoVolume === 0 ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
+                        </Button>
+                        <div className="w-20" onClick={(e) => e.stopPropagation()}>
+                          <Slider min={0} max={100} step={1} value={[videoVolume]}
+                            onValueChange={(val) => { const v = videoRef.current; if (v) { v.volume = val[0] / 100; v.muted = val[0] === 0; } setVideoVolume(val[0]); }}
+                            className="[&_[data-radix-slider-track]]:h-1 [&_[data-radix-slider-track]]:bg-white/30 [&_[data-radix-slider-range]]:bg-white [&_[data-radix-slider-thumb]]:h-2.5 [&_[data-radix-slider-thumb]]:w-2.5 [&_[data-radix-slider-thumb]]:bg-white [&_[data-radix-slider-thumb]]:border-0"
+                          />
                         </div>
                       </div>
-                      <Button size="icon" variant="secondary" className="absolute top-3 right-3 h-8 w-8 rounded-full bg-black/60 hover:bg-black/80 text-white"
-                        onClick={(e) => { e.stopPropagation(); setVideoFile(null); setVideoPreviewUrl(""); setIsPlaying(false); }}>
-                        <X className="h-4 w-4" />
+                      <select value={videoSpeed} onChange={(e) => { const val = Number(e.target.value); setVideoSpeed(val); if (videoRef.current) videoRef.current.playbackRate = val; }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="h-7 px-1.5 text-[11px] bg-white/10 text-white rounded-md border-0 cursor-pointer focus:outline-none focus:ring-0">
+                        {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((s) => (
+                          <option key={s} value={s} className="bg-black text-white">{s}x</option>
+                        ))}
+                      </select>
+                      <Button size="sm" variant="ghost" className="h-7 text-white hover:bg-white/20 text-[11px]"
+                        onClick={(e) => { e.stopPropagation(); captureFrame(); }}>
+                        <ImageIcon className="h-3 w-3 mr-1" /> Кадр
                       </Button>
                     </div>
-                    {videoFile && (
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Film className="h-3 w-3" /><span>{videoFile.name}</span><span className="text-muted-foreground/50">·</span><span>{(videoFile.size / 1024 / 1024).toFixed(1)} МБ</span>
-                      </div>
-                    )}
+                  </div>
+                  <Button size="icon" variant="secondary" className="absolute top-3 right-3 h-8 w-8 rounded-full bg-black/60 hover:bg-black/80 text-white"
+                    onClick={(e) => { e.stopPropagation(); setVideoFile(null); setVideoPreviewUrl(""); setIsPlaying(false); }}>
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+                {videoFile && (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Film className="h-3 w-3" /><span>{videoFile.name}</span><span className="text-muted-foreground/50">·</span><span>{(videoFile.size / 1024 / 1024).toFixed(1)} МБ</span>
                   </div>
                 )}
-                <input ref={videoInputRef} type="file" accept="video/*" className="hidden" onChange={handleVideoSelect} />
               </div>
+            )}
+            <input ref={videoInputRef} type="file" accept="video/*" className="hidden" onChange={handleVideoSelect} />
+          </div>
 
-              {/* Right column: Thumbnail + A/B covers */}
-              <div className="w-80 shrink-0 space-y-4">
-                <Card>
-                  <CardHeader className="pb-2 pt-4 px-5">
-                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                      <ImageIcon className="h-4 w-4 text-primary" /> Обложка
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="px-5 pb-5">
-                    {thumbnailPreviewUrl ? (
-                      <div className="relative rounded-lg overflow-hidden aspect-video mb-3">
-                        <img src={thumbnailPreviewUrl} alt="Обложка" className="w-full h-full object-cover" />
-                        <Button size="icon" variant="secondary" className="absolute top-2 right-2 h-7 w-7 rounded-full bg-black/60 hover:bg-black/80 text-white"
-                          onClick={() => { setThumbnailFile(null); setThumbnailPreviewUrl(""); setActiveAbCover(null); }}>
-                          <X className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    ) : (
-                      <div
-                        onDragOver={(e) => { e.preventDefault(); setIsDraggingThumb(true); }}
-                        onDragLeave={() => setIsDraggingThumb(false)}
-                        onDrop={handleThumbnailDrop}
-                        onClick={() => thumbnailInputRef.current?.click()}
-                        className={cn(
-                          "border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-all aspect-video flex flex-col items-center justify-center",
-                          isDraggingThumb ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"
-                        )}
-                      >
-                        <ImageIcon className="h-6 w-6 text-muted-foreground mb-2" />
-                        <p className="text-xs text-muted-foreground">Загрузите или перетащите</p>
-                        <p className="text-[11px] text-muted-foreground/60 mt-0.5">JPG, PNG · 16:9</p>
-                      </div>
-                    )}
-                    <input ref={thumbnailInputRef} type="file" accept="image/*" className="hidden" onChange={handleThumbnailSelect} />
-                    {videoPreviewUrl && (
-                      <Button variant="outline" size="sm" className="w-full text-xs mt-2" onClick={captureFrame}>
-                        <Film className="h-3 w-3 mr-1.5" /> Захватить из видео
-                      </Button>
-                    )}
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardContent className="px-5 py-4 space-y-3">
-                    {abCovers.length > 0 && (
-                      <div className="grid grid-cols-2 gap-2">
-                        {abCovers.map((cover) => (
-                          <div key={cover.id} onClick={() => selectAbCover(cover)}
-                            className={cn(
-                              "relative rounded-lg overflow-hidden aspect-video cursor-pointer border-2 transition-all group",
-                              activeAbCover === cover.id ? "border-primary ring-2 ring-primary/20" : "border-border hover:border-primary/40"
-                            )}>
-                            <img src={cover.previewUrl} alt={cover.label} className="w-full h-full object-cover" />
-                            <Badge className="absolute bottom-1.5 left-1.5 text-[9px] bg-black/60 text-white border-0">{cover.label}</Badge>
-                            {activeAbCover === cover.id && <CheckCircle className="absolute top-1.5 left-1.5 h-4 w-4 text-primary drop-shadow-md" />}
-                            <button onClick={(e) => { e.stopPropagation(); removeAbCover(cover.id); }}
-                              className="absolute top-1.5 right-1.5 h-5 w-5 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                              <X className="h-3 w-3" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    <Button variant="outline" size="sm" className="w-full text-xs" onClick={addAbCover} disabled={abCovers.length >= 4}>
-                      <Plus className="h-3 w-3 mr-1.5" />
-                      {abCovers.length === 0 ? "+ Добавить варианты обложки" : `Добавить вариант (${abCovers.length}/4)`}
-                    </Button>
-                    <input ref={abCoverInputRef} type="file" accept="image/*" className="hidden" onChange={handleAbCoverSelect} />
-                    {abCovers.length >= 2 && (
-                      <div className="rounded-lg bg-primary/5 border border-primary/20 p-3 text-xs text-foreground flex items-start gap-2">
-                        <Shuffle className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
-                        <span>A/B тест активен — <strong>{abCovers.length} варианта</strong></span>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-            </div>
-
-            {/* Preview Card */}
-            <Card>
-              <CardHeader className="pb-2 pt-4 px-5">
-                <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                  <Eye className="h-4 w-4 text-primary" /> Предпросмотр карточки
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="px-5 pb-5">
-                <div className="rounded-lg border border-border overflow-hidden max-w-sm">
-                  <div className="aspect-video bg-muted relative">
-                    {thumbnailPreviewUrl ? (
-                      <img src={thumbnailPreviewUrl} alt="" className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-muted-foreground"><Film className="h-8 w-8" /></div>
-                    )}
-                    {form.age_restricted && <Badge variant="destructive" className="absolute top-2 left-2 text-[9px]">18+</Badge>}
-                    {form.monetization_type !== "free" && (
-                      <Badge className="absolute top-2 right-2 text-[9px] bg-success text-white">
-                        {form.monetization_type === "paid" ? `₽${form.price || 0}` : form.monetization_type === "subscription" ? "Подписка" : "PWYW"}
-                      </Badge>
-                    )}
-                  </div>
-                  <div className="p-3 space-y-1">
-                    <p className="text-sm font-semibold text-foreground line-clamp-2">{form.title || "Название видео"}</p>
-                    <p className="text-xs text-muted-foreground">{profile?.display_name || "Автор"}</p>
-                    <div className="flex flex-wrap gap-1 mt-1.5">
-                      {form.tags.slice(0, 3).map((t) => <Badge key={t} variant="secondary" className="text-[10px]">{t}</Badge>)}
-                      {form.tags.length > 3 && <Badge variant="secondary" className="text-[10px]">+{form.tags.length - 3}</Badge>}
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Section content below (non-media tabs) */}
-            {activeTab !== "media" && (
+          {/* Tab content below video (non-media tabs) */}
+          {activeTab !== "media" && (
             <motion.div key={activeTab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15 }}>
 
               {activeTab === "basic" && (
@@ -922,9 +806,118 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
                 </Card>
               )}
             </motion.div>
-            )}
-          </div>
+          )}
         </div>
+
+        {/* Right sidebar: Covers, A/B test, Preview */}
+        <aside className="w-72 shrink-0 border-l border-border bg-card/30 overflow-y-auto p-4 space-y-4">
+          {/* Thumbnail */}
+          <Card>
+            <CardHeader className="pb-2 pt-3 px-4">
+              <CardTitle className="text-xs font-semibold flex items-center gap-2">
+                <ImageIcon className="h-3.5 w-3.5 text-primary" /> Обложка
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-4 pb-4">
+              {thumbnailPreviewUrl ? (
+                <div className="relative rounded-lg overflow-hidden aspect-video mb-2">
+                  <img src={thumbnailPreviewUrl} alt="Обложка" className="w-full h-full object-cover" />
+                  <Button size="icon" variant="secondary" className="absolute top-1.5 right-1.5 h-6 w-6 rounded-full bg-black/60 hover:bg-black/80 text-white"
+                    onClick={() => { setThumbnailFile(null); setThumbnailPreviewUrl(""); setActiveAbCover(null); }}>
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              ) : (
+                <div
+                  onDragOver={(e) => { e.preventDefault(); setIsDraggingThumb(true); }}
+                  onDragLeave={() => setIsDraggingThumb(false)}
+                  onDrop={handleThumbnailDrop}
+                  onClick={() => thumbnailInputRef.current?.click()}
+                  className={cn(
+                    "border-2 border-dashed rounded-lg p-5 text-center cursor-pointer transition-all aspect-video flex flex-col items-center justify-center",
+                    isDraggingThumb ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"
+                  )}
+                >
+                  <ImageIcon className="h-6 w-6 text-muted-foreground mb-1.5" />
+                  <p className="text-xs text-muted-foreground">Загрузите или перетащите</p>
+                  <p className="text-[10px] text-muted-foreground/60">JPG, PNG · 16:9</p>
+                </div>
+              )}
+              <input ref={thumbnailInputRef} type="file" accept="image/*" className="hidden" onChange={handleThumbnailSelect} />
+              {videoPreviewUrl && (
+                <Button variant="outline" size="sm" className="w-full text-[11px] mt-2" onClick={captureFrame}>
+                  <Film className="h-3 w-3 mr-1" /> Захватить из видео
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* A/B Cover Testing */}
+          <Card>
+            <CardContent className="px-4 py-3 space-y-2.5">
+              {abCovers.length > 0 && (
+                <div className="grid grid-cols-2 gap-1.5">
+                  {abCovers.map((cover) => (
+                    <div key={cover.id} onClick={() => selectAbCover(cover)}
+                      className={cn(
+                        "relative rounded-md overflow-hidden aspect-video cursor-pointer border-2 transition-all group",
+                        activeAbCover === cover.id ? "border-primary ring-1 ring-primary/20" : "border-border hover:border-primary/40"
+                      )}>
+                      <img src={cover.previewUrl} alt={cover.label} className="w-full h-full object-cover" />
+                      <Badge className="absolute bottom-1 left-1 text-[8px] bg-black/60 text-white border-0">{cover.label}</Badge>
+                      {activeAbCover === cover.id && <CheckCircle className="absolute top-1 left-1 h-3 w-3 text-primary drop-shadow-md" />}
+                      <button onClick={(e) => { e.stopPropagation(); removeAbCover(cover.id); }}
+                        className="absolute top-1 right-1 h-4 w-4 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <X className="h-2.5 w-2.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <Button variant="outline" size="sm" className="w-full text-[11px]" onClick={addAbCover} disabled={abCovers.length >= 4}>
+                <Plus className="h-3 w-3 mr-1" />
+                {abCovers.length === 0 ? "+ Добавить варианты обложки" : `Добавить (${abCovers.length}/4)`}
+              </Button>
+              <input ref={abCoverInputRef} type="file" accept="image/*" className="hidden" onChange={handleAbCoverSelect} />
+              {abCovers.length >= 2 && (
+                <div className="rounded-md bg-primary/5 border border-primary/20 p-2 text-[10px] text-foreground flex items-start gap-1.5">
+                  <Shuffle className="h-3 w-3 text-primary shrink-0 mt-0.5" />
+                  <span>A/B тест — <strong>{abCovers.length} варианта</strong></span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Preview Card */}
+          <Card>
+            <CardHeader className="pb-2 pt-3 px-4">
+              <CardTitle className="text-xs font-semibold flex items-center gap-2">
+                <Eye className="h-3.5 w-3.5 text-primary" /> Предпросмотр карточки
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-4 pb-4">
+              <div className="rounded-lg border border-border overflow-hidden">
+                <div className="aspect-video bg-muted relative">
+                  {thumbnailPreviewUrl ? (
+                    <img src={thumbnailPreviewUrl} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-muted-foreground"><Film className="h-6 w-6" /></div>
+                  )}
+                  {form.age_restricted && <Badge variant="destructive" className="absolute top-1.5 left-1.5 text-[8px]">18+</Badge>}
+                  {form.monetization_type !== "free" && (
+                    <Badge className="absolute top-1.5 right-1.5 text-[8px] bg-success text-white">
+                      {form.monetization_type === "paid" ? `₽${form.price || 0}` : form.monetization_type === "subscription" ? "Подписка" : "PWYW"}
+                    </Badge>
+                  )}
+                </div>
+                <div className="p-2.5 space-y-0.5">
+                  <p className="text-xs font-semibold text-foreground line-clamp-2">{form.title || "Название видео"}</p>
+                  <p className="text-[11px] text-muted-foreground">{profile?.display_name || "Автор"}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </aside>
       </div>
     </div>
   );
