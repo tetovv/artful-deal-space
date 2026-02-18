@@ -18,6 +18,7 @@ import TrustRating from "./pages/TrustRating";
 import AIWorkspace from "./pages/AIWorkspace";
 import AdminPanel from "./pages/AdminPanel";
 import MyPurchases from "./pages/MyPurchases";
+import Settings from "./pages/Settings";
 import Auth from "./pages/Auth";
 import ResetPassword from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
@@ -52,6 +53,7 @@ const App = () => (
               <Route path="/ai-workspace" element={<Protected><AIWorkspace /></Protected>} />
               <Route path="/admin" element={<Protected><AdminPanel /></Protected>} />
               <Route path="/my-purchases" element={<Protected><MyPurchases /></Protected>} />
+              <Route path="/settings" element={<Protected><Settings /></Protected>} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </AuthProvider>
