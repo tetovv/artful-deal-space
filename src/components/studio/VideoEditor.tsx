@@ -1,9 +1,10 @@
-import { useState, useRef, useCallback, useMemo, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import {
   Upload, X, Plus, Trash2, GripVertical, Image as ImageIcon,
   Play, Pause, Clock, Tag, Globe, Shield, DollarSign, Calendar,
   Save, Send, Eye, ChevronDown, ChevronUp, Film, FileText,
-  AlertCircle, CheckCircle, Loader2, Music,
+  AlertCircle, CheckCircle, Loader2, Music, Volume2, VolumeX,
+  Layers, Shuffle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
+import { Slider } from "@/components/ui/slider";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -26,6 +28,13 @@ interface Chapter {
   id: string;
   time: string;
   title: string;
+}
+
+interface ABCover {
+  id: string;
+  file: File | null;
+  previewUrl: string;
+  label: string;
 }
 
 interface VideoFormData {
@@ -68,12 +77,51 @@ const CATEGORIES = [
   "Бизнес", "Искусство", "Здоровье", "Новости", "Авто",
 ];
 
+/** Convert local datetime-local value to MSK and back */
+const getMSKOffset = () => {
+  // MSK = UTC+3
+  const now = new Date();
+  const localOffset = now.getTimezoneOffset(); // in minutes, negative for east of UTC
+  const mskOffsetMinutes = -180; // UTC+3 = -180
+  return (localOffset + mskOffsetMinutes) * 60 * 1000; // diff in ms
+};
+
+const localToMSK = (localDatetimeStr: string): string => {
+  if (!localDatetimeStr) return "";
+  const d = new Date(localDatetimeStr);
+  const msk = new Date(d.getTime() + getMSKOffset());
+  return msk.toISOString().slice(0, 16);
+};
+
+const mskToLocal = (mskDatetimeStr: string): string => {
+  if (!mskDatetimeStr) return "";
+  const d = new Date(mskDatetimeStr);
+  const local = new Date(d.getTime() - getMSKOffset());
+  const y = local.getFullYear();
+  const mo = String(local.getMonth() + 1).padStart(2, "0");
+  const da = String(local.getDate()).padStart(2, "0");
+  const h = String(local.getHours()).padStart(2, "0");
+  const mi = String(local.getMinutes()).padStart(2, "0");
+  return `${y}-${mo}-${da}T${h}:${mi}`;
+};
+
+const formatMSKDisplay = (localDatetimeStr: string): string => {
+  if (!localDatetimeStr) return "";
+  const msk = localToMSK(localDatetimeStr);
+  const d = new Date(msk);
+  return d.toLocaleString("ru-RU", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) + " МСК";
+};
+
 export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
   const { user, profile } = useAuth();
   const videoInputRef = useRef<HTMLInputElement>(null);
   const thumbnailInputRef = useRef<HTMLInputElement>(null);
   const subtitleInputRef = useRef<HTMLInputElement>(null);
-  const videoPreviewRef = useRef<HTMLVideoElement>(null);
+  const abCoverInputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const progressRef = useRef(0);
+  const durationRef = useRef(0);
+  const animFrameRef = useRef<number>(0);
 
   const isEditing = !!editItem;
 
@@ -110,10 +158,15 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
   });
   const [isPlaying, setIsPlaying] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [videoProgress, setVideoProgress] = useState(0);
+  const [displayProgress, setDisplayProgress] = useState(0);
   const [videoDuration, setVideoDuration] = useState(0);
   const [videoVolume, setVideoVolume] = useState(100);
   const [videoSpeed, setVideoSpeed] = useState(1);
+  const [isSeeking, setIsSeeking] = useState(false);
+
+  // A/B Cover testing
+  const [abCovers, setAbCovers] = useState<ABCover[]>([]);
+  const [activeAbCover, setActiveAbCover] = useState<string | null>(null);
 
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60);
@@ -122,6 +175,23 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
   };
 
   const toggleSection = (key: string) => setExpandedSections((p) => ({ ...p, [key]: !p[key] }));
+
+  /* ── Video progress via rAF (no re-render on every frame) ── */
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+
+    const update = () => {
+      if (v && !v.paused && v.duration && !isSeeking) {
+        const pct = (v.currentTime / v.duration) * 100;
+        progressRef.current = pct;
+        setDisplayProgress(pct);
+      }
+      animFrameRef.current = requestAnimationFrame(update);
+    };
+    animFrameRef.current = requestAnimationFrame(update);
+    return () => cancelAnimationFrame(animFrameRef.current);
+  }, [videoPreviewUrl, isSeeking]);
 
   /* ── Video drag & drop ── */
   const handleVideoDrop = useCallback((e: React.DragEvent) => {
@@ -164,7 +234,7 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
   };
 
   const captureFrame = () => {
-    const video = videoPreviewRef.current;
+    const video = videoRef.current;
     if (!video) return;
     const canvas = document.createElement("canvas");
     canvas.width = video.videoWidth;
@@ -178,6 +248,43 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
         toast.success("Обложка захвачена из кадра!");
       }
     }, "image/jpeg", 0.9);
+  };
+
+  /* ── A/B Covers ── */
+  const addAbCover = () => {
+    abCoverInputRef.current?.click();
+  };
+
+  const handleAbCoverSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && file.type.startsWith("image/")) {
+      const newCover: ABCover = {
+        id: crypto.randomUUID(),
+        file,
+        previewUrl: URL.createObjectURL(file),
+        label: `Вариант ${String.fromCharCode(65 + abCovers.length)}`,
+      };
+      setAbCovers((prev) => [...prev, newCover]);
+      if (!activeAbCover && !thumbnailPreviewUrl) {
+        setActiveAbCover(newCover.id);
+        setThumbnailFile(file);
+        setThumbnailPreviewUrl(newCover.previewUrl);
+      }
+    }
+    if (e.target) e.target.value = "";
+  };
+
+  const selectAbCover = (cover: ABCover) => {
+    setActiveAbCover(cover.id);
+    setThumbnailFile(cover.file);
+    setThumbnailPreviewUrl(cover.previewUrl);
+  };
+
+  const removeAbCover = (id: string) => {
+    setAbCovers((prev) => prev.filter((c) => c.id !== id));
+    if (activeAbCover === id) {
+      setActiveAbCover(null);
+    }
   };
 
   /* ── Tags ── */
@@ -212,13 +319,19 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
     setForm((p) => ({ ...p, chapters: p.chapters.filter((c) => c.id !== id) }));
   };
 
-  /* ── Toggle play ── */
-  const togglePlay = () => {
-    const v = videoPreviewRef.current;
+  /* ── Play/Pause ── */
+  const togglePlay = useCallback((e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    const v = videoRef.current;
     if (!v) return;
-    if (v.paused) { v.play(); setIsPlaying(true); }
-    else { v.pause(); setIsPlaying(false); }
-  };
+    if (v.paused) {
+      v.play().catch(() => {});
+      setIsPlaying(true);
+    } else {
+      v.pause();
+      setIsPlaying(false);
+    }
+  }, []);
 
   /* ── Upload helper ── */
   const uploadFile = async (file: File, path: string) => {
@@ -242,25 +355,28 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
       let thumbnailUrl = editItem?.thumbnail || "";
       let subtitlesUrl = editItem?.subtitles_url || "";
 
-      // Upload video
       if (videoFile) {
         setUploadProgress(20);
         videoUrl = await uploadFile(videoFile, `${user.id}/videos/${Date.now()}_${videoFile.name}`);
         setUploadProgress(60);
       }
 
-      // Upload thumbnail
       if (thumbnailFile) {
         thumbnailUrl = await uploadFile(thumbnailFile, `${user.id}/thumbnails/${Date.now()}_${thumbnailFile.name}`);
         setUploadProgress(75);
       }
 
-      // Upload subtitles
       if (subtitleFile) {
         subtitlesUrl = await uploadFile(subtitleFile, `${user.id}/subtitles/${Date.now()}_${subtitleFile.name}`);
       }
 
       setUploadProgress(85);
+
+      // Convert scheduled_at from local to UTC for storage
+      let scheduledAtUtc: string | null = null;
+      if (form.status === "scheduled" && form.scheduled_at) {
+        scheduledAtUtc = new Date(form.scheduled_at).toISOString();
+      }
 
       const record: Record<string, any> = {
         title: form.title.trim(),
@@ -279,7 +395,7 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
         price: form.monetization_type === "paid" ? form.price : null,
         price_min: form.monetization_type === "pay_what_you_want" ? form.price_min : null,
         status: publishStatus || form.status,
-        scheduled_at: form.status === "scheduled" ? form.scheduled_at || null : null,
+        scheduled_at: scheduledAtUtc,
         creator_id: user.id,
         creator_name: profile?.display_name || "",
         creator_avatar: profile?.avatar_url || "",
@@ -293,7 +409,6 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
       }
 
       setUploadProgress(100);
-
       if (error) throw error;
 
       toast.success(publishStatus === "published" ? "Видео опубликовано!" : "Сохранено как черновик");
@@ -324,7 +439,7 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
         {expandedSections[id] ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
       </button>
       <div
-        className="grid transition-all duration-200 ease-in-out"
+        className="grid transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]"
         style={{ gridTemplateRows: expandedSections[id] ? "1fr" : "0fr" }}
       >
         <div className="overflow-hidden">
@@ -395,89 +510,132 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
               </div>
             ) : (
               <div className="space-y-3">
-                <div className="relative rounded-xl overflow-hidden bg-black aspect-video group">
+                <div className="relative rounded-xl overflow-hidden bg-black aspect-video">
                   <video
-                    ref={videoPreviewRef}
+                    ref={videoRef}
                     src={videoPreviewUrl}
                     className="w-full h-full object-contain"
-                    onTimeUpdate={() => {
-                      const v = videoPreviewRef.current;
-                      if (v && v.duration) setVideoProgress((v.currentTime / v.duration) * 100);
-                    }}
                     onLoadedMetadata={() => {
-                      const v = videoPreviewRef.current;
-                      if (v) setVideoDuration(v.duration);
+                      const v = videoRef.current;
+                      if (v) {
+                        setVideoDuration(v.duration);
+                        durationRef.current = v.duration;
+                      }
                     }}
                     onEnded={() => setIsPlaying(false)}
+                    onClick={togglePlay}
                   />
-                  {/* Progress bar */}
-                  <div className="absolute bottom-12 left-0 right-0 px-3">
-                    <input
-                      type="range"
+                  
+                  {/* Controls overlay */}
+                  <div
+                    className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent pt-8 pb-2 px-3 space-y-1.5"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {/* Progress bar */}
+                    <Slider
                       min={0}
                       max={100}
                       step={0.1}
-                      value={videoProgress}
-                      onChange={(e) => {
-                        const v = videoPreviewRef.current;
+                      value={[displayProgress]}
+                      onPointerDown={() => setIsSeeking(true)}
+                      onValueChange={(val) => {
+                        setDisplayProgress(val[0]);
+                        const v = videoRef.current;
                         if (v && v.duration) {
-                          v.currentTime = (Number(e.target.value) / 100) * v.duration;
-                          setVideoProgress(Number(e.target.value));
+                          v.currentTime = (val[0] / 100) * v.duration;
                         }
                       }}
-                      className="w-full h-1 accent-primary cursor-pointer appearance-none bg-white/30 rounded-full [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white"
+                      onValueCommit={() => setIsSeeking(false)}
+                      className="w-full [&_[data-radix-slider-track]]:h-1 [&_[data-radix-slider-track]]:bg-white/30 [&_[data-radix-slider-range]]:bg-white [&_[data-radix-slider-thumb]]:h-3 [&_[data-radix-slider-thumb]]:w-3 [&_[data-radix-slider-thumb]]:bg-white [&_[data-radix-slider-thumb]]:border-0"
                     />
-                  </div>
-                  {/* Controls bar */}
-                  <div className="absolute bottom-3 left-3 right-3 flex items-center gap-2">
-                    <Button size="icon" variant="secondary" className="h-8 w-8 rounded-full bg-black/60 hover:bg-black/80 text-white" onClick={togglePlay}>
-                      {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-                    </Button>
-                    {/* Time */}
-                    <span className="text-[11px] text-white/80 font-mono tabular-nums">
-                      {formatTime(videoPreviewRef.current?.currentTime || 0)} / {formatTime(videoDuration)}
-                    </span>
-                    <div className="flex-1" />
-                    {/* Volume */}
-                    <div className="flex items-center gap-1">
-                      <Button size="icon" variant="secondary" className="h-7 w-7 rounded-full bg-black/60 hover:bg-black/80 text-white"
-                        onClick={() => {
-                          const v = videoPreviewRef.current;
-                          if (v) { v.muted = !v.muted; setVideoVolume(v.muted ? 0 : v.volume * 100); }
-                        }}>
-                        {videoVolume === 0 ? <Music className="h-3 w-3" /> : <Music className="h-3 w-3" />}
+
+                    {/* Controls row */}
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8 text-white hover:bg-white/20"
+                        onClick={togglePlay}
+                      >
+                        {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
                       </Button>
-                      <input
-                        type="range" min={0} max={100} value={videoVolume}
+
+                      {/* Time */}
+                      <span className="text-[11px] text-white/80 font-mono tabular-nums select-none">
+                        {formatTime(videoRef.current?.currentTime || 0)} / {formatTime(videoDuration)}
+                      </span>
+
+                      <div className="flex-1" />
+
+                      {/* Volume */}
+                      <div className="flex items-center gap-1.5">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7 text-white hover:bg-white/20"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const v = videoRef.current;
+                            if (v) {
+                              v.muted = !v.muted;
+                              setVideoVolume(v.muted ? 0 : Math.round(v.volume * 100));
+                            }
+                          }}
+                        >
+                          {videoVolume === 0 ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
+                        </Button>
+                        <div className="w-20" onClick={(e) => e.stopPropagation()}>
+                          <Slider
+                            min={0}
+                            max={100}
+                            step={1}
+                            value={[videoVolume]}
+                            onValueChange={(val) => {
+                              const v = videoRef.current;
+                              if (v) {
+                                v.volume = val[0] / 100;
+                                v.muted = val[0] === 0;
+                              }
+                              setVideoVolume(val[0]);
+                            }}
+                            className="[&_[data-radix-slider-track]]:h-1 [&_[data-radix-slider-track]]:bg-white/30 [&_[data-radix-slider-range]]:bg-white [&_[data-radix-slider-thumb]]:h-2.5 [&_[data-radix-slider-thumb]]:w-2.5 [&_[data-radix-slider-thumb]]:bg-white [&_[data-radix-slider-thumb]]:border-0"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Speed */}
+                      <select
+                        value={videoSpeed}
                         onChange={(e) => {
-                          const v = videoPreviewRef.current;
                           const val = Number(e.target.value);
-                          if (v) { v.volume = val / 100; v.muted = val === 0; }
-                          setVideoVolume(val);
+                          setVideoSpeed(val);
+                          if (videoRef.current) videoRef.current.playbackRate = val;
                         }}
-                        className="w-16 h-1 accent-white cursor-pointer appearance-none bg-white/30 rounded-full [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white"
-                      />
+                        onClick={(e) => e.stopPropagation()}
+                        className="h-7 px-1.5 text-[11px] bg-white/10 text-white rounded-md border-0 cursor-pointer focus:outline-none focus:ring-0"
+                      >
+                        {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((s) => (
+                          <option key={s} value={s} className="bg-black text-white">{s}x</option>
+                        ))}
+                      </select>
+
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 text-white hover:bg-white/20 text-[11px]"
+                        onClick={(e) => { e.stopPropagation(); captureFrame(); }}
+                      >
+                        <ImageIcon className="h-3 w-3 mr-1" /> Кадр
+                      </Button>
                     </div>
-                    {/* Speed */}
-                    <select
-                      value={videoSpeed}
-                      onChange={(e) => {
-                        const val = Number(e.target.value);
-                        setVideoSpeed(val);
-                        if (videoPreviewRef.current) videoPreviewRef.current.playbackRate = val;
-                      }}
-                      className="h-7 px-1.5 text-[11px] bg-black/60 text-white rounded-md border-0 cursor-pointer focus:ring-0"
-                    >
-                      {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((s) => (
-                        <option key={s} value={s}>{s}x</option>
-                      ))}
-                    </select>
-                    <Button size="sm" variant="secondary" className="h-7 rounded-full bg-black/60 hover:bg-black/80 text-white text-[11px]" onClick={captureFrame}>
-                      <ImageIcon className="h-3 w-3 mr-1" /> Кадр
-                    </Button>
                   </div>
-                  <Button size="icon" variant="secondary" className="absolute top-3 right-3 h-8 w-8 rounded-full bg-black/60 hover:bg-black/80 text-white"
-                    onClick={() => { setVideoFile(null); setVideoPreviewUrl(""); }}>
+
+                  <Button
+                    size="icon"
+                    variant="secondary"
+                    className="absolute top-3 right-3 h-8 w-8 rounded-full bg-black/60 hover:bg-black/80 text-white"
+                    onClick={(e) => { e.stopPropagation(); setVideoFile(null); setVideoPreviewUrl(""); setIsPlaying(false); }}
+                  >
                     <X className="h-4 w-4" />
                   </Button>
                 </div>
@@ -508,7 +666,6 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
                 />
                 <p className="text-[11px] text-muted-foreground mt-1">{form.title.length}/100</p>
               </div>
-
               <div>
                 <Label className="text-xs font-medium mb-1.5 block">Описание</Label>
                 <Textarea
@@ -520,7 +677,6 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
                 />
                 <p className="text-[11px] text-muted-foreground mt-1">{form.description.length}/5000</p>
               </div>
-
               {/* Tags */}
               <div>
                 <Label className="text-xs font-medium mb-1.5 block">Теги</Label>
@@ -544,7 +700,6 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
                     <Plus className="h-3 w-3" />
                   </Button>
                 </div>
-                {/* Quick category tags */}
                 <div className="flex flex-wrap gap-1 mt-2">
                   {CATEGORIES.filter((c) => !form.tags.includes(c)).slice(0, 8).map((cat) => (
                     <button
@@ -567,18 +722,8 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
               {form.chapters.map((ch, i) => (
                 <div key={ch.id} className="flex items-center gap-2">
                   <GripVertical className="h-4 w-4 text-muted-foreground/40 shrink-0 cursor-grab" />
-                  <Input
-                    value={ch.time}
-                    onChange={(e) => updateChapter(ch.id, "time", e.target.value)}
-                    placeholder="00:00"
-                    className="w-20 text-sm text-center font-mono"
-                  />
-                  <Input
-                    value={ch.title}
-                    onChange={(e) => updateChapter(ch.id, "title", e.target.value)}
-                    placeholder={`Глава ${i + 1}`}
-                    className="text-sm flex-1"
-                  />
+                  <Input value={ch.time} onChange={(e) => updateChapter(ch.id, "time", e.target.value)} placeholder="00:00" className="w-20 text-sm text-center font-mono" />
+                  <Input value={ch.title} onChange={(e) => updateChapter(ch.id, "title", e.target.value)} placeholder={`Глава ${i + 1}`} className="text-sm flex-1" />
                   <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive shrink-0" onClick={() => removeChapter(ch.id)}>
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
@@ -605,35 +750,18 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
                   </SelectContent>
                 </Select>
               </div>
-
               {form.monetization_type === "paid" && (
                 <div>
                   <Label className="text-xs font-medium mb-1.5 block">Цена (₽)</Label>
-                  <Input
-                    type="number"
-                    value={form.price || ""}
-                    onChange={(e) => setForm((p) => ({ ...p, price: Number(e.target.value) || null }))}
-                    placeholder="299"
-                    className="text-sm w-40"
-                    min={1}
-                  />
+                  <Input type="number" value={form.price || ""} onChange={(e) => setForm((p) => ({ ...p, price: Number(e.target.value) || null }))} placeholder="299" className="text-sm w-40" min={1} />
                 </div>
               )}
-
               {form.monetization_type === "pay_what_you_want" && (
                 <div>
                   <Label className="text-xs font-medium mb-1.5 block">Минимальная цена (₽)</Label>
-                  <Input
-                    type="number"
-                    value={form.price_min || ""}
-                    onChange={(e) => setForm((p) => ({ ...p, price_min: Number(e.target.value) || null }))}
-                    placeholder="100"
-                    className="text-sm w-40"
-                    min={0}
-                  />
+                  <Input type="number" value={form.price_min || ""} onChange={(e) => setForm((p) => ({ ...p, price_min: Number(e.target.value) || null }))} placeholder="100" className="text-sm w-40" min={0} />
                 </div>
               )}
-
               {form.monetization_type === "subscription" && (
                 <div className="rounded-lg bg-muted/50 border border-border p-3 text-xs text-muted-foreground">
                   <AlertCircle className="h-3.5 w-3.5 inline mr-1" />
@@ -653,7 +781,6 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
                 </div>
                 <Switch checked={form.age_restricted} onCheckedChange={(v) => setForm((p) => ({ ...p, age_restricted: v }))} />
               </div>
-
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label className="text-xs font-medium mb-1.5 block">Язык</Label>
@@ -664,18 +791,11 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
                     </SelectContent>
                   </Select>
                 </div>
-
                 <div>
                   <Label className="text-xs font-medium mb-1.5 block">Геолокация</Label>
-                  <Input
-                    value={form.geo}
-                    onChange={(e) => setForm((p) => ({ ...p, geo: e.target.value }))}
-                    placeholder="Россия"
-                    className="text-sm"
-                  />
+                  <Input value={form.geo} onChange={(e) => setForm((p) => ({ ...p, geo: e.target.value }))} placeholder="Россия" className="text-sm" />
                 </div>
               </div>
-
               {/* Subtitles */}
               <div>
                 <Label className="text-xs font-medium mb-1.5 block">Субтитры</Label>
@@ -692,7 +812,6 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
                 <input ref={subtitleInputRef} type="file" accept=".srt,.vtt" className="hidden"
                   onChange={(e) => { if (e.target.files?.[0]) setSubtitleFile(e.target.files[0]); }} />
               </div>
-
               {/* Pinned comment */}
               <div>
                 <Label className="text-xs font-medium mb-1.5 block">Закреплённый комментарий</Label>
@@ -721,23 +840,33 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
                   </SelectContent>
                 </Select>
               </div>
-
               {form.status === "scheduled" && (
-                <div>
-                  <Label className="text-xs font-medium mb-1.5 block">Дата и время публикации</Label>
+                <div className="space-y-2">
+                  <Label className="text-xs font-medium mb-1.5 block">Дата и время публикации (МСК)</Label>
                   <Input
                     type="datetime-local"
                     value={form.scheduled_at}
                     onChange={(e) => setForm((p) => ({ ...p, scheduled_at: e.target.value }))}
                     className="text-sm w-64"
                   />
+                  {form.scheduled_at && (
+                    <div className="rounded-lg bg-primary/5 border border-primary/20 p-3 text-xs text-foreground flex items-center gap-2">
+                      <Clock className="h-3.5 w-3.5 text-primary shrink-0" />
+                      <span>
+                        Публикация: <strong>{formatMSKDisplay(form.scheduled_at)}</strong>
+                      </span>
+                    </div>
+                  )}
+                  <p className="text-[11px] text-muted-foreground">
+                    Время указывается по московскому времени (UTC+3)
+                  </p>
                 </div>
               )}
             </div>
           </Section>
         </div>
 
-        {/* ── RIGHT: Preview & Thumbnail ── */}
+        {/* ── RIGHT: Preview, A/B Covers & Thumbnail ── */}
         <div className="space-y-4">
           {/* Thumbnail */}
           <Card>
@@ -751,7 +880,7 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
                 <div className="relative rounded-lg overflow-hidden aspect-video mb-3">
                   <img src={thumbnailPreviewUrl} alt="Обложка" className="w-full h-full object-cover" />
                   <Button size="icon" variant="secondary" className="absolute top-2 right-2 h-7 w-7 rounded-full bg-black/60 hover:bg-black/80 text-white"
-                    onClick={() => { setThumbnailFile(null); setThumbnailPreviewUrl(""); }}>
+                    onClick={() => { setThumbnailFile(null); setThumbnailPreviewUrl(""); setActiveAbCover(null); }}>
                     <X className="h-3 w-3" />
                   </Button>
                 </div>
@@ -773,9 +902,71 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
               )}
               <input ref={thumbnailInputRef} type="file" accept="image/*" className="hidden" onChange={handleThumbnailSelect} />
               {videoPreviewUrl && (
-                <Button variant="outline" size="sm" className="w-full text-xs" onClick={captureFrame}>
+                <Button variant="outline" size="sm" className="w-full text-xs mt-2" onClick={captureFrame}>
                   <Film className="h-3 w-3 mr-1.5" /> Захватить из видео
                 </Button>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* A/B Cover Testing */}
+          <Card>
+            <CardHeader className="pb-2 pt-4 px-5">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <Layers className="h-4 w-4 text-primary" /> A/B тест обложек
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-5 pb-5 space-y-3">
+              <p className="text-[11px] text-muted-foreground">
+                Загрузите несколько вариантов обложки — система покажет их разным зрителям и определит лучшую по CTR.
+              </p>
+
+              {abCovers.length > 0 && (
+                <div className="grid grid-cols-2 gap-2">
+                  {abCovers.map((cover) => (
+                    <div
+                      key={cover.id}
+                      onClick={() => selectAbCover(cover)}
+                      className={cn(
+                        "relative rounded-lg overflow-hidden aspect-video cursor-pointer border-2 transition-all group",
+                        activeAbCover === cover.id ? "border-primary ring-2 ring-primary/20" : "border-border hover:border-primary/40"
+                      )}
+                    >
+                      <img src={cover.previewUrl} alt={cover.label} className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
+                      <Badge className="absolute bottom-1.5 left-1.5 text-[9px] bg-black/60 text-white border-0">
+                        {cover.label}
+                      </Badge>
+                      {activeAbCover === cover.id && (
+                        <div className="absolute top-1.5 left-1.5">
+                          <CheckCircle className="h-4 w-4 text-primary drop-shadow-md" />
+                        </div>
+                      )}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); removeAbCover(cover.id); }}
+                        className="absolute top-1.5 right-1.5 h-5 w-5 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <Button variant="outline" size="sm" className="w-full text-xs" onClick={addAbCover} disabled={abCovers.length >= 4}>
+                <Plus className="h-3 w-3 mr-1.5" />
+                {abCovers.length === 0 ? "Добавить варианты обложки" : `Добавить вариант (${abCovers.length}/4)`}
+              </Button>
+              <input ref={abCoverInputRef} type="file" accept="image/*" className="hidden" onChange={handleAbCoverSelect} />
+
+              {abCovers.length >= 2 && (
+                <div className="rounded-lg bg-primary/5 border border-primary/20 p-3 text-xs text-foreground flex items-start gap-2">
+                  <Shuffle className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
+                  <span>
+                    A/B тест активен — <strong>{abCovers.length} варианта</strong> будут показаны зрителям в равных пропорциях.
+                    Результаты появятся в аналитике через 24ч.
+                  </span>
+                </div>
               )}
             </CardContent>
           </Card>
