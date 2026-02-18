@@ -39,7 +39,7 @@ const statusColors: Record<string, string> = {
 
 // Creator view: incoming offers from advertisers
 function CreatorOffers() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { scores: advertiserScores } = useAdvertiserScores();
@@ -109,9 +109,24 @@ function CreatorOffers() {
     });
   }, [deals, filter, advertiserScores, minBudget, minPartnerScore]);
 
+  const sendNotification = async (deal: typeof deals[0], accepted: boolean) => {
+    if (!deal.advertiser_id || !user) return;
+    const creatorName = profile?.display_name || "Автор";
+    await supabase.from("notifications").insert({
+      user_id: deal.advertiser_id,
+      title: accepted ? "Предложение принято" : "Предложение отклонено",
+      message: accepted
+        ? `${creatorName} принял(а) ваше предложение «${deal.title}»`
+        : `${creatorName} отклонил(а) ваше предложение «${deal.title}»`,
+      type: "deal",
+      link: "/ad-studio",
+    });
+  };
+
   const handleAccept = async (dealId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setActionLoading(dealId);
+    const deal = deals.find((d) => d.id === dealId);
     const { error } = await supabase
       .from("deals")
       .update({ status: "briefing" })
@@ -119,6 +134,7 @@ function CreatorOffers() {
     if (error) {
       toast.error("Не удалось принять предложение");
     } else {
+      if (deal) await sendNotification(deal, true);
       toast.success("Предложение принято!");
       queryClient.invalidateQueries({ queryKey: ["creator-incoming-deals"] });
     }
@@ -128,6 +144,7 @@ function CreatorOffers() {
   const handleReject = async (dealId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setActionLoading(dealId);
+    const deal = deals.find((d) => d.id === dealId);
     const { error } = await supabase
       .from("deals")
       .update({ status: "disputed" })
@@ -135,6 +152,7 @@ function CreatorOffers() {
     if (error) {
       toast.error("Не удалось отклонить предложение");
     } else {
+      if (deal) await sendNotification(deal, false);
       toast.success("Предложение отклонено");
       queryClient.invalidateQueries({ queryKey: ["creator-incoming-deals"] });
     }
