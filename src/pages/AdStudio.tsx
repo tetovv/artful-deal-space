@@ -32,7 +32,7 @@ const AdStudio = () => {
   const [newMsg, setNewMsg] = useState("");
 
   return (
-    <div className="flex h-[calc(100vh)] max-h-screen">
+    <div className="flex h-[calc(100vh-3.5rem)] max-h-[calc(100vh-3.5rem)]">
       {/* Deals list */}
       <div className="w-72 border-r border-border bg-card overflow-y-auto shrink-0">
         <div className="p-4 border-b border-border">
