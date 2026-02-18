@@ -17,8 +17,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useContentItems } from "@/hooks/useDbData";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useMemo, useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import {
@@ -89,6 +89,7 @@ const fmtNum = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}K` : String(
 const CreatorStudio = () => {
   const { user, profile } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const { data: dbItems } = useContentItems();
 
   const [section, setSection] = useState<Section>("home");
@@ -101,6 +102,17 @@ const CreatorStudio = () => {
   const [editingItem, setEditingItem] = useState<any>(null);
   const [showOfferChat, setShowOfferChat] = useState(false);
   const [offerChatMsg, setOfferChatMsg] = useState("");
+
+  // Auto-open editor when navigated with state
+  useEffect(() => {
+    const state = location.state as { openEditor?: boolean; contentType?: string } | null;
+    if (state?.openEditor) {
+      setEditorMode("create");
+      setEditingItem(null);
+      // Clear location state so it doesn't re-trigger
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   const allItems = (dbItems && dbItems.length > 0 ? dbItems : contentItems).map(mapItem);
   const myItems = allItems.filter((i) => i.creatorId === user?.id || i.creatorId === "u1");
@@ -218,7 +230,7 @@ const CreatorStudio = () => {
     <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden">
       {/* ─── SIDEBAR ─── */}
       {editorMode === "none" && (
-      <aside className="w-56 shrink-0 border-r border-border bg-card flex flex-col">
+      <aside className="w-64 shrink-0 border-r border-border bg-card flex flex-col ml-0">
         <div className="p-4 pb-2">
           <h2 className="text-sm font-bold text-foreground tracking-tight">Студия</h2>
           <p className="text-[11px] text-muted-foreground truncate">{profile?.display_name || "автора"}</p>
