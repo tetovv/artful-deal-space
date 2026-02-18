@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useUserRole } from "@/hooks/useUserRole";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -8,7 +9,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Save, User, Tags, MapPin } from "lucide-react";
+import { Save, User, Tags, MapPin, Upload, Loader2, Shield } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import type { Database } from "@/integrations/supabase/types";
+
+type AppRole = Database["public"]["Enums"]["app_role"];
 
 const INTEREST_OPTIONS = [
   "Технологии", "Маркетинг", "Дизайн", "Бизнес", "Образование",
@@ -16,14 +21,26 @@ const INTEREST_OPTIONS = [
   "Программирование", "AI", "Криптовалюта", "Путешествия",
 ];
 
+const ROLE_OPTIONS: { value: AppRole; label: string; description: string }[] = [
+  { value: "user", label: "Пользователь", description: "Просмотр и покупка контента" },
+  { value: "creator", label: "Автор", description: "Создание и продажа контента" },
+  { value: "advertiser", label: "Рекламодатель", description: "Размещение рекламы и сделки" },
+];
+
 export default function Settings() {
   const { user, profile } = useAuth();
+  const { primaryRole, roles } = useUserRole();
+  const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [displayName, setDisplayName] = useState("");
   const [bio, setBio] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
   const [geo, setGeo] = useState("");
   const [niche, setNiche] = useState<string[]>([]);
+  const [selectedRole, setSelectedRole] = useState<AppRole>("user");
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -43,27 +60,86 @@ export default function Settings() {
       });
   }, [user]);
 
+  useEffect(() => {
+    setSelectedRole(primaryRole);
+  }, [primaryRole]);
+
   const toggleNiche = (tag: string) => {
     setNiche((prev) =>
       prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
     );
   };
 
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast.error("Выберите изображение");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("Максимальный размер — 2 МБ");
+      return;
+    }
+
+    setUploading(true);
+    const ext = file.name.split(".").pop();
+    const path = `${user.id}/avatar.${ext}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("avatars")
+      .upload(path, file, { upsert: true });
+
+    if (uploadError) {
+      toast.error("Ошибка загрузки");
+      setUploading(false);
+      return;
+    }
+
+    const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(path);
+    setAvatarUrl(urlData.publicUrl + "?t=" + Date.now());
+    setUploading(false);
+    toast.success("Аватар загружен");
+  };
+
   const handleSave = async () => {
     if (!user) return;
     setSaving(true);
+
+    // Update profile
     const { error } = await supabase
       .from("profiles")
       .update({ display_name: displayName, bio, avatar_url: avatarUrl, geo, niche })
       .eq("user_id", user.id);
-    setSaving(false);
+
     if (error) {
-      toast.error("Не удалось сохранить");
-    } else {
-      toast.success("Профиль обновлён");
-      // Also sync localStorage interests for AI recommendations
-      localStorage.setItem("onboarding_interests", JSON.stringify(niche));
+      toast.error("Не удалось сохранить профиль");
+      setSaving(false);
+      return;
     }
+
+    // Update role if changed
+    if (selectedRole !== primaryRole) {
+      // Delete old non-moderator/support roles
+      await supabase
+        .from("user_roles")
+        .delete()
+        .eq("user_id", user.id)
+        .in("role", ["user", "creator", "advertiser"]);
+
+      // Insert new role
+      await supabase
+        .from("user_roles")
+        .insert({ user_id: user.id, role: selectedRole });
+
+      queryClient.invalidateQueries({ queryKey: ["user-roles"] });
+    }
+
+    localStorage.setItem("mediaos-interests", JSON.stringify(niche));
+    queryClient.invalidateQueries({ queryKey: ["ai-recommendations"] });
+    setSaving(false);
+    toast.success("Профиль обновлён");
   };
 
   return (
@@ -83,12 +159,39 @@ export default function Settings() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="avatarUrl">URL аватара</Label>
-            <div className="flex gap-3 items-center">
-              {avatarUrl && (
-                <img src={avatarUrl} alt="avatar" className="h-10 w-10 rounded-full object-cover border border-border" />
-              )}
-              <Input id="avatarUrl" value={avatarUrl} onChange={(e) => setAvatarUrl(e.target.value)} placeholder="https://..." className="flex-1" />
+            <Label>Аватар</Label>
+            <div className="flex gap-4 items-center">
+              <div className="relative h-16 w-16 rounded-full overflow-hidden border-2 border-border bg-muted flex items-center justify-center shrink-0">
+                {avatarUrl ? (
+                  <img src={avatarUrl} alt="avatar" className="h-full w-full object-cover" />
+                ) : (
+                  <User className="h-6 w-6 text-muted-foreground" />
+                )}
+                {uploading && (
+                  <div className="absolute inset-0 bg-background/60 flex items-center justify-center">
+                    <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                  </div>
+                )}
+              </div>
+              <div className="flex flex-col gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  Загрузить фото
+                </Button>
+                <p className="text-[11px] text-muted-foreground">JPG, PNG до 2 МБ</p>
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleAvatarUpload}
+              />
             </div>
           </div>
 
@@ -100,6 +203,41 @@ export default function Settings() {
           <div className="space-y-2">
             <Label htmlFor="geo" className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5" /> Регион</Label>
             <Input id="geo" value={geo} onChange={(e) => setGeo(e.target.value)} placeholder="Москва, Россия" />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Role selection */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Shield className="h-4 w-4" /> Роль
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-xs text-muted-foreground mb-3">Выберите основную роль — от неё зависят доступные разделы</p>
+          <div className="grid gap-2">
+            {ROLE_OPTIONS.map((r) => (
+              <button
+                key={r.value}
+                onClick={() => setSelectedRole(r.value)}
+                className={`flex items-center gap-3 rounded-lg border p-3 text-left transition-all ${
+                  selectedRole === r.value
+                    ? "border-primary bg-primary/5 ring-1 ring-primary/20"
+                    : "border-border hover:border-muted-foreground/30"
+                }`}
+              >
+                <div className={`h-4 w-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                  selectedRole === r.value ? "border-primary" : "border-muted-foreground/40"
+                }`}>
+                  {selectedRole === r.value && <div className="h-2 w-2 rounded-full bg-primary" />}
+                </div>
+                <div>
+                  <p className="text-sm font-medium">{r.label}</p>
+                  <p className="text-xs text-muted-foreground">{r.description}</p>
+                </div>
+              </button>
+            ))}
           </div>
         </CardContent>
       </Card>

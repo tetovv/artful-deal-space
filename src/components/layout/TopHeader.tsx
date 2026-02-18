@@ -25,12 +25,12 @@ interface NavItem {
 }
 
 const allNavItems: NavItem[] = [
-  { title: "Главная", url: "/", icon: Home },
+  { title: "Дашборд", url: "/", icon: Home },
   { title: "Каталог", url: "/explore", icon: Compass },
   { title: "Студия", url: "/creator-studio", icon: Palette, roles: ["creator", "moderator"] },
   { title: "Реклама", url: "/ad-studio", icon: Megaphone, roles: ["advertiser", "creator", "moderator"] },
-  { title: "Биржа", url: "/marketplace", icon: Store },
-  { title: "Рейтинг", url: "/trust-rating", icon: Shield },
+  { title: "Биржа", url: "/marketplace", icon: Store, roles: ["creator", "advertiser", "moderator"] },
+  { title: "Рейтинг", url: "/trust-rating", icon: Shield, roles: ["creator", "advertiser", "moderator"] },
   { title: "AI", url: "/ai-workspace", icon: Brain },
 ];
 
