@@ -3,19 +3,19 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAdvertiserScores } from "@/hooks/useAdvertiserScores";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { creators } from "@/data/mockData";
-import { Search, MapPin, Users, Star, CheckCircle, Clock, AlertTriangle, Briefcase, ShieldAlert, ArrowRight } from "lucide-react";
+import { Search, MapPin, Users, Star, CheckCircle, Clock, Briefcase, ShieldAlert, ArrowRight, Check, X, SlidersHorizontal, Filter } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Slider } from "@/components/ui/slider";
 import { motion } from "framer-motion";
 import { PageTransition } from "@/components/layout/PageTransition";
-
-const niches = ["Все", "Образование", "Технологии", "Дизайн", "Фото", "Музыка", "Подкасты", "Бизнес", "Видео", "Motion"];
+import { toast } from "sonner";
 
 const statusLabels: Record<string, string> = {
   pending: "Ожидание",
@@ -24,6 +24,7 @@ const statusLabels: Record<string, string> = {
   review: "На проверке",
   completed: "Завершено",
   disputed: "Спор",
+  rejected: "Отклонено",
 };
 
 const statusColors: Record<string, string> = {
@@ -33,14 +34,20 @@ const statusColors: Record<string, string> = {
   review: "bg-accent/10 text-accent-foreground",
   completed: "bg-green-500/10 text-green-500",
   disputed: "bg-destructive/10 text-destructive",
+  rejected: "bg-muted text-muted-foreground",
 };
 
 // Creator view: incoming offers from advertisers
 function CreatorOffers() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { scores: advertiserScores } = useAdvertiserScores();
   const [filter, setFilter] = useState<"all" | "pending" | "active">("all");
+  const [showFilters, setShowFilters] = useState(false);
+  const [minBudget, setMinBudget] = useState(0);
+  const [minPartnerScore, setMinPartnerScore] = useState(0);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const { data: deals = [], isLoading } = useQuery({
     queryKey: ["creator-incoming-deals", user?.id],
@@ -56,6 +63,8 @@ function CreatorOffers() {
     },
     enabled: !!user,
   });
+
+  const maxBudget = useMemo(() => Math.max(...deals.map((d) => d.budget || 0), 100000), [deals]);
 
   // Fetch advertiser profiles
   const advertiserIds = useMemo(() => [...new Set(deals.map((d) => d.advertiser_id).filter(Boolean))], [deals]);
@@ -79,14 +88,58 @@ function CreatorOffers() {
     if (filter === "pending") result = deals.filter((d) => d.status === "pending" || d.status === "briefing");
     if (filter === "active") result = deals.filter((d) => d.status === "in_progress" || d.status === "review");
 
+    // Budget filter
+    if (minBudget > 0) result = result.filter((d) => (d.budget || 0) >= minBudget);
+
+    // Partner Score filter
+    if (minPartnerScore > 0) {
+      result = result.filter((d) => {
+        const score = advertiserScores.get(d.advertiser_id || "");
+        if (!score || score.partnerScore === 0) return true; // no score = show
+        return score.partnerScore >= minPartnerScore;
+      });
+    }
+
     // Sort: low-score advertisers go to bottom
-    return result.sort((a, b) => {
+    return [...result].sort((a, b) => {
       const aLow = advertiserScores.get(a.advertiser_id || "")?.isLowScore ? 1 : 0;
       const bLow = advertiserScores.get(b.advertiser_id || "")?.isLowScore ? 1 : 0;
       if (aLow !== bLow) return aLow - bLow;
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
-  }, [deals, filter, advertiserScores]);
+  }, [deals, filter, advertiserScores, minBudget, minPartnerScore]);
+
+  const handleAccept = async (dealId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setActionLoading(dealId);
+    const { error } = await supabase
+      .from("deals")
+      .update({ status: "briefing" })
+      .eq("id", dealId);
+    if (error) {
+      toast.error("Не удалось принять предложение");
+    } else {
+      toast.success("Предложение принято!");
+      queryClient.invalidateQueries({ queryKey: ["creator-incoming-deals"] });
+    }
+    setActionLoading(null);
+  };
+
+  const handleReject = async (dealId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setActionLoading(dealId);
+    const { error } = await supabase
+      .from("deals")
+      .update({ status: "disputed" })
+      .eq("id", dealId);
+    if (error) {
+      toast.error("Не удалось отклонить предложение");
+    } else {
+      toast.success("Предложение отклонено");
+      queryClient.invalidateQueries({ queryKey: ["creator-incoming-deals"] });
+    }
+    setActionLoading(null);
+  };
 
   return (
     <PageTransition>
@@ -101,8 +154,8 @@ function CreatorOffers() {
           </p>
         </div>
 
-        {/* Filters */}
-        <div className="flex gap-2">
+        {/* Status filters + advanced toggle */}
+        <div className="flex items-center gap-2 flex-wrap">
           {([
             { key: "all", label: "Все" },
             { key: "pending", label: "Новые" },
@@ -118,7 +171,65 @@ function CreatorOffers() {
               {f.label}
             </button>
           ))}
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className={`ml-auto px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors ${
+              showFilters ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground hover:bg-accent"
+            }`}
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+            Фильтры
+          </button>
         </div>
+
+        {/* Advanced filters */}
+        {showFilters && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="rounded-xl border border-border bg-card p-4 space-y-4"
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-medium text-muted-foreground">Минимальный бюджет</label>
+                  <span className="text-xs font-semibold text-card-foreground">{minBudget > 0 ? `от ${minBudget.toLocaleString()} ₽` : "Любой"}</span>
+                </div>
+                <Slider
+                  value={[minBudget]}
+                  onValueChange={([v]) => setMinBudget(v)}
+                  max={maxBudget}
+                  step={5000}
+                  className="w-full"
+                />
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-medium text-muted-foreground">Мин. Partner Score</label>
+                  <span className="text-xs font-semibold text-card-foreground">{minPartnerScore > 0 ? `от ${minPartnerScore.toFixed(1)}` : "Любой"}</span>
+                </div>
+                <Slider
+                  value={[minPartnerScore]}
+                  onValueChange={([v]) => setMinPartnerScore(v)}
+                  max={5}
+                  step={0.5}
+                  className="w-full"
+                />
+              </div>
+            </div>
+            {(minBudget > 0 || minPartnerScore > 0) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => { setMinBudget(0); setMinPartnerScore(0); }}
+                className="text-xs"
+              >
+                Сбросить фильтры
+              </Button>
+            )}
+          </motion.div>
+        )}
 
         {isLoading ? (
           <div className="text-center py-12 text-muted-foreground animate-pulse">Загрузка...</div>
@@ -136,18 +247,22 @@ function CreatorOffers() {
               const advScore = advertiserScores.get(deal.advertiser_id || "");
               const isLow = advScore?.isLowScore;
               const advProfile = profileMap.get(deal.advertiser_id || "");
+              const isPending = deal.status === "pending";
+              const isActioning = actionLoading === deal.id;
 
               return (
                 <motion.div
                   key={deal.id}
                   whileHover={{ y: -2 }}
-                  onClick={() => navigate("/ad-studio")}
-                  className={`rounded-xl border bg-card p-5 cursor-pointer hover:border-primary/30 transition-all ${
-                    isLow ? "opacity-60 border-destructive/20" : "border-border"
+                  className={`rounded-xl border bg-card p-5 transition-all ${
+                    isLow ? "opacity-60 border-destructive/20" : "border-border hover:border-primary/30"
                   }`}
                 >
                   <div className="flex items-start justify-between gap-4">
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <div
+                      className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer"
+                      onClick={() => navigate("/ad-studio")}
+                    >
                       <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden border border-border shrink-0">
                         {advProfile?.avatar_url ? (
                           <img src={advProfile.avatar_url} alt="" className="h-full w-full object-cover" />
@@ -185,7 +300,6 @@ function CreatorOffers() {
                           {statusLabels[deal.status] || deal.status}
                         </span>
                       </div>
-                      <ArrowRight className="h-4 w-4 text-muted-foreground" />
                     </div>
                   </div>
 
@@ -193,13 +307,40 @@ function CreatorOffers() {
                     <p className="text-xs text-muted-foreground mt-3 line-clamp-2">{deal.description}</p>
                   )}
 
-                  <div className="flex items-center gap-4 mt-3 text-[11px] text-muted-foreground">
-                    <span className="flex items-center gap-1">
-                      <Clock className="h-3 w-3" />
-                      {new Date(deal.created_at).toLocaleDateString("ru-RU")}
-                    </span>
-                    {deal.deadline && (
-                      <span>Дедлайн: {new Date(deal.deadline).toLocaleDateString("ru-RU")}</span>
+                  <div className="flex items-center justify-between mt-3">
+                    <div className="flex items-center gap-4 text-[11px] text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        {new Date(deal.created_at).toLocaleDateString("ru-RU")}
+                      </span>
+                      {deal.deadline && (
+                        <span>Дедлайн: {new Date(deal.deadline).toLocaleDateString("ru-RU")}</span>
+                      )}
+                    </div>
+
+                    {/* Accept / Reject buttons for pending deals */}
+                    {isPending && (
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 text-destructive border-destructive/30 hover:bg-destructive/10"
+                          disabled={isActioning}
+                          onClick={(e) => handleReject(deal.id, e)}
+                        >
+                          <X className="h-3.5 w-3.5 mr-1" />
+                          Отклонить
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="h-8"
+                          disabled={isActioning}
+                          onClick={(e) => handleAccept(deal.id, e)}
+                        >
+                          <Check className="h-3.5 w-3.5 mr-1" />
+                          Принять
+                        </Button>
+                      </div>
                     )}
                   </div>
                 </motion.div>
@@ -211,6 +352,7 @@ function CreatorOffers() {
     </PageTransition>
   );
 }
+const niches = ["Все", "Образование", "Технологии", "Дизайн", "Фото", "Музыка", "Подкасты", "Бизнес", "Видео", "Motion"];
 
 // Advertiser view: browse creators (original marketplace)
 function AdvertiserMarketplace() {
