@@ -509,7 +509,7 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
       {/* ── Main layout: sidebar + content + right panel ── */}
       <div className="flex h-[calc(100vh-7.5rem)]">
         {/* Left sidebar - section tabs */}
-        <aside className="w-48 shrink-0 border-r border-border bg-card/50 flex flex-col overflow-y-auto">
+        <aside className="w-40 shrink-0 border-r border-border bg-card/50 flex flex-col overflow-y-auto">
           <nav className="py-2 px-2 space-y-0.5 flex-1">
             {EDITOR_TABS.map((tab) => (
               <button
@@ -550,9 +550,9 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
           <div className="p-6 space-y-6">
 
             {/* Top row: Video + Covers side by side */}
-            <div className="flex gap-5">
+            <div className="flex gap-4">
               {/* Video player */}
-              <div className="flex-1 min-w-0 space-y-3">
+              <div className="flex-1 min-w-0 max-w-2xl space-y-3">
                 {!videoPreviewUrl ? (
                   <div
                     onDragOver={(e) => { e.preventDefault(); setIsDraggingVideo(true); }}
