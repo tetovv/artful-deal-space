@@ -213,6 +213,7 @@ const CreatorStudio = () => {
   return (
     <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden">
       {/* ─── SIDEBAR ─── */}
+      {editorMode === "none" && (
       <aside className="w-56 shrink-0 border-r border-border bg-card flex flex-col">
         <div className="p-4 pb-2">
           <h2 className="text-sm font-bold text-foreground tracking-tight">Студия</h2>
@@ -249,11 +250,12 @@ const CreatorStudio = () => {
           </Button>
         </div>
       </aside>
+      )}
 
       {/* ─── MAIN AREA ─── */}
       <main className="flex-1 overflow-y-auto">
         {editorMode !== "none" ? (
-          <div className="p-6 lg:p-8 max-w-6xl">
+          <div className="p-6 lg:p-8 max-w-6xl mx-auto">
             <VideoEditor
               editItem={editingItem}
               onClose={() => { setEditorMode("none"); setEditingItem(null); }}
