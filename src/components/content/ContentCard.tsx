@@ -3,14 +3,20 @@ import { contentTypeLabels } from "@/data/mockData";
 import { Eye, Heart } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
+import { motion } from "framer-motion";
 
 export function ContentCard({ item }: { item: ContentItem }) {
   const navigate = useNavigate();
 
   return (
-    <div
+    <motion.div
       onClick={() => navigate(`/product/${item.id}`)}
-      className="group cursor-pointer rounded-xl border border-border bg-card overflow-hidden hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 transition-all duration-300 animate-fade-in"
+      className="group cursor-pointer rounded-xl border border-border bg-card overflow-hidden hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 transition-all duration-300"
+      whileHover={{ y: -4, scale: 1.01 }}
+      whileTap={{ scale: 0.98 }}
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
     >
       <div className="relative aspect-video overflow-hidden">
         <img src={item.thumbnail} alt={item.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
@@ -39,6 +45,6 @@ export function ContentCard({ item }: { item: ContentItem }) {
           )}
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }

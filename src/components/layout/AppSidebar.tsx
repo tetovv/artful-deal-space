@@ -1,6 +1,7 @@
-import { Home, Compass, Palette, Megaphone, Store, Shield, Brain, Settings, LogOut, ChevronLeft, ChevronRight } from "lucide-react";
+import { Home, Compass, Palette, Megaphone, Store, Shield, Brain, Settings, LogOut, ChevronLeft, ChevronRight, Sun, Moon } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
@@ -22,6 +23,7 @@ const bottomNav = [
 export function AppSidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const { profile, signOut } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
 
   const handleSignOut = async () => {
@@ -92,6 +94,18 @@ export function AppSidebar() {
             </div>
           )}
         </div>
+
+        {/* Theme toggle */}
+        <button
+          onClick={toggleTheme}
+          className={cn(
+            "flex items-center gap-3 px-3 py-2 rounded-lg text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors text-sm w-full",
+            collapsed && "justify-center px-2"
+          )}
+        >
+          {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          {!collapsed && <span className="text-xs">{theme === "dark" ? "Светлая тема" : "Тёмная тема"}</span>}
+        </button>
 
         {/* Sign out */}
         <button
