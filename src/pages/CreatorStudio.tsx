@@ -74,6 +74,8 @@ function mapItem(item: any) {
     creatorAvatar: item.creator_avatar || item.creatorAvatar || "",
     price: item.price ?? null, views: item.views || 0, likes: item.likes || 0,
     createdAt: item.created_at || item.createdAt || "", tags: item.tags || [],
+    status: item.status || "draft",
+    monetization_type: item.monetization_type || "free",
   };
 }
 
@@ -97,6 +99,8 @@ const CreatorStudio = () => {
   const [selectedDeal, setSelectedDeal] = useState<string | null>(null);
   const [editorMode, setEditorMode] = useState<"none" | "create" | "edit">("none");
   const [editingItem, setEditingItem] = useState<any>(null);
+  const [showOfferChat, setShowOfferChat] = useState(false);
+  const [offerChatMsg, setOfferChatMsg] = useState("");
 
   const allItems = (dbItems && dbItems.length > 0 ? dbItems : contentItems).map(mapItem);
   const myItems = allItems.filter((i) => i.creatorId === user?.id || i.creatorId === "u1");
@@ -506,6 +510,9 @@ const CreatorStudio = () => {
                             <div className="flex items-center gap-2 mb-0.5">
                               <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                               <h3 className="text-sm font-medium text-foreground truncate group-hover:text-primary transition-colors">{item.title}</h3>
+                              <Badge variant={item.status === "published" ? "default" : "secondary"} className="text-[10px] shrink-0">
+                                {item.status === "published" ? "Опубликован" : item.status === "scheduled" ? "Запланирован" : "Черновик"}
+                              </Badge>
                             </div>
                             <div className="flex items-center gap-3 text-xs text-muted-foreground">
                               <span className="flex items-center gap-1"><Eye className="h-3 w-3" />{fmtNum(item.views)}</span>
@@ -514,9 +521,24 @@ const CreatorStudio = () => {
                               <span className="hidden sm:inline text-muted-foreground/60">{new Date(item.createdAt).toLocaleDateString("ru")}</span>
                             </div>
                           </div>
+                          {/* Access type */}
+                          <div className="shrink-0 hidden sm:block" onClick={(e) => e.stopPropagation()}>
+                            <Select defaultValue={item.monetization_type === "subscription" ? "subscription" : item.monetization_type === "paid" ? "paid" : "public"}>
+                              <SelectTrigger className="h-7 w-[120px] text-[11px]">
+                                <Eye className="h-3 w-3 mr-1" /><SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="public">Публичный</SelectItem>
+                                <SelectItem value="paid">Платный</SelectItem>
+                                <SelectItem value="subscription">По подписке</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          {/* Actions */}
                           <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
                             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate(`/product/${item.id}`)} title="Открыть"><Eye className="h-4 w-4" /></Button>
                             <Button variant="ghost" size="icon" className="h-8 w-8" title="Редактировать" onClick={() => { setEditingItem(item); setEditorMode("edit"); }}><Edit className="h-4 w-4" /></Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-primary" title="Аналитика" onClick={() => setDetailItem(item.id)}><BarChart3 className="h-4 w-4" /></Button>
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" title="Удалить"><Trash2 className="h-4 w-4" /></Button>
@@ -936,10 +958,38 @@ const CreatorStudio = () => {
                               </Button>
                             </>
                           )}
-                          <Button variant="outline" className="flex-1">
-                            <MessageCircle className="h-4 w-4 mr-2" /> Открыть чат
+                          <Button variant="outline" className="flex-1" onClick={() => setShowOfferChat(!showOfferChat)}>
+                            <MessageCircle className="h-4 w-4 mr-2" /> {showOfferChat ? "Скрыть чат" : "Открыть чат"}
                           </Button>
                         </div>
+
+                        {/* Embedded Chat */}
+                        {showOfferChat && (
+                          <>
+                            <Separator />
+                            <div className="rounded-xl border border-border overflow-hidden">
+                              <div className="bg-muted/30 px-4 py-2.5 border-b border-border">
+                                <p className="text-xs font-semibold text-foreground">Чат с {openDeal.advertiser_name}</p>
+                              </div>
+                              <div className="h-64 overflow-y-auto p-4 space-y-3 bg-background">
+                                <div className="text-center text-xs text-muted-foreground py-8">
+                                  Начните диалог — напишите первое сообщение
+                                </div>
+                              </div>
+                              <div className="p-3 border-t border-border bg-card flex gap-2">
+                                <Input
+                                  value={offerChatMsg}
+                                  onChange={(e) => setOfferChatMsg(e.target.value)}
+                                  placeholder="Написать сообщение..."
+                                  className="flex-1 bg-background text-sm"
+                                />
+                                <Button size="icon" disabled={!offerChatMsg.trim()}>
+                                  <Send className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          </>
+                        )}
                       </CardContent>
                     </Card>
                   </>

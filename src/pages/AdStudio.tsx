@@ -6,8 +6,10 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Send, Paperclip, CheckCircle2, AlertTriangle, ShieldAlert } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Send, Paperclip, CheckCircle2, AlertTriangle, ShieldAlert, Palette } from "lucide-react";
 import { Deal, DealStatus } from "@/types";
+import { cn } from "@/lib/utils";
 
 const statusColors: Record<DealStatus, string> = {
   pending: "bg-warning/10 text-warning",
@@ -27,6 +29,24 @@ const statusLabels: Record<DealStatus, string> = {
   disputed: "Спор",
 };
 
+const MESSAGE_COLOR_PRESETS = [
+  { name: "Синий", outgoing: "210 100% 52%", incoming: "220 14% 20%" },
+  { name: "Бирюзовый", outgoing: "175 80% 40%", incoming: "180 10% 18%" },
+  { name: "Зелёный", outgoing: "142 70% 42%", incoming: "145 10% 18%" },
+  { name: "Фиолетовый", outgoing: "270 70% 55%", incoming: "275 12% 20%" },
+  { name: "Оранжевый", outgoing: "25 95% 53%", incoming: "20 10% 18%" },
+  { name: "Розовый", outgoing: "330 80% 55%", incoming: "335 10% 18%" },
+];
+
+const CHAT_BG_PRESETS = [
+  { name: "Стандарт", className: "bg-background" },
+  { name: "Тёмный", className: "bg-[hsl(220,15%,8%)]" },
+  { name: "Синий", className: "bg-gradient-to-b from-[hsl(220,30%,12%)] to-[hsl(220,20%,8%)]" },
+  { name: "Зелёный", className: "bg-gradient-to-b from-[hsl(160,20%,10%)] to-[hsl(160,15%,6%)]" },
+  { name: "Фиолетовый", className: "bg-gradient-to-b from-[hsl(270,20%,12%)] to-[hsl(270,15%,8%)]" },
+  { name: "Тёплый", className: "bg-gradient-to-b from-[hsl(30,15%,10%)] to-[hsl(20,12%,7%)]" },
+];
+
 const AdStudio = () => {
   const [selectedDeal, setSelectedDeal] = useState<Deal>(deals[0]);
   useRealtimeMessages(selectedDeal?.id);
@@ -34,7 +54,10 @@ const AdStudio = () => {
   const [newMsg, setNewMsg] = useState("");
   const { scores: advertiserScores } = useAdvertiserScores();
 
-  // Sort deals: low-score advertisers go to the bottom
+  // Chat customization
+  const [chatColorIdx, setChatColorIdx] = useState(0);
+  const [chatBgIdx, setChatBgIdx] = useState(0);
+
   const sortedDeals = useMemo(() => {
     return [...deals].sort((a, b) => {
       const aLow = advertiserScores.get(a.advertiserId)?.isLowScore ? 1 : 0;
@@ -44,6 +67,8 @@ const AdStudio = () => {
   }, [advertiserScores]);
 
   const selectedAdvertiserScore = advertiserScores.get(selectedDeal.advertiserId);
+  const currentColors = MESSAGE_COLOR_PRESETS[chatColorIdx];
+  const currentBg = CHAT_BG_PRESETS[chatBgIdx];
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] max-h-[calc(100vh-3.5rem)]">
@@ -129,34 +154,39 @@ const AdStudio = () => {
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-background">
-          {dealMessages.map((msg) => (
-            <div key={msg.id} className={`flex ${msg.senderId === "u1" ? "justify-end" : "justify-start"}`}>
-              <div className={`max-w-[70%] rounded-xl p-3 text-sm ${
-                msg.senderId === "u1"
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-card text-card-foreground border border-border"
-              }`}>
-                <p className="text-[10px] font-medium mb-1 opacity-70">{msg.senderName}</p>
-                <p>{msg.content}</p>
-                {msg.attachment && (
-                  <div className="mt-2 flex items-center gap-1 text-[10px] opacity-70">
-                    <Paperclip className="h-3 w-3" /> {msg.attachment}
-                  </div>
-                )}
-                <p className="text-[10px] opacity-50 mt-1 text-right">
-                  {new Date(msg.timestamp).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}
-                </p>
+        <div className={cn("flex-1 overflow-y-auto p-4 space-y-4", currentBg.className)}>
+          {dealMessages.map((msg) => {
+            const isMe = msg.senderId === "u1";
+            return (
+              <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
+                <div
+                  className="max-w-[70%] rounded-xl p-3 text-sm"
+                  style={{
+                    backgroundColor: `hsl(${isMe ? currentColors.outgoing : currentColors.incoming})`,
+                    color: "white",
+                  }}
+                >
+                  <p className="text-[10px] font-medium mb-1 opacity-70">{msg.senderName}</p>
+                  <p>{msg.content}</p>
+                  {msg.attachment && (
+                    <div className="mt-2 flex items-center gap-1 text-[10px] opacity-70">
+                      <Paperclip className="h-3 w-3" /> {msg.attachment}
+                    </div>
+                  )}
+                  <p className="text-[10px] opacity-50 mt-1 text-right">
+                    {new Date(msg.timestamp).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}
+                  </p>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
           {dealMessages.length === 0 && (
             <div className="text-center text-sm text-muted-foreground py-12">Нет сообщений</div>
           )}
         </div>
 
-        {/* Input */}
-        <div className="p-3 border-t border-border bg-card flex gap-2">
+        {/* Input + Settings */}
+        <div className="p-3 border-t border-border bg-card flex gap-2 items-center">
           <Button size="icon" variant="ghost"><Paperclip className="h-4 w-4" /></Button>
           <Input
             value={newMsg}
@@ -165,6 +195,77 @@ const AdStudio = () => {
             className="flex-1 bg-background"
           />
           <Button size="icon"><Send className="h-4 w-4" /></Button>
+
+          {/* Chat customization */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button size="icon" variant="ghost" className="shrink-0">
+                <Palette className="h-4 w-4" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-72 p-4 space-y-4">
+              <p className="text-sm font-semibold text-foreground">Оформление чата</p>
+
+              {/* Message colors */}
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">Цвет сообщений</p>
+                <div className="grid grid-cols-6 gap-2">
+                  {MESSAGE_COLOR_PRESETS.map((preset, i) => (
+                    <Tooltip key={preset.name}>
+                      <TooltipTrigger asChild>
+                        <button
+                          onClick={() => setChatColorIdx(i)}
+                          className={cn(
+                            "h-8 w-8 rounded-full border-2 transition-all",
+                            chatColorIdx === i ? "border-foreground scale-110" : "border-transparent hover:scale-105"
+                          )}
+                          style={{ backgroundColor: `hsl(${preset.outgoing})` }}
+                        />
+                      </TooltipTrigger>
+                      <TooltipContent><p className="text-xs">{preset.name}</p></TooltipContent>
+                    </Tooltip>
+                  ))}
+                </div>
+              </div>
+
+              {/* Background */}
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">Фон чата</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {CHAT_BG_PRESETS.map((bg, i) => (
+                    <button
+                      key={bg.name}
+                      onClick={() => setChatBgIdx(i)}
+                      className={cn(
+                        "h-12 rounded-lg border-2 transition-all text-[10px] font-medium text-muted-foreground flex items-end justify-center pb-1",
+                        bg.className,
+                        chatBgIdx === i ? "border-foreground" : "border-border hover:border-primary/30"
+                      )}
+                    >
+                      {bg.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Preview */}
+              <div className="space-y-1.5">
+                <p className="text-xs font-medium text-muted-foreground">Превью</p>
+                <div className={cn("rounded-lg p-3 space-y-2 border border-border", currentBg.className)}>
+                  <div className="flex justify-end">
+                    <div className="rounded-lg px-3 py-1.5 text-[11px] text-white" style={{ backgroundColor: `hsl(${currentColors.outgoing})` }}>
+                      Привет! 👋
+                    </div>
+                  </div>
+                  <div className="flex justify-start">
+                    <div className="rounded-lg px-3 py-1.5 text-[11px] text-white" style={{ backgroundColor: `hsl(${currentColors.incoming})` }}>
+                      Здравствуйте!
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
       </div>
     </div>
