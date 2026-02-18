@@ -360,6 +360,8 @@ export type Database = {
       }
       ratings: {
         Row: {
+          agreement_compliance: number | null
+          brief_adequacy: number | null
           communication: number | null
           created_at: string
           deal_id: string
@@ -367,10 +369,14 @@ export type Database = {
           id: string
           overall: number | null
           payment: number | null
+          payment_timeliness: number | null
           professionalism: number | null
+          repeat_willingness: number | null
           to_id: string | null
         }
         Insert: {
+          agreement_compliance?: number | null
+          brief_adequacy?: number | null
           communication?: number | null
           created_at?: string
           deal_id: string
@@ -378,10 +384,14 @@ export type Database = {
           id?: string
           overall?: number | null
           payment?: number | null
+          payment_timeliness?: number | null
           professionalism?: number | null
+          repeat_willingness?: number | null
           to_id?: string | null
         }
         Update: {
+          agreement_compliance?: number | null
+          brief_adequacy?: number | null
           communication?: number | null
           created_at?: string
           deal_id?: string
@@ -389,7 +399,9 @@ export type Database = {
           id?: string
           overall?: number | null
           payment?: number | null
+          payment_timeliness?: number | null
           professionalism?: number | null
+          repeat_willingness?: number | null
           to_id?: string | null
         }
         Relationships: [
