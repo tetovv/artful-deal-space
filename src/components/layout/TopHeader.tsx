@@ -26,7 +26,7 @@ interface NavItem {
 }
 
 const allNavItems: NavItem[] = [
-  { title: "Главная", titleCreator: "Дашборд", url: "/", icon: Home },
+  { title: "Главная", titleCreator: "Панель управления", url: "/", icon: Home },
   { title: "Главная", url: "/explore", icon: Compass, roles: ["creator", "advertiser", "moderator"] },
   { title: "Авторы", url: "/authors", icon: Users, roles: ["user"] },
   { title: "Подписки", url: "/subscriptions", icon: Rss, roles: ["user"] },
@@ -100,7 +100,7 @@ export function TopHeader() {
               activeClassName="text-primary bg-primary/10 font-medium"
             >
               <item.icon className="h-4 w-4" />
-              <span>{item.titleCreator && isCreator ? item.titleCreator : item.title}</span>
+              <span>{item.titleCreator && (isCreator || isAdvertiser) ? item.titleCreator : item.title}</span>
             </NavLink>
           ))}
         </nav>
@@ -238,7 +238,7 @@ export function TopHeader() {
                   onClick={() => setMobileMenuOpen(false)}
                 >
                   <item.icon className="h-4 w-4" />
-                  <span>{item.titleCreator && isCreator ? item.titleCreator : item.title}</span>
+                  <span>{item.titleCreator && (isCreator || isAdvertiser) ? item.titleCreator : item.title}</span>
                 </NavLink>
               ))}
             </nav>
