@@ -14,6 +14,234 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_courses: {
+        Row: {
+          created_at: string
+          id: string
+          modules: Json | null
+          progress: number | null
+          status: string
+          title: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          modules?: Json | null
+          progress?: number | null
+          status?: string
+          title: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          modules?: Json | null
+          progress?: number | null
+          status?: string
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      content_items: {
+        Row: {
+          created_at: string
+          creator_avatar: string | null
+          creator_id: string | null
+          creator_name: string
+          description: string | null
+          id: string
+          likes: number | null
+          price: number | null
+          tags: string[] | null
+          thumbnail: string | null
+          title: string
+          type: string
+          views: number | null
+        }
+        Insert: {
+          created_at?: string
+          creator_avatar?: string | null
+          creator_id?: string | null
+          creator_name?: string
+          description?: string | null
+          id?: string
+          likes?: number | null
+          price?: number | null
+          tags?: string[] | null
+          thumbnail?: string | null
+          title: string
+          type: string
+          views?: number | null
+        }
+        Update: {
+          created_at?: string
+          creator_avatar?: string | null
+          creator_id?: string | null
+          creator_name?: string
+          description?: string | null
+          id?: string
+          likes?: number | null
+          price?: number | null
+          tags?: string[] | null
+          thumbnail?: string | null
+          title?: string
+          type?: string
+          views?: number | null
+        }
+        Relationships: []
+      }
+      deals: {
+        Row: {
+          advertiser_id: string | null
+          advertiser_name: string
+          budget: number | null
+          created_at: string
+          creator_id: string | null
+          creator_name: string
+          deadline: string | null
+          description: string | null
+          id: string
+          status: string
+          title: string
+        }
+        Insert: {
+          advertiser_id?: string | null
+          advertiser_name?: string
+          budget?: number | null
+          created_at?: string
+          creator_id?: string | null
+          creator_name?: string
+          deadline?: string | null
+          description?: string | null
+          id?: string
+          status?: string
+          title: string
+        }
+        Update: {
+          advertiser_id?: string | null
+          advertiser_name?: string
+          budget?: number | null
+          created_at?: string
+          creator_id?: string | null
+          creator_name?: string
+          deadline?: string | null
+          description?: string | null
+          id?: string
+          status?: string
+          title?: string
+        }
+        Relationships: []
+      }
+      disputes: {
+        Row: {
+          created_at: string
+          deal_id: string
+          id: string
+          raised_by: string | null
+          reason: string
+          status: string | null
+        }
+        Insert: {
+          created_at?: string
+          deal_id: string
+          id?: string
+          raised_by?: string | null
+          reason?: string
+          status?: string | null
+        }
+        Update: {
+          created_at?: string
+          deal_id?: string
+          id?: string
+          raised_by?: string | null
+          reason?: string
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "disputes_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "deals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      messages: {
+        Row: {
+          attachment: string | null
+          content: string
+          created_at: string
+          deal_id: string
+          id: string
+          sender_id: string | null
+          sender_name: string
+        }
+        Insert: {
+          attachment?: string | null
+          content?: string
+          created_at?: string
+          deal_id: string
+          id?: string
+          sender_id?: string | null
+          sender_name?: string
+        }
+        Update: {
+          attachment?: string | null
+          content?: string
+          created_at?: string
+          deal_id?: string
+          id?: string
+          sender_id?: string | null
+          sender_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "deals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      milestones: {
+        Row: {
+          completed: boolean | null
+          deal_id: string
+          due_date: string | null
+          id: string
+          sort_order: number | null
+          title: string
+        }
+        Insert: {
+          completed?: boolean | null
+          deal_id: string
+          due_date?: string | null
+          id?: string
+          sort_order?: number | null
+          title: string
+        }
+        Update: {
+          completed?: boolean | null
+          deal_id?: string
+          due_date?: string | null
+          id?: string
+          sort_order?: number | null
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "milestones_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "deals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -67,6 +295,79 @@ export type Database = {
           verified?: boolean | null
         }
         Relationships: []
+      }
+      purchases: {
+        Row: {
+          content_id: string
+          created_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          content_id: string
+          created_at?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          content_id?: string
+          created_at?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "purchases_content_id_fkey"
+            columns: ["content_id"]
+            isOneToOne: false
+            referencedRelation: "content_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ratings: {
+        Row: {
+          communication: number | null
+          created_at: string
+          deal_id: string
+          from_id: string | null
+          id: string
+          overall: number | null
+          payment: number | null
+          professionalism: number | null
+          to_id: string | null
+        }
+        Insert: {
+          communication?: number | null
+          created_at?: string
+          deal_id: string
+          from_id?: string | null
+          id?: string
+          overall?: number | null
+          payment?: number | null
+          professionalism?: number | null
+          to_id?: string | null
+        }
+        Update: {
+          communication?: number | null
+          created_at?: string
+          deal_id?: string
+          from_id?: string | null
+          id?: string
+          overall?: number | null
+          payment?: number | null
+          professionalism?: number | null
+          to_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ratings_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "deals"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {
