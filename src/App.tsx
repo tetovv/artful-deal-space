@@ -3,6 +3,8 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { AuthProvider } from "@/contexts/AuthContext";
+import { ProtectedRoute } from "@/components/layout/ProtectedRoute";
 import { AppLayout } from "@/components/layout/AppLayout";
 import Home from "./pages/Home";
 import Explore from "./pages/Explore";
@@ -18,25 +20,33 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
+const Protected = ({ children }: { children: React.ReactNode }) => (
+  <ProtectedRoute>
+    <AppLayout>{children}</AppLayout>
+  </ProtectedRoute>
+);
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <Routes>
-          <Route path="/auth" element={<Auth />} />
-          <Route path="/" element={<AppLayout><Home /></AppLayout>} />
-          <Route path="/explore" element={<AppLayout><Explore /></AppLayout>} />
-          <Route path="/product/:id" element={<AppLayout><ProductPage /></AppLayout>} />
-          <Route path="/creator-studio" element={<AppLayout><CreatorStudio /></AppLayout>} />
-          <Route path="/ad-studio" element={<AppLayout><AdStudio /></AppLayout>} />
-          <Route path="/marketplace" element={<AppLayout><Marketplace /></AppLayout>} />
-          <Route path="/trust-rating" element={<AppLayout><TrustRating /></AppLayout>} />
-          <Route path="/ai-workspace" element={<AppLayout><AIWorkspace /></AppLayout>} />
-          <Route path="/admin" element={<AppLayout><AdminPanel /></AppLayout>} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+        <AuthProvider>
+          <Routes>
+            <Route path="/auth" element={<Auth />} />
+            <Route path="/" element={<Protected><Home /></Protected>} />
+            <Route path="/explore" element={<Protected><Explore /></Protected>} />
+            <Route path="/product/:id" element={<Protected><ProductPage /></Protected>} />
+            <Route path="/creator-studio" element={<Protected><CreatorStudio /></Protected>} />
+            <Route path="/ad-studio" element={<Protected><AdStudio /></Protected>} />
+            <Route path="/marketplace" element={<Protected><Marketplace /></Protected>} />
+            <Route path="/trust-rating" element={<Protected><TrustRating /></Protected>} />
+            <Route path="/ai-workspace" element={<Protected><AIWorkspace /></Protected>} />
+            <Route path="/admin" element={<Protected><AdminPanel /></Protected>} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
