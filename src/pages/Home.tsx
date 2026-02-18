@@ -1,9 +1,10 @@
-import { contentItems as mockItems, deals as mockDeals } from "@/data/mockData";
+import { contentItems as mockItems, deals as mockDeals, contentTypeLabels } from "@/data/mockData";
 import { ContentCard } from "@/components/content/ContentCard";
 import {
   TrendingUp, Users, DollarSign, Zap, Sparkles, ArrowRight, BarChart3, Target,
   Loader2, Plus, FileText, Image, Music, Video, Mic, BookOpen, Layout, Eye, Heart,
   Handshake, Clock, CheckCircle2, AlertTriangle, Star, Wallet, PieChart, Activity,
+  Search,
 } from "lucide-react";
 import { useContentItems } from "@/hooks/useDbData";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -18,6 +19,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { ContentType } from "@/types";
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, PieChart as RePieChart, Pie, Cell, Legend,
@@ -389,61 +392,56 @@ const Home = () => {
           </>
         )}
 
-        {/* ============ USER (regular) DASHBOARD ============ */}
+        {/* ============ USER — show catalog as main page ============ */}
         {!isCreator && !isAdvertiser && (
-          <>
-            {/* Basic user stats */}
-            <motion.div variants={stagger.container} initial="hidden" animate="show" className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              {[
-                { label: "Контент", value: `${allItems.length}`, icon: Zap, color: "bg-primary/10" },
-                { label: "Авторов", value: "580", icon: Users, color: "bg-accent/10" },
-                { label: "Покупки", value: "12", icon: DollarSign, color: "bg-success/10" },
-                { label: "Охват", value: "1.8M", icon: TrendingUp, color: "bg-warning/10" },
-              ].map((s) => (
-                <motion.div key={s.label} variants={stagger.item}><StatCard icon={s.icon} label={s.label} value={s.value} color={s.color} /></motion.div>
-              ))}
-            </motion.div>
-
-            {/* AI recommendation banner */}
-            <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.3 }}
-              className="rounded-xl border border-primary/20 bg-gradient-to-r from-primary/5 via-accent/5 to-primary/5 p-5 flex items-center gap-4">
-              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                {aiLoading ? <Loader2 className="h-5 w-5 text-primary animate-spin" /> : <Sparkles className="h-5 w-5 text-primary" />}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-foreground">
-                  {aiLoading ? "AI подбирает контент..." : recommendedItems.length > 0 ? "Персональная AI-подборка" : "Персональная подборка"}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {recommendedItems.length > 0
-                    ? `AI подобрал ${recommendedItems.length} рекомендаций на основе ваших интересов`
-                    : "На основе ваших интересов и активности мы подобрали контент специально для вас"}
-                </p>
-              </div>
-              <button onClick={() => navigate("/explore")} className="hidden sm:flex items-center gap-1 text-xs font-medium text-primary hover:underline shrink-0">
-                Смотреть <ArrowRight className="h-3 w-3" />
-              </button>
-            </motion.div>
-
-            {/* Recommendations */}
-            <section className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-foreground">
-                  {recommendedItems.length > 0 ? "🤖 AI рекомендации для вас" : "Рекомендации для вас"}
-                </h2>
-                <button onClick={() => navigate("/explore")} className="text-xs text-primary hover:underline flex items-center gap-1">Все <ArrowRight className="h-3 w-3" /></button>
-              </div>
-              <motion.div variants={stagger.container} initial="hidden" animate="show" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {displayItems.map((item: any) => (
-                  <motion.div key={item.id} variants={stagger.item}><ContentCard item={item} /></motion.div>
-                ))}
-              </motion.div>
-            </section>
-          </>
+          <UserCatalog allItems={allItems} navigate={navigate} />
         )}
       </div>
     </PageTransition>
   );
 };
+
+const types: (ContentType | "all")[] = ["all", "video", "music", "post", "podcast", "book", "template", "image"];
+
+function UserCatalog({ allItems, navigate }: { allItems: any[]; navigate: (p: string) => void }) {
+  const [search, setSearch] = useState("");
+  const [activeType, setActiveType] = useState<ContentType | "all">("all");
+
+  const filtered = allItems.filter((item: any) => {
+    const matchSearch = item.title.toLowerCase().includes(search.toLowerCase()) || (item.tags || []).some((t: string) => t.toLowerCase().includes(search.toLowerCase()));
+    const matchType = activeType === "all" || item.type === activeType;
+    return matchSearch && matchType;
+  });
+
+  return (
+    <>
+      <div className="flex flex-col sm:flex-row gap-4">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input placeholder="Поиск контента..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 bg-card border-border" />
+        </div>
+        <div className="flex gap-1.5 flex-wrap">
+          {types.map((t) => (
+            <button key={t} onClick={() => setActiveType(t)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                activeType === t ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground hover:bg-accent"
+              }`}>
+              {t === "all" ? "Все" : contentTypeLabels[t] || t}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        {filtered.map((item: any) => (
+          <ContentCard key={item.id} item={item} />
+        ))}
+      </div>
+      {filtered.length === 0 && (
+        <div className="text-center py-16 text-muted-foreground">Ничего не найдено</div>
+      )}
+    </>
+  );
+}
 
 export default Home;
