@@ -31,6 +31,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
+import { VideoEditor } from "@/components/studio/VideoEditor";
 
 /* ── constants ── */
 const PIE_COLORS = [
@@ -94,6 +95,8 @@ const CreatorStudio = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [detailItem, setDetailItem] = useState<string | null>(null);
   const [selectedDeal, setSelectedDeal] = useState<string | null>(null);
+  const [editorMode, setEditorMode] = useState<"none" | "create" | "edit">("none");
+  const [editingItem, setEditingItem] = useState<any>(null);
 
   const allItems = (dbItems && dbItems.length > 0 ? dbItems : contentItems).map(mapItem);
   const myItems = allItems.filter((i) => i.creatorId === user?.id || i.creatorId === "u1");
@@ -241,7 +244,7 @@ const CreatorStudio = () => {
           })}
         </nav>
         <div className="p-3 border-t border-border">
-          <Button size="sm" className="w-full text-xs">
+          <Button size="sm" className="w-full text-xs" onClick={() => { setEditorMode("create"); setEditingItem(null); }}>
             <Plus className="h-3.5 w-3.5 mr-1.5" /> Создать контент
           </Button>
         </div>
@@ -249,6 +252,15 @@ const CreatorStudio = () => {
 
       {/* ─── MAIN AREA ─── */}
       <main className="flex-1 overflow-y-auto">
+        {editorMode !== "none" ? (
+          <div className="p-6 lg:p-8 max-w-6xl">
+            <VideoEditor
+              editItem={editingItem}
+              onClose={() => { setEditorMode("none"); setEditingItem(null); }}
+              onSaved={() => { setEditorMode("none"); setEditingItem(null); }}
+            />
+          </div>
+        ) : (
         <AnimatePresence mode="wait">
           <motion.div
             key={section}
@@ -403,7 +415,7 @@ const CreatorStudio = () => {
                     </h1>
                     <p className="text-sm text-muted-foreground">Управление публикациями</p>
                   </div>
-                  <Button size="sm"><Plus className="h-3.5 w-3.5 mr-1.5" /> Создать</Button>
+                  <Button size="sm" onClick={() => { setEditorMode("create"); setEditingItem(null); }}><Plus className="h-3.5 w-3.5 mr-1.5" /> Создать</Button>
                 </div>
 
                 {/* Filters */}
@@ -502,7 +514,7 @@ const CreatorStudio = () => {
                           </div>
                           <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
                             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate(`/product/${item.id}`)} title="Открыть"><Eye className="h-4 w-4" /></Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8" title="Редактировать"><Edit className="h-4 w-4" /></Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" title="Редактировать" onClick={() => { setEditingItem(item); setEditorMode("edit"); }}><Edit className="h-4 w-4" /></Button>
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" title="Удалить"><Trash2 className="h-4 w-4" /></Button>
@@ -934,6 +946,7 @@ const CreatorStudio = () => {
             )}
           </motion.div>
         </AnimatePresence>
+        )}
       </main>
     </div>
   );
