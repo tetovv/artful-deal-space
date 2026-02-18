@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { deals, messages as allMessages } from "@/data/mockData";
+import { useRealtimeMessages } from "@/hooks/useRealtimeMessages";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,7 @@ const statusLabels: Record<DealStatus, string> = {
 
 const AdStudio = () => {
   const [selectedDeal, setSelectedDeal] = useState<Deal>(deals[0]);
+  useRealtimeMessages(selectedDeal?.id);
   const dealMessages = allMessages.filter((m) => m.dealId === selectedDeal.id);
   const [newMsg, setNewMsg] = useState("");
 
