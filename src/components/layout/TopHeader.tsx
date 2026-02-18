@@ -101,23 +101,23 @@ export function TopHeader() {
           ))}
         </nav>
 
-        <div className="flex items-center gap-2 ml-auto">
-          <span className={cn("hidden sm:inline-flex text-[10px] font-medium px-2 py-0.5 rounded-full", roleBadgeColors[primaryRole] || roleBadgeColors.user)}>
+        <div className="flex items-center gap-3 ml-auto">
+          <span className={cn("hidden sm:inline-flex text-xs font-medium px-2.5 py-1 rounded-full", roleBadgeColors[primaryRole] || roleBadgeColors.user)}>
             {roleLabels[primaryRole] || "Пользователь"}
           </span>
 
           <button
             onClick={toggleTheme}
-            className="h-8 w-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            className="h-9 w-9 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
           >
-            {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            {theme === "dark" ? <Sun className="h-[18px] w-[18px]" /> : <Moon className="h-[18px] w-[18px]" />}
           </button>
 
           {/* Notifications dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="h-8 w-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors relative">
-                <Bell className="h-4 w-4" />
+              <button className="h-9 w-9 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors relative">
+                <Bell className="h-[18px] w-[18px]" />
                 {unreadCount > 0 && (
                   <span className="absolute -top-0.5 -right-0.5 h-4 min-w-4 px-1 flex items-center justify-center bg-primary text-primary-foreground text-[10px] font-bold rounded-full">
                     {unreadCount > 9 ? "9+" : unreadCount}
@@ -170,7 +170,7 @@ export function TopHeader() {
           {/* User menu */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary hover:bg-primary/20 transition-colors">
+              <button className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-sm font-bold text-primary hover:bg-primary/20 transition-colors">
                 {(profile?.display_name || "U").charAt(0).toUpperCase()}
               </button>
             </DropdownMenuTrigger>
@@ -190,7 +190,7 @@ export function TopHeader() {
                   Админ-панель
                 </DropdownMenuItem>
               )}
-              <DropdownMenuItem onClick={() => navigate(`/creator/${profile?.display_name || "me"}`)}>
+              <DropdownMenuItem onClick={() => navigate(`/creator/me`)}>
                 <User className="h-4 w-4 mr-2" />
                 Мой профиль
               </DropdownMenuItem>
