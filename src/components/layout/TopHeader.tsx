@@ -19,6 +19,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface NavItem {
   title: string;
+  titleCreator?: string;
   url: string;
   icon: React.ElementType;
   roles?: string[];
@@ -29,7 +30,7 @@ const allNavItems: NavItem[] = [
   { title: "Каталог", url: "/explore", icon: Compass },
   { title: "Студия", url: "/creator-studio", icon: Palette, roles: ["creator", "moderator"] },
   { title: "Реклама", url: "/ad-studio", icon: Megaphone, roles: ["advertiser", "creator", "moderator"] },
-  { title: "Биржа", url: "/marketplace", icon: Store, roles: ["creator", "advertiser", "moderator"] },
+  { title: "Биржа", titleCreator: "Предложения", url: "/marketplace", icon: Store, roles: ["creator", "advertiser", "moderator"] },
   { title: "Рейтинг", url: "/trust-rating", icon: Shield, roles: ["creator", "advertiser", "moderator"] },
   { title: "AI", url: "/ai-workspace", icon: Brain },
 ];
@@ -85,7 +86,7 @@ export function TopHeader() {
           <span className="text-lg font-bold gradient-text tracking-tight">MediaOS</span>
         </NavLink>
 
-        <nav className="hidden md:flex items-center gap-1 flex-1">
+        <nav className="hidden md:flex items-center gap-1 flex-1 justify-center">
           {visibleItems.map((item) => (
             <NavLink
               key={item.url}
@@ -95,7 +96,7 @@ export function TopHeader() {
               activeClassName="text-primary bg-primary/10 font-medium"
             >
               <item.icon className="h-4 w-4" />
-              <span>{item.title}</span>
+              <span>{item.titleCreator && isCreator ? item.titleCreator : item.title}</span>
             </NavLink>
           ))}
         </nav>
@@ -233,7 +234,7 @@ export function TopHeader() {
                   onClick={() => setMobileMenuOpen(false)}
                 >
                   <item.icon className="h-4 w-4" />
-                  <span>{item.title}</span>
+                  <span>{item.titleCreator && isCreator ? item.titleCreator : item.title}</span>
                 </NavLink>
               ))}
             </nav>
