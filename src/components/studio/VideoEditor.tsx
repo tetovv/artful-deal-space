@@ -112,6 +112,40 @@ const formatMSKDisplay = (localDatetimeStr: string): string => {
   return d.toLocaleString("ru-RU", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) + " МСК";
 };
 
+/* Stable section component — defined outside VideoEditor to prevent
+   React from unmounting/remounting children (and losing input focus)
+   on every state change inside the editor. */
+function EditorSection({ icon: Icon, title, children, badge, expanded, onToggle }: {
+  icon: React.ElementType; title: string; children: React.ReactNode; badge?: string;
+  expanded: boolean; onToggle: () => void;
+}) {
+  return (
+    <Card className="overflow-hidden">
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center justify-between px-5 py-4 hover:bg-muted/30 transition-colors text-left"
+      >
+        <div className="flex items-center gap-2.5">
+          <Icon className="h-4 w-4 text-primary" />
+          <span className="text-sm font-semibold text-foreground">{title}</span>
+          {badge && <Badge variant="secondary" className="text-[10px]">{badge}</Badge>}
+        </div>
+        {expanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+      </button>
+      <div
+        className="grid transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]"
+        style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}
+      >
+        <div className="overflow-hidden">
+          <CardContent className="px-5 pb-5 pt-0 space-y-4">
+            {children}
+          </CardContent>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
   const { user, profile } = useAuth();
   const videoInputRef = useRef<HTMLInputElement>(null);
@@ -422,34 +456,7 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
     }
   };
 
-  /* ── Section renderer ── */
-  const Section = ({ id, icon: Icon, title, children, badge }: {
-    id: string; icon: React.ElementType; title: string; children: React.ReactNode; badge?: string;
-  }) => (
-    <Card className="overflow-hidden">
-      <button
-        onClick={() => toggleSection(id)}
-        className="w-full flex items-center justify-between px-5 py-4 hover:bg-muted/30 transition-colors text-left"
-      >
-        <div className="flex items-center gap-2.5">
-          <Icon className="h-4 w-4 text-primary" />
-          <span className="text-sm font-semibold text-foreground">{title}</span>
-          {badge && <Badge variant="secondary" className="text-[10px]">{badge}</Badge>}
-        </div>
-        {expandedSections[id] ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
-      </button>
-      <div
-        className="grid transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]"
-        style={{ gridTemplateRows: expandedSections[id] ? "1fr" : "0fr" }}
-      >
-        <div className="overflow-hidden">
-          <CardContent className="px-5 pb-5 pt-0 space-y-4">
-            {children}
-          </CardContent>
-        </div>
-      </div>
-    </Card>
-  );
+  /* Section component is now defined outside VideoEditor as EditorSection */
 
   /* ════════════ RENDER ════════════ */
   return (
@@ -491,7 +498,7 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
         <div className="xl:col-span-2 space-y-4">
 
           {/* Video Upload */}
-          <Section id="media" icon={Film} title="Видео">
+          <EditorSection icon={Film} title="Видео" expanded={!!expandedSections.media} onToggle={() => toggleSection("media")}>
             {!videoPreviewUrl ? (
               <div
                 onDragOver={(e) => { e.preventDefault(); setIsDraggingVideo(true); }}
@@ -650,10 +657,10 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
               </div>
             )}
             <input ref={videoInputRef} type="file" accept="video/*" className="hidden" onChange={handleVideoSelect} />
-          </Section>
+          </EditorSection>
 
           {/* Basic Info */}
-          <Section id="basic" icon={FileText} title="Основная информация">
+          <EditorSection icon={FileText} title="Основная информация" expanded={!!expandedSections.basic} onToggle={() => toggleSection("basic")}>
             <div className="space-y-4">
               <div>
                 <Label className="text-xs font-medium mb-1.5 block">Название *</Label>
@@ -713,10 +720,10 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
                 </div>
               </div>
             </div>
-          </Section>
+          </EditorSection>
 
           {/* Chapters */}
-          <Section id="chapters" icon={Clock} title="Таймкоды / Главы" badge={form.chapters.length > 0 ? String(form.chapters.length) : undefined}>
+          <EditorSection icon={Clock} title="Таймкоды / Главы" badge={form.chapters.length > 0 ? String(form.chapters.length) : undefined} expanded={!!expandedSections.chapters} onToggle={() => toggleSection("chapters")}>
             <p className="text-xs text-muted-foreground">Добавьте главы для навигации по видео</p>
             <div className="space-y-2">
               {form.chapters.map((ch, i) => (
@@ -733,10 +740,10 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
             <Button variant="outline" size="sm" onClick={addChapter}>
               <Plus className="h-3 w-3 mr-1.5" /> Добавить главу
             </Button>
-          </Section>
+          </EditorSection>
 
           {/* Monetization */}
-          <Section id="monetization" icon={DollarSign} title="Монетизация">
+          <EditorSection icon={DollarSign} title="Монетизация" expanded={!!expandedSections.monetization} onToggle={() => toggleSection("monetization")}>
             <div className="space-y-4">
               <div>
                 <Label className="text-xs font-medium mb-1.5 block">Модель доступа</Label>
@@ -769,10 +776,10 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
                 </div>
               )}
             </div>
-          </Section>
+          </EditorSection>
 
           {/* Audience */}
-          <Section id="audience" icon={Shield} title="Аудитория и настройки">
+          <EditorSection icon={Shield} title="Аудитория и настройки" expanded={!!expandedSections.audience} onToggle={() => toggleSection("audience")}>
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -824,10 +831,10 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
                 />
               </div>
             </div>
-          </Section>
+          </EditorSection>
 
           {/* Schedule */}
-          <Section id="schedule" icon={Calendar} title="Публикация">
+          <EditorSection icon={Calendar} title="Публикация" expanded={!!expandedSections.schedule} onToggle={() => toggleSection("schedule")}>
             <div className="space-y-4">
               <div>
                 <Label className="text-xs font-medium mb-1.5 block">Статус</Label>
@@ -863,7 +870,7 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
                 </div>
               )}
             </div>
-          </Section>
+          </EditorSection>
         </div>
 
         {/* ── RIGHT: Preview, A/B Covers & Thumbnail ── */}
