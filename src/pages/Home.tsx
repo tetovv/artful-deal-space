@@ -203,25 +203,7 @@ const Home = () => {
   const hour = new Date().getHours();
   const timeGreeting = hour < 12 ? "Доброе утро" : hour < 18 ? "Добрый день" : "Добрый вечер";
 
-  // Chart data - creator
-  const viewsChartData = useMemo(() => {
-    const months = ["Янв", "Фев", "Мар", "Апр", "Май", "Июн"];
-    return months.map((m, i) => ({
-      name: m,
-      views: Math.max(0, totalViews > 0 ? Math.round(totalViews * (0.4 + i * 0.12)) : Math.round(800 + i * 350)),
-      likes: Math.max(0, totalLikes > 0 ? Math.round(totalLikes * (0.3 + i * 0.14)) : Math.round(50 + i * 40)),
-    }));
-  }, [totalViews, totalLikes]);
-
-  const contentByType = useMemo(() => {
-    const types: Record<string, number> = {};
-    myItems.forEach((i) => { types[i.type] = (types[i.type] || 0) + 1; });
-    if (Object.keys(types).length === 0) {
-      return [{ name: "Видео", value: 3 }, { name: "Пост", value: 2 }, { name: "Фото", value: 1 }];
-    }
-    const labels: Record<string, string> = { video: "Видео", post: "Пост", image: "Фото", music: "Музыка", podcast: "Подкаст", book: "Книга", template: "Шаблон" };
-    return Object.entries(types).map(([k, v]) => ({ name: labels[k] || k, value: v }));
-  }, [myItems]);
+  // Chart data - creator (moved to CreatorStudio)
 
   // Chart data - advertiser
   const spendingChartData = useMemo(() => {
@@ -285,50 +267,6 @@ const Home = () => {
               <motion.div variants={stagger.item}><StatCard icon={Wallet} label="Заработано" value={`₽${creatorTotalBudget > 1000 ? `${(creatorTotalBudget / 1000).toFixed(0)}K` : creatorTotalBudget}`} sub="по сделкам" color="bg-accent/10" /></motion.div>
             </motion.div>
 
-            {/* Charts row */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <Card>
-                <CardContent className="p-5 space-y-3">
-                  <div className="flex items-center gap-2">
-                    <Eye className="h-4 w-4 text-primary" />
-                    <span className="text-sm font-semibold">Динамика просмотров</span>
-                  </div>
-                  <ResponsiveContainer width="100%" height={200}>
-                    <AreaChart data={viewsChartData}>
-                      <defs>
-                        <linearGradient id="viewsGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                      <XAxis dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
-                      <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
-                      <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
-                      <Area type="monotone" dataKey="views" stroke="hsl(var(--primary))" fill="url(#viewsGrad)" strokeWidth={2} name="Просмотры" />
-                      <Area type="monotone" dataKey="likes" stroke="hsl(var(--destructive))" fill="transparent" strokeWidth={2} strokeDasharray="4 4" name="Лайки" />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-5 space-y-3">
-                  <div className="flex items-center gap-2">
-                    <PieChart className="h-4 w-4 text-primary" />
-                    <span className="text-sm font-semibold">Контент по типам</span>
-                  </div>
-                  <ResponsiveContainer width="100%" height={240}>
-                    <RePieChart>
-                      <Pie data={contentByType} cx="50%" cy="45%" innerRadius={45} outerRadius={75} paddingAngle={4} dataKey="value" label={({ name, value }) => `${name}: ${value}`}>
-                        {contentByType.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
-                      </Pie>
-                      <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
-                      <Legend wrapperStyle={{ fontSize: 11 }} />
-                    </RePieChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-            </div>
 
             <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
               <Card className="overflow-hidden">
