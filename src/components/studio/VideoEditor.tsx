@@ -546,9 +546,9 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
         </aside>
 
         {/* Center: Video + tab content */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        <div className="flex-1 min-w-0 overflow-y-auto p-4 space-y-4">
           {/* Video upload/player */}
-          <div className="space-y-3">
+          <div className="space-y-3 max-w-3xl">
             {!videoPreviewUrl ? (
               <div
                 onDragOver={(e) => { e.preventDefault(); setIsDraggingVideo(true); }}
@@ -556,7 +556,7 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
                 onDrop={handleVideoDrop}
                 onClick={() => videoInputRef.current?.click()}
                 className={cn(
-                  "border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-all aspect-video flex flex-col items-center justify-center",
+                  "border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all aspect-video max-h-[360px] flex flex-col items-center justify-center",
                   isDraggingVideo ? "border-primary bg-primary/5" : "border-border hover:border-primary/40 hover:bg-muted/30"
                 )}
               >
@@ -566,8 +566,8 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
                 <p className="text-[11px] text-muted-foreground/60 mt-2">MP4, WebM, MOV · до 2 ГБ</p>
               </div>
             ) : (
-              <div className="space-y-3">
-                <div className="relative rounded-xl overflow-hidden bg-black aspect-video">
+              <div className="space-y-3 max-w-3xl">
+                <div className="relative rounded-xl overflow-hidden bg-black aspect-video max-h-[360px]">
                   <video
                     ref={videoRef}
                     src={videoPreviewUrl}
@@ -634,9 +634,9 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
             <input ref={videoInputRef} type="file" accept="video/*" className="hidden" onChange={handleVideoSelect} />
           </div>
 
-          {/* Tab content below video (non-media tabs) */}
+          {/* Tab content below video */}
           {activeTab !== "media" && (
-            <motion.div key={activeTab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15 }}>
+            <motion.div key={activeTab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15 }} className="max-w-3xl">
 
               {activeTab === "basic" && (
                 <Card>
@@ -810,7 +810,7 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
         </div>
 
         {/* Right sidebar: Covers, A/B test, Preview */}
-        <aside className="w-72 shrink-0 border-l border-border bg-card/30 overflow-y-auto p-4 space-y-4">
+        <aside className="w-80 shrink-0 border-l border-border bg-card/30 overflow-y-auto p-4 space-y-4">
           {/* Thumbnail */}
           <Card>
             <CardHeader className="pb-2 pt-3 px-4">
