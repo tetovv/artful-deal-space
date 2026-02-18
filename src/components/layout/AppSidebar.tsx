@@ -1,8 +1,9 @@
-import { Home, Compass, Palette, Megaphone, Store, Shield, Brain, Settings, LogOut, User, ChevronLeft, ChevronRight } from "lucide-react";
+import { Home, Compass, Palette, Megaphone, Store, Shield, Brain, Settings, LogOut, ChevronLeft, ChevronRight } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
-import { currentUser } from "@/data/mockData";
+import { useAuth } from "@/contexts/AuthContext";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { useNavigate } from "react-router-dom";
 
 const mainNav = [
   { title: "Главная", url: "/", icon: Home },
@@ -20,6 +21,13 @@ const bottomNav = [
 
 export function AppSidebar() {
   const [collapsed, setCollapsed] = useState(false);
+  const { profile, signOut } = useAuth();
+  const navigate = useNavigate();
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/auth");
+  };
 
   return (
     <aside className={cn(
@@ -74,14 +82,28 @@ export function AppSidebar() {
 
         {/* User */}
         <div className={cn("flex items-center gap-3 px-3 py-2.5", collapsed && "justify-center px-2")}>
-          <img src={currentUser.avatar} alt="" className="h-7 w-7 rounded-full bg-sidebar-accent" />
+          <div className="h-7 w-7 rounded-full bg-sidebar-accent flex items-center justify-center text-xs font-medium text-sidebar-accent-foreground shrink-0">
+            {(profile?.display_name || "U").charAt(0).toUpperCase()}
+          </div>
           {!collapsed && (
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-sidebar-accent-foreground truncate">{currentUser.name}</p>
-              <p className="text-[10px] text-sidebar-muted truncate">{currentUser.email}</p>
+              <p className="text-xs font-medium text-sidebar-accent-foreground truncate">{profile?.display_name || "Пользователь"}</p>
+              <p className="text-[10px] text-sidebar-muted truncate">{profile?.email || ""}</p>
             </div>
           )}
         </div>
+
+        {/* Sign out */}
+        <button
+          onClick={handleSignOut}
+          className={cn(
+            "flex items-center gap-3 px-3 py-2 rounded-lg text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors text-sm w-full",
+            collapsed && "justify-center px-2"
+          )}
+        >
+          <LogOut className="h-4 w-4" />
+          {!collapsed && <span className="text-xs">Выйти</span>}
+        </button>
 
         {/* Collapse toggle */}
         <button

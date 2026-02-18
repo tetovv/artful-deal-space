@@ -1,17 +1,51 @@
 import { useState } from "react";
-import { Mail, ArrowRight } from "lucide-react";
+import { Mail, Lock, ArrowRight, UserPlus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { useEffect } from "react";
 
 const Auth = () => {
   const [email, setEmail] = useState("");
-  const [sent, setSent] = useState(false);
+  const [password, setPassword] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const { session } = useAuth();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  useEffect(() => {
+    if (session) navigate("/", { replace: true });
+  }, [session, navigate]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (email) setSent(true);
+    setError("");
+    setLoading(true);
+
+    try {
+      if (isSignUp) {
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: { display_name: displayName || email.split("@")[0] },
+            emailRedirectTo: window.location.origin,
+          },
+        });
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+      }
+    } catch (err: any) {
+      setError(err.message || "Ошибка авторизации");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -19,34 +53,64 @@ const Auth = () => {
       <div className="w-full max-w-sm space-y-6 animate-fade-in">
         <div className="text-center space-y-2">
           <h1 className="text-2xl font-bold gradient-text">MediaOS</h1>
-          <p className="text-sm text-muted-foreground">Войдите в экосистему</p>
+          <p className="text-sm text-muted-foreground">
+            {isSignUp ? "Создайте аккаунт" : "Войдите в экосистему"}
+          </p>
         </div>
 
-        {!sent ? (
-          <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {isSignUp && (
             <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <UserPlus className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                type="email"
-                placeholder="Email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Имя"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
                 className="pl-9"
-                required
               />
             </div>
-            <Button type="submit" className="w-full">Получить код <ArrowRight className="h-4 w-4 ml-2" /></Button>
-          </form>
-        ) : (
-          <div className="space-y-4 text-center">
-            <div className="h-12 w-12 rounded-full bg-success/10 flex items-center justify-center mx-auto">
-              <Mail className="h-5 w-5 text-success" />
-            </div>
-            <p className="text-sm text-foreground">Код отправлен на <strong>{email}</strong></p>
-            <Input placeholder="Введите код" className="text-center tracking-widest" maxLength={6} />
-            <Button className="w-full" onClick={() => navigate("/")}>Войти</Button>
+          )}
+          <div className="relative">
+            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="pl-9"
+              required
+            />
           </div>
-        )}
+          <div className="relative">
+            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="password"
+              placeholder="Пароль"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="pl-9"
+              required
+              minLength={6}
+            />
+          </div>
+
+          {error && <p className="text-xs text-destructive">{error}</p>}
+
+          <Button type="submit" className="w-full" disabled={loading}>
+            {loading ? "Загрузка..." : isSignUp ? "Зарегистрироваться" : "Войти"}
+            <ArrowRight className="h-4 w-4 ml-2" />
+          </Button>
+        </form>
+
+        <p className="text-center text-xs text-muted-foreground">
+          {isSignUp ? "Уже есть аккаунт?" : "Нет аккаунта?"}{" "}
+          <button
+            onClick={() => { setIsSignUp(!isSignUp); setError(""); }}
+            className="text-primary hover:underline"
+          >
+            {isSignUp ? "Войти" : "Зарегистрироваться"}
+          </button>
+        </p>
       </div>
     </div>
   );
