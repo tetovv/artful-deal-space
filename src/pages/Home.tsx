@@ -20,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, PieChart as RePieChart, Pie, Cell,
+  ResponsiveContainer, PieChart as RePieChart, Pie, Cell, Legend,
 } from "recharts";
 
 const stagger = {
@@ -317,12 +317,13 @@ const Home = () => {
                     <PieChart className="h-4 w-4 text-primary" />
                     <span className="text-sm font-semibold">Контент по типам</span>
                   </div>
-                  <ResponsiveContainer width="100%" height={200}>
+                  <ResponsiveContainer width="100%" height={240}>
                     <RePieChart>
-                      <Pie data={contentByType} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={4} dataKey="value">
+                      <Pie data={contentByType} cx="50%" cy="45%" innerRadius={45} outerRadius={75} paddingAngle={4} dataKey="value" label={({ name, value }) => `${name}: ${value}`}>
                         {contentByType.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
                       </Pie>
                       <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
+                      <Legend wrapperStyle={{ fontSize: 11 }} />
                     </RePieChart>
                   </ResponsiveContainer>
                 </CardContent>
@@ -407,15 +408,16 @@ const Home = () => {
                     <PieChart className="h-4 w-4 text-primary" />
                     <span className="text-sm font-semibold">Статусы сделок</span>
                   </div>
-                  <ResponsiveContainer width="100%" height={200}>
+                  <ResponsiveContainer width="100%" height={240}>
                     <RePieChart>
-                      <Pie data={dealStatusPie} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={4} dataKey="value">
+                      <Pie data={dealStatusPie} cx="50%" cy="45%" innerRadius={45} outerRadius={75} paddingAngle={4} dataKey="value" label={({ name, value }) => `${name}: ${value}`}>
                         {dealStatusPie.map((_, i) => {
                           const colors = ["hsl(var(--warning))", "hsl(var(--primary))", "hsl(var(--success))", "hsl(var(--destructive))"];
                           return <Cell key={i} fill={colors[i % colors.length]} />;
                         })}
                       </Pie>
                       <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
+                      <Legend wrapperStyle={{ fontSize: 11 }} />
                     </RePieChart>
                   </ResponsiveContainer>
                 </CardContent>
