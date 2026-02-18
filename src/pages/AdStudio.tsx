@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { deals, messages as allMessages } from "@/data/mockData";
 import { useRealtimeMessages } from "@/hooks/useRealtimeMessages";
+import { useAdvertiserScores } from "@/hooks/useAdvertiserScores";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Send, Paperclip, CheckCircle2 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Send, Paperclip, CheckCircle2, AlertTriangle, ShieldAlert } from "lucide-react";
 import { Deal, DealStatus } from "@/types";
 
 const statusColors: Record<DealStatus, string> = {
@@ -30,6 +32,18 @@ const AdStudio = () => {
   useRealtimeMessages(selectedDeal?.id);
   const dealMessages = allMessages.filter((m) => m.dealId === selectedDeal.id);
   const [newMsg, setNewMsg] = useState("");
+  const { scores: advertiserScores } = useAdvertiserScores();
+
+  // Sort deals: low-score advertisers go to the bottom
+  const sortedDeals = useMemo(() => {
+    return [...deals].sort((a, b) => {
+      const aLow = advertiserScores.get(a.advertiserId)?.isLowScore ? 1 : 0;
+      const bLow = advertiserScores.get(b.advertiserId)?.isLowScore ? 1 : 0;
+      return aLow - bLow;
+    });
+  }, [advertiserScores]);
+
+  const selectedAdvertiserScore = advertiserScores.get(selectedDeal.advertiserId);
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] max-h-[calc(100vh-3.5rem)]">
@@ -38,24 +52,40 @@ const AdStudio = () => {
         <div className="p-4 border-b border-border">
           <h2 className="font-semibold text-foreground">Сделки</h2>
         </div>
-        {deals.map((deal) => (
-          <div
-            key={deal.id}
-            onClick={() => setSelectedDeal(deal)}
-            className={`p-4 border-b border-border cursor-pointer hover:bg-muted/50 transition-colors ${
-              selectedDeal.id === deal.id ? "bg-muted/80" : ""
-            }`}
-          >
-            <p className="text-sm font-medium text-card-foreground truncate">{deal.title}</p>
-            <p className="text-xs text-muted-foreground mt-1">{deal.advertiserName} → {deal.creatorName}</p>
-            <div className="flex items-center justify-between mt-2">
-              <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${statusColors[deal.status]}`}>
-                {statusLabels[deal.status]}
-              </span>
-              <span className="text-[10px] text-muted-foreground">{deal.budget.toLocaleString()} ₽</span>
+        {sortedDeals.map((deal) => {
+          const advScore = advertiserScores.get(deal.advertiserId);
+          const isLow = advScore?.isLowScore;
+          return (
+            <div
+              key={deal.id}
+              onClick={() => setSelectedDeal(deal)}
+              className={`p-4 border-b border-border cursor-pointer hover:bg-muted/50 transition-colors ${
+                selectedDeal.id === deal.id ? "bg-muted/80" : ""
+              } ${isLow ? "opacity-60" : ""}`}
+            >
+              <div className="flex items-center gap-1.5">
+                <p className="text-sm font-medium text-card-foreground truncate flex-1">{deal.title}</p>
+                {isLow && (
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="text-xs">Низкий Partner Score ({advScore!.partnerScore.toFixed(1)})</p>
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">{deal.advertiserName} → {deal.creatorName}</p>
+              <div className="flex items-center justify-between mt-2">
+                <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${statusColors[deal.status]}`}>
+                  {statusLabels[deal.status]}
+                </span>
+                <span className="text-[10px] text-muted-foreground">{deal.budget.toLocaleString()} ₽</span>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Chat + Deal details */}
@@ -68,6 +98,12 @@ const AdStudio = () => {
               <p className="text-xs text-muted-foreground">{selectedDeal.description}</p>
             </div>
             <div className="flex items-center gap-2">
+              {selectedAdvertiserScore?.isLowScore && (
+                <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-destructive/10 text-destructive text-xs font-medium">
+                  <ShieldAlert className="h-3.5 w-3.5" />
+                  Partner Score: {selectedAdvertiserScore.partnerScore.toFixed(1)}
+                </div>
+              )}
               <span className={`text-xs font-medium px-2 py-1 rounded ${statusColors[selectedDeal.status]}`}>
                 {statusLabels[selectedDeal.status]}
               </span>
