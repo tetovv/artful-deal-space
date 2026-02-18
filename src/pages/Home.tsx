@@ -1,6 +1,6 @@
 import { contentItems as mockItems, deals, creators } from "@/data/mockData";
 import { ContentCard } from "@/components/content/ContentCard";
-import { TrendingUp, Users, DollarSign, Zap, Sparkles, ArrowRight, BarChart3, Target, Loader2 } from "lucide-react";
+import { TrendingUp, Users, DollarSign, Zap, Sparkles, ArrowRight, BarChart3, Target, Loader2, Plus, FileText, Image, Music, Video, Mic, BookOpen, Layout, Eye, Heart } from "lucide-react";
 import { useContentItems } from "@/hooks/useDbData";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAuth } from "@/contexts/AuthContext";
@@ -11,12 +11,15 @@ import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 
 const statsByRole: Record<string, { label: string; value: string; icon: React.ElementType; change: string }[]> = {
   user: [
     { label: "Контент", value: "2.4K", icon: Zap, change: "+12%" },
     { label: "Авторы", value: "580", icon: Users, change: "+8%" },
-    { label: "Сделки", value: "156", icon: DollarSign, change: "+24%" },
+    { label: "Покупки", value: "12", icon: DollarSign, change: "+3" },
     { label: "Охват", value: "1.8M", icon: TrendingUp, change: "+15%" },
   ],
   creator: [
@@ -33,17 +36,20 @@ const statsByRole: Record<string, { label: string; value: string; icon: React.El
   ],
 };
 
-const greetings: Record<string, string> = {
-  user: "Что нового для вас",
-  creator: "Ваша студия",
-  advertiser: "Ваши кампании",
-  moderator: "Панель управления",
-};
-
 const stagger = {
   container: { hidden: {}, show: { transition: { staggerChildren: 0.06 } } },
   item: { hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0, transition: { duration: 0.35 } } },
 };
+
+const contentTypeOptions = [
+  { type: "video", label: "Видео", icon: Video, color: "text-destructive" },
+  { type: "post", label: "Пост", icon: FileText, color: "text-primary" },
+  { type: "image", label: "Фото", icon: Image, color: "text-accent" },
+  { type: "music", label: "Музыка", icon: Music, color: "text-warning" },
+  { type: "podcast", label: "Подкаст", icon: Mic, color: "text-info" },
+  { type: "book", label: "Книга", icon: BookOpen, color: "text-success" },
+  { type: "template", label: "Шаблон", icon: Layout, color: "text-muted-foreground" },
+];
 
 function mapItem(item: any) {
   return {
@@ -65,8 +71,9 @@ function mapItem(item: any) {
 
 const Home = () => {
   const { data: dbItems } = useContentItems();
-  const { primaryRole } = useUserRole();
-  const { profile } = useAuth();
+  const { primaryRole, isCreator, isAdvertiser } = useUserRole();
+  const { profile, user } = useAuth();
+  const navigate = useNavigate();
 
   const [showOnboarding, setShowOnboarding] = useState(false);
 
@@ -99,7 +106,6 @@ const Home = () => {
     enabled: interests.length > 0,
   });
 
-  // Sort items by AI recommendations
   const recommendedItems = aiRecommendations
     ? allItems
         .filter((item) => aiRecommendations.some((t: string) => t.toLowerCase() === item.title.toLowerCase()))
@@ -114,18 +120,35 @@ const Home = () => {
   const hour = new Date().getHours();
   const timeGreeting = hour < 12 ? "Доброе утро" : hour < 18 ? "Добрый день" : "Добрый вечер";
 
+  // My content stats (for creators)
+  const myItems = allItems.filter((i) => i.creatorId === user?.id);
+  const totalViews = myItems.reduce((s, i) => s + i.views, 0);
+  const totalLikes = myItems.reduce((s, i) => s + i.likes, 0);
+
   return (
     <PageTransition>
       {showOnboarding && <OnboardingWizard onComplete={handleOnboardingComplete} />}
 
       <div className="p-6 lg:p-8 space-y-8 max-w-7xl mx-auto">
-        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="space-y-1">
-          <h1 className="text-3xl font-bold text-foreground">
-            {timeGreeting}, <span className="gradient-text">{displayName}</span> 👋
-          </h1>
-          <p className="text-muted-foreground">{greetings[primaryRole] || greetings.user}</p>
+        {/* Greeting */}
+        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex items-end justify-between gap-4 flex-wrap">
+          <div className="space-y-1">
+            <h1 className="text-3xl font-bold text-foreground">
+              {timeGreeting}, <span className="gradient-text">{displayName}</span> 👋
+            </h1>
+            <p className="text-muted-foreground">
+              {isCreator ? "Управляйте контентом и отслеживайте статистику" : isAdvertiser ? "Ваши кампании и аналитика" : "Откройте для себя лучший контент"}
+            </p>
+          </div>
+          {(isCreator || isAdvertiser) && (
+            <Button onClick={() => navigate(isCreator ? "/creator-studio" : "/ad-studio")} className="shrink-0">
+              <Plus className="h-4 w-4 mr-2" />
+              {isCreator ? "Новый контент" : "Новая кампания"}
+            </Button>
+          )}
         </motion.div>
 
+        {/* Stats */}
         <motion.div variants={stagger.container} initial="hidden" animate="show" className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {stats.map((s) => (
             <motion.div
@@ -135,13 +158,74 @@ const Home = () => {
             >
               <div className="flex items-center justify-between mb-2">
                 <s.icon className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
-                <span className={cn("text-xs font-medium", s.change.startsWith("+") || s.change.startsWith("−") ? "text-success" : "text-muted-foreground")}>{s.change}</span>
+                <span className={cn("text-xs font-medium", s.change.startsWith("+") ? "text-success" : s.change.startsWith("−") ? "text-destructive" : "text-muted-foreground")}>{s.change}</span>
               </div>
               <p className="text-2xl font-bold text-card-foreground">{s.value}</p>
               <p className="text-xs text-muted-foreground">{s.label}</p>
             </motion.div>
           ))}
         </motion.div>
+
+        {/* Quick create panel for creators */}
+        {isCreator && (
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+            <Card className="overflow-hidden">
+              <CardContent className="p-0">
+                <div className="border-b border-border px-5 py-3 flex items-center gap-2">
+                  <Plus className="h-4 w-4 text-primary" />
+                  <span className="text-sm font-semibold">Быстрое создание</span>
+                </div>
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-7 divide-x divide-border">
+                  {contentTypeOptions.map((ct) => (
+                    <button
+                      key={ct.type}
+                      onClick={() => navigate("/creator-studio")}
+                      className="flex flex-col items-center gap-2 py-5 hover:bg-muted/50 transition-colors group"
+                    >
+                      <ct.icon className={cn("h-6 w-6 transition-transform group-hover:scale-110", ct.color)} />
+                      <span className="text-[11px] text-muted-foreground group-hover:text-foreground">{ct.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+
+        {/* My content mini-stats for creators */}
+        {isCreator && myItems.length > 0 && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.25 }} className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Мой контент</h2>
+              <button onClick={() => navigate("/creator-studio")} className="text-xs text-primary hover:underline flex items-center gap-1">
+                Все <ArrowRight className="h-3 w-3" />
+              </button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="rounded-xl border border-border bg-card p-4 flex items-center gap-3">
+                <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center"><Zap className="h-4 w-4 text-primary" /></div>
+                <div>
+                  <p className="text-xl font-bold">{myItems.length}</p>
+                  <p className="text-xs text-muted-foreground">Публикаций</p>
+                </div>
+              </div>
+              <div className="rounded-xl border border-border bg-card p-4 flex items-center gap-3">
+                <div className="h-9 w-9 rounded-lg bg-accent/10 flex items-center justify-center"><Eye className="h-4 w-4 text-accent" /></div>
+                <div>
+                  <p className="text-xl font-bold">{(totalViews / 1000).toFixed(1)}K</p>
+                  <p className="text-xs text-muted-foreground">Просмотров</p>
+                </div>
+              </div>
+              <div className="rounded-xl border border-border bg-card p-4 flex items-center gap-3">
+                <div className="h-9 w-9 rounded-lg bg-destructive/10 flex items-center justify-center"><Heart className="h-4 w-4 text-destructive" /></div>
+                <div>
+                  <p className="text-xl font-bold">{totalLikes}</p>
+                  <p className="text-xs text-muted-foreground">Лайков</p>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
 
         {/* AI recommendation banner */}
         <motion.div
@@ -163,17 +247,18 @@ const Home = () => {
                 : "На основе ваших интересов и активности мы подобрали контент специально для вас"}
             </p>
           </div>
-          <button onClick={() => window.location.href = "/explore"} className="hidden sm:flex items-center gap-1 text-xs font-medium text-primary hover:underline shrink-0">
+          <button onClick={() => navigate("/explore")} className="hidden sm:flex items-center gap-1 text-xs font-medium text-primary hover:underline shrink-0">
             Смотреть <ArrowRight className="h-3 w-3" />
           </button>
         </motion.div>
 
+        {/* Recommendations */}
         <section className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-foreground">
               {recommendedItems.length > 0 ? "🤖 AI рекомендации для вас" : "Рекомендации для вас"}
             </h2>
-            <button onClick={() => window.location.href = "/explore"} className="text-xs text-primary hover:underline flex items-center gap-1">
+            <button onClick={() => navigate("/explore")} className="text-xs text-primary hover:underline flex items-center gap-1">
               Все <ArrowRight className="h-3 w-3" />
             </button>
           </div>
@@ -186,32 +271,35 @@ const Home = () => {
           </motion.div>
         </section>
 
-        <section className="space-y-4">
-          <h2 className="text-lg font-semibold text-foreground">Активные сделки</h2>
-          <motion.div variants={stagger.container} initial="hidden" animate="show" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {deals.map((deal) => (
-              <motion.div
-                key={deal.id}
-                variants={stagger.item}
-                className="rounded-xl border border-border bg-card p-4 space-y-3 hover:shadow-lg hover:border-primary/20 transition-all duration-300"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium px-2 py-1 rounded-md bg-primary/10 text-primary">{deal.status}</span>
-                  <span className="text-xs text-muted-foreground">{deal.budget.toLocaleString()} ₽</span>
-                </div>
-                <h3 className="font-medium text-sm text-card-foreground">{deal.title}</h3>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <span>{deal.advertiserName}</span><span>→</span><span>{deal.creatorName}</span>
-                </div>
-                <div className="flex gap-1">
-                  {deal.milestones.map((m) => (
-                    <div key={m.id} className={`h-1.5 flex-1 rounded-full transition-colors ${m.completed ? "bg-success" : "bg-muted"}`} />
-                  ))}
-                </div>
-              </motion.div>
-            ))}
-          </motion.div>
-        </section>
+        {/* Deals for creator/advertiser */}
+        {(isCreator || isAdvertiser) && (
+          <section className="space-y-4">
+            <h2 className="text-lg font-semibold text-foreground">Активные сделки</h2>
+            <motion.div variants={stagger.container} initial="hidden" animate="show" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {deals.map((deal) => (
+                <motion.div
+                  key={deal.id}
+                  variants={stagger.item}
+                  className="rounded-xl border border-border bg-card p-4 space-y-3 hover:shadow-lg hover:border-primary/20 transition-all duration-300"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium px-2 py-1 rounded-md bg-primary/10 text-primary">{deal.status}</span>
+                    <span className="text-xs text-muted-foreground">{deal.budget.toLocaleString()} ₽</span>
+                  </div>
+                  <h3 className="font-medium text-sm text-card-foreground">{deal.title}</h3>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span>{deal.advertiserName}</span><span>→</span><span>{deal.creatorName}</span>
+                  </div>
+                  <div className="flex gap-1">
+                    {deal.milestones.map((m) => (
+                      <div key={m.id} className={`h-1.5 flex-1 rounded-full transition-colors ${m.completed ? "bg-success" : "bg-muted"}`} />
+                    ))}
+                  </div>
+                </motion.div>
+              ))}
+            </motion.div>
+          </section>
+        )}
       </div>
     </PageTransition>
   );
