@@ -169,6 +169,7 @@ export type Database = {
           creator_id: string | null
           creator_name: string
           description: string | null
+          duration: number | null
           geo: string | null
           id: string
           language: string | null
@@ -196,6 +197,7 @@ export type Database = {
           creator_id?: string | null
           creator_name?: string
           description?: string | null
+          duration?: number | null
           geo?: string | null
           id?: string
           language?: string | null
@@ -223,6 +225,7 @@ export type Database = {
           creator_id?: string | null
           creator_name?: string
           description?: string | null
+          duration?: number | null
           geo?: string | null
           id?: string
           language?: string | null

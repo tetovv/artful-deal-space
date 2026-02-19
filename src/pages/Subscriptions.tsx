@@ -37,6 +37,7 @@ function mapItem(item: any) {
     likes: item.likes || 0,
     createdAt: item.created_at || "",
     tags: item.tags || [],
+    duration: item.duration ?? null,
   };
 }
 
@@ -236,6 +237,14 @@ export default function Subscriptions() {
               <div className="text-center py-16 text-muted-foreground">Загрузка ленты...</div>
             ) : filteredFeed.length === 0 ? (
               <div className="text-center py-16 text-muted-foreground">Ничего не найдено</div>
+            ) : activeType === "post" ? (
+              <motion.div variants={stagger.container} initial="hidden" animate="show" className="space-y-4 max-w-2xl mx-auto">
+                {filteredFeed.map((item: any) => (
+                  <motion.div key={item.id} variants={stagger.item}>
+                    <ContentCard item={item} />
+                  </motion.div>
+                ))}
+              </motion.div>
             ) : (
               <motion.div variants={stagger.container} initial="hidden" animate="show" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {filteredFeed.map((item: any) => (
