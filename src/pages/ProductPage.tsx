@@ -69,9 +69,9 @@ const ProductPage = () => {
       <div className="max-w-full mx-auto px-4 lg:px-6 py-4 space-y-0">
         <div className="flex flex-col lg:flex-row gap-6">
           {/* Left: Video + Info */}
-          <div className="flex-1 min-w-0 space-y-3">
+          <div className="flex-1 min-w-0">
             {/* Video Player / Thumbnail */}
-            <div className="rounded-xl overflow-hidden bg-black relative" style={{ height: 'calc(100vh - 380px)', minHeight: '250px' }}>
+            <div className="rounded-xl overflow-hidden bg-black relative" style={{ height: 'calc(100vh - 210px)', minHeight: '250px' }}>
               {item.video_url ? (
                 <video
                   ref={videoRef}
@@ -86,10 +86,10 @@ const ProductPage = () => {
             </div>
 
             {/* Title */}
-            <h1 className="text-xl font-bold text-foreground leading-tight">{item.title}</h1>
+            <h1 className="text-xl font-bold text-foreground leading-tight mt-3">{item.title}</h1>
 
             {/* Author + Actions row */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-2">
               <div
                 className="flex items-center gap-3 cursor-pointer"
                 onClick={() => item.creatorId && navigate(`/creator/${item.creatorId}`)}
@@ -138,7 +138,7 @@ const ProductPage = () => {
             </div>
 
             {/* Views + Date - separate from description */}
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2">
               <span>{item.views.toLocaleString()} просмотров</span>
               <span>·</span>
               <span>{new Date((raw as any).created_at || Date.now()).toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" })}</span>
