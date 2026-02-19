@@ -260,7 +260,11 @@ const ProductPage = () => {
                   <div className="flex-1 min-w-0 space-y-0.5">
                     <p className="text-base font-semibold text-foreground group-hover:text-primary transition-colors leading-snug">{r.title}</p>
                     <p className="text-sm text-muted-foreground">{r.creator_name}</p>
-                    <p className="text-sm text-muted-foreground">{(r.views || 0).toLocaleString()} просмотров</p>
+                    <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                      <span>{(r.views || 0).toLocaleString()} просмотров</span>
+                      <span>·</span>
+                      <span>{new Date(r.created_at).toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" })}</span>
+                    </div>
                   </div>
                 </div>
               ))

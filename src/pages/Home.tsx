@@ -483,23 +483,59 @@ function UserCatalog({ allItems, navigate }: { allItems: any[]; navigate: (p: st
         </div>
       </div>
 
-      {activeType === "post" ? (
+      {activeType === null ? (
+        <SelectTabPrompt />
+      ) : activeType === "post" ? (
         <div className="space-y-4 max-w-2xl mx-auto">
           {filtered.map((item: any) => (
             <ContentCard key={item.id} item={item} />
           ))}
+          {filtered.length === 0 && <div className="text-center py-16 text-muted-foreground">Ничего не найдено</div>}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filtered.map((item: any) => (
-            <ContentCard key={item.id} item={item} />
-          ))}
-        </div>
-      )}
-      {filtered.length === 0 && (
-        <div className="text-center py-16 text-muted-foreground">Ничего не найдено</div>
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {filtered.map((item: any) => (
+              <ContentCard key={item.id} item={item} />
+            ))}
+          </div>
+          {filtered.length === 0 && <div className="text-center py-16 text-muted-foreground">Ничего не найдено</div>}
+        </>
       )}
     </>
+  );
+}
+
+function SelectTabPrompt() {
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.5, ease: "easeOut" }}
+      className="flex flex-col items-center justify-center py-20 space-y-5"
+    >
+      <motion.div
+        animate={{ y: [0, -8, 0] }}
+        transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+        className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center"
+      >
+        <Sparkles className="h-8 w-8 text-primary" />
+      </motion.div>
+      <div className="text-center space-y-2 max-w-md">
+        <h3 className="text-xl font-bold text-foreground">Выберите категорию</h3>
+        <p className="text-sm text-muted-foreground">
+          Нажмите на одну из вкладок выше, чтобы увидеть контент — видео, посты, музыку и другое
+        </p>
+      </div>
+      <motion.div
+        animate={{ opacity: [0.4, 1, 0.4] }}
+        transition={{ duration: 2, repeat: Infinity }}
+        className="flex items-center gap-2 text-xs text-muted-foreground"
+      >
+        <ArrowRight className="h-3.5 w-3.5 rotate-[-90deg]" />
+        <span>Выберите тип контента</span>
+      </motion.div>
+    </motion.div>
   );
 }
 
