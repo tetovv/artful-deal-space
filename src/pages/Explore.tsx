@@ -40,10 +40,6 @@ const Explore = () => {
   return (
     <PageTransition>
       <div className="p-6 lg:p-8 space-y-6 max-w-7xl">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-bold text-foreground">Каталог контента</h1>
-          <p className="text-sm text-muted-foreground">Видео, музыка, книги, шаблоны и многое другое</p>
-        </div>
 
         <div className="space-y-3">
           <div className="relative max-w-2xl mx-auto">
