@@ -145,7 +145,7 @@ const ProductPage = () => {
             </div>
 
             {/* Description */}
-            <div className="rounded-xl bg-muted/50 p-4 space-y-2">
+            <div className="rounded-xl bg-muted/50 p-4 space-y-2 mt-3">
               {item.description && (
                 <p className="text-sm text-foreground whitespace-pre-wrap">{item.description}</p>
               )}
