@@ -20,6 +20,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
+import { ContentPreview } from "@/components/studio/ContentPreview";
 
 interface PodcastFormData {
   title: string;
@@ -98,6 +99,7 @@ export function PodcastEditor({ editItem, onClose, onSaved }: PodcastEditorProps
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
   const [isDraggingAudio, setIsDraggingAudio] = useState(false);
   const [isDraggingCover, setIsDraggingCover] = useState(false);
   const [activeTab, setActiveTab] = useState<EditorTab>("media");
@@ -210,6 +212,7 @@ export function PodcastEditor({ editItem, onClose, onSaved }: PodcastEditorProps
           </Badge>
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={() => setShowPreview(true)}><Eye className="h-3.5 w-3.5 mr-1.5" /> Превью</Button>
           <Button variant="outline" size="sm" onClick={() => handleSave("draft")} disabled={saving}><Save className="h-3.5 w-3.5 mr-1.5" /> Черновик</Button>
           <Button size="sm" onClick={() => handleSave("published")} disabled={saving} className="gap-1.5">
             {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />} Опубликовать
@@ -451,6 +454,11 @@ export function PodcastEditor({ editItem, onClose, onSaved }: PodcastEditorProps
           </AnimatePresence>
         </div>
       </div>
+      <ContentPreview open={showPreview} onOpenChange={setShowPreview} data={{
+        title: form.title, description: form.description, thumbnail: coverPreviewUrl,
+        tags: form.tags, price: form.price, monetization_type: form.monetization_type,
+        creatorName: profile?.display_name || "", creatorAvatar: profile?.avatar_url || "", type: "podcast",
+      }} />
     </div>
   );
 }
