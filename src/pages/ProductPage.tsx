@@ -187,17 +187,20 @@ const ProductPage = () => {
               related.map((r) => (
                 <div
                   key={r.id}
-                  className="flex gap-2 cursor-pointer group"
+                  className="flex gap-2 cursor-pointer group rounded-lg p-1.5 -mx-1.5 hover:bg-accent/50 transition-colors duration-200"
                   onClick={() => navigate(`/product/${r.id}`)}
                 >
-                  <div className="w-[65%] shrink-0 rounded-lg overflow-hidden aspect-video bg-muted">
+                  <div className="w-[65%] shrink-0 rounded-lg overflow-hidden aspect-video bg-muted relative">
                     {r.thumbnail ? (
-                      <img src={r.thumbnail} alt={r.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                      <img src={r.thumbnail} alt={r.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-muted-foreground">
                         <Play className="h-6 w-6" />
                       </div>
                     )}
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-200 flex items-center justify-center">
+                      <Play className="h-8 w-8 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200 drop-shadow-lg" fill="white" />
+                    </div>
                   </div>
                   <div className="flex-1 min-w-0 space-y-0.5">
                     <p className="text-base font-semibold text-foreground group-hover:text-primary transition-colors leading-snug">{r.title}</p>
