@@ -545,7 +545,7 @@ const CreatorStudio = () => {
                             </Select>
                           </div>
                           {/* Actions */}
-                          <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center gap-0.5 shrink-0" onClick={(e) => e.stopPropagation()}>
                             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate(`/product/${item.id}`)} title="Открыть"><Eye className="h-4 w-4" /></Button>
                             <Button variant="ghost" size="icon" className="h-8 w-8" title="Редактировать" onClick={() => { setEditingItem(item); setEditorMode("edit"); }}><Edit className="h-4 w-4" /></Button>
                             <Button variant="ghost" size="icon" className="h-8 w-8 text-primary" title="Аналитика" onClick={() => setDetailItem(item.id)}><BarChart3 className="h-4 w-4" /></Button>
