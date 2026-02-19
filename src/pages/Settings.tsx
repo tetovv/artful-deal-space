@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Save, User, Tags, MapPin, Upload, Loader2, Shield, Bell, Lock, Monitor, Globe, LayoutDashboard } from "lucide-react";
+import { Save, User, Tags, MapPin, Upload, Loader2, Shield, Bell, Lock, Monitor, Globe, LayoutDashboard, Accessibility, UserX, ShieldCheck } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import type { Database } from "@/integrations/supabase/types";
@@ -36,9 +36,12 @@ const SECTIONS = [
   { id: "interests", label: "Интересы", icon: Tags },
   { id: "notifications", label: "Уведомления", icon: Bell },
   { id: "privacy", label: "Приватность", icon: Lock },
+  { id: "blocked", label: "Блокировки", icon: UserX },
   { id: "content", label: "Контент", icon: Monitor },
+  { id: "accessibility", label: "Доступность", icon: Accessibility },
+  { id: "region", label: "Регион", icon: Globe },
   { id: "platform", label: "Платформа", icon: LayoutDashboard },
-  { id: "security", label: "Безопасность", icon: Globe },
+  { id: "security", label: "Безопасность", icon: ShieldCheck },
 ] as const;
 
 function useLocalSettings() {
@@ -274,9 +277,35 @@ export default function Settings() {
               <CardTitle className="flex items-center gap-2 text-base"><Lock className="h-4 w-4" /> Приватность</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <SettingToggle label="Публичный профиль" description="Ваш профиль виден другим пользователям" checked={settings.profilePublic} onChange={(v) => updateSetting("profilePublic", v)} />
+              <div>
+                <p className="text-sm font-medium mb-1">Видимость профиля</p>
+                <p className="text-xs text-muted-foreground mb-2">Кто может видеть ваш профиль</p>
+                <Select value={settings.profileVisibility || "public"} onValueChange={(v) => updateSetting("profileVisibility", v)}>
+                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="public">Все пользователи</SelectItem>
+                    <SelectItem value="subscribers">Только подписчики (платные и бесплатные)</SelectItem>
+                    <SelectItem value="paid">Только платные подписчики</SelectItem>
+                    <SelectItem value="private">Скрытый профиль</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <SettingToggle label="Показывать активность" description="Другие видят вашу недавнюю активность" checked={settings.showActivity} onChange={(v) => updateSetting("showActivity", v)} />
               <SettingToggle label="Показывать покупки" description="Показывать список покупок в профиле" checked={settings.showPurchases} onChange={(v) => updateSetting("showPurchases", v)} />
+            </CardContent>
+          </Card>
+        );
+      case "blocked":
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base"><UserX className="h-4 w-4" /> Управление заблокированными пользователями</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-xs text-muted-foreground">Здесь отображаются пользователи, которых вы заблокировали. Заблокированные пользователи не могут видеть ваш профиль, контент и отправлять вам сообщения.</p>
+              <div className="text-center py-8 text-muted-foreground rounded-xl border border-border bg-muted/30 text-sm">
+                Нет заблокированных пользователей
+              </div>
             </CardContent>
           </Card>
         );
@@ -321,6 +350,99 @@ export default function Settings() {
             </CardContent>
           </Card>
         );
+      case "accessibility":
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base"><Accessibility className="h-4 w-4" /> Доступность</CardTitle>
+              <p className="text-xs text-muted-foreground">Настройки для комфортного использования</p>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div>
+                <p className="text-sm font-medium mb-1">Размер шрифта</p>
+                <p className="text-xs text-muted-foreground mb-3">{settings.fontSize === "small" ? "Маленький" : settings.fontSize === "large" ? "Большой" : settings.fontSize === "xlarge" ? "Очень большой" : "Средний"}</p>
+                <input
+                  type="range"
+                  min={0}
+                  max={3}
+                  value={settings.fontSize === "small" ? 0 : settings.fontSize === "large" ? 2 : settings.fontSize === "xlarge" ? 3 : 1}
+                  onChange={(e) => {
+                    const vals = ["small", "medium", "large", "xlarge"];
+                    updateSetting("fontSize", vals[Number(e.target.value)]);
+                  }}
+                  className="w-full accent-primary"
+                />
+                <div className="flex justify-between text-muted-foreground mt-1">
+                  <span className="text-xs">A</span>
+                  <span className="text-sm">A</span>
+                  <span className="text-base">A</span>
+                  <span className="text-lg">A</span>
+                </div>
+              </div>
+              <SettingToggle label="Уменьшить анимации" description="Отключить или упростить анимации интерфейса" checked={settings.reduceMotion || false} onChange={(v) => updateSetting("reduceMotion", v)} />
+              <SettingToggle label="Высокий контраст" description="Увеличить контрастность цветов для лучшей читаемости" checked={settings.highContrast || false} onChange={(v) => updateSetting("highContrast", v)} />
+            </CardContent>
+          </Card>
+        );
+      case "region":
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base"><Globe className="h-4 w-4" /> Язык и регион</CardTitle>
+              <p className="text-xs text-muted-foreground">Локализация и форматирование</p>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div>
+                <Label className="text-sm font-medium">Язык интерфейса</Label>
+                <Select value={settings.uiLanguage || "ru"} onValueChange={(v) => updateSetting("uiLanguage", v)}>
+                  <SelectTrigger className="w-full mt-1.5"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ru">Русский</SelectItem>
+                    <SelectItem value="en">English</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-sm font-medium">Часовой пояс</Label>
+                <Select value={settings.timezone || "Europe/Moscow"} onValueChange={(v) => updateSetting("timezone", v)}>
+                  <SelectTrigger className="w-full mt-1.5"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Europe/Moscow">Москва (UTC+3)</SelectItem>
+                    <SelectItem value="Europe/Kaliningrad">Калининград (UTC+2)</SelectItem>
+                    <SelectItem value="Asia/Yekaterinburg">Екатеринбург (UTC+5)</SelectItem>
+                    <SelectItem value="Asia/Novosibirsk">Новосибирск (UTC+7)</SelectItem>
+                    <SelectItem value="Asia/Vladivostok">Владивосток (UTC+10)</SelectItem>
+                    <SelectItem value="UTC">UTC</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-sm font-medium">Формат даты</Label>
+                <Select value={settings.dateFormat || "dd.mm.yyyy"} onValueChange={(v) => updateSetting("dateFormat", v)}>
+                  <SelectTrigger className="w-full mt-1.5"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="dd.mm.yyyy">31.12.2026</SelectItem>
+                    <SelectItem value="yyyy-mm-dd">2026-12-31</SelectItem>
+                    <SelectItem value="mm/dd/yyyy">12/31/2026</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-sm font-medium">Формат времени</Label>
+                <div className="flex gap-4 mt-1.5">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="timeFormat" checked={(settings.timeFormat || "24h") === "24h"} onChange={() => updateSetting("timeFormat", "24h")} className="accent-primary" />
+                    <span className="text-sm">24-часовой (14:30)</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="timeFormat" checked={settings.timeFormat === "12h"} onChange={() => updateSetting("timeFormat", "12h")} className="accent-primary" />
+                    <span className="text-sm">12-часовой (2:30 PM)</span>
+                  </label>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        );
       case "platform":
         return (
           <Card>
@@ -354,9 +476,9 @@ export default function Settings() {
         return (
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base"><Globe className="h-4 w-4" /> Безопасность</CardTitle>
+              <CardTitle className="flex items-center gap-2 text-base"><ShieldCheck className="h-4 w-4" /> Безопасность</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-5">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium">Email</p>
@@ -366,6 +488,30 @@ export default function Settings() {
               <Button variant="outline" size="sm" onClick={handleChangePassword}>
                 <Lock className="h-4 w-4 mr-2" />Сменить пароль
               </Button>
+              <div className="border-t border-border pt-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">Двухфакторная аутентификация</p>
+                    <p className="text-xs text-muted-foreground">Дополнительный уровень безопасности при входе</p>
+                  </div>
+                  <Switch checked={settings.twoFactorEnabled || false} onCheckedChange={(v) => {
+                    updateSetting("twoFactorEnabled", v);
+                    toast.info(v ? "2FA будет настроена при следующем входе" : "2FA отключена");
+                  }} />
+                </div>
+              </div>
+              <div className="border-t border-border pt-4">
+                <p className="text-sm font-medium mb-2">Активные сессии</p>
+                <div className="rounded-lg border border-border bg-muted/30 p-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm">Текущая сессия</p>
+                      <p className="text-xs text-muted-foreground">Этот браузер</p>
+                    </div>
+                    <Badge variant="secondary" className="text-xs">Активна</Badge>
+                  </div>
+                </div>
+              </div>
             </CardContent>
           </Card>
         );

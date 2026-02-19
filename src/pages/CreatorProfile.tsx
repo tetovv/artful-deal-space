@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { creators, contentItems } from "@/data/mockData";
 import { ContentCard } from "@/components/content/ContentCard";
-import { ArrowLeft, MapPin, Users, Star, CheckCircle, Eye, Package, Handshake, User, Crown, Trophy, Bookmark, Rss } from "lucide-react";
+import { ArrowLeft, MapPin, Users, CheckCircle, Eye, Package, Handshake, User, Crown, Trophy, Rss } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PageTransition } from "@/components/layout/PageTransition";
@@ -194,12 +194,11 @@ const CreatorProfile = () => {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
           {[
             { label: "Подписчики", value: profileData.followers > 1000 ? `${(profileData.followers / 1000).toFixed(0)}K` : String(profileData.followers), icon: Users },
             { label: "Охват", value: profileData.reach > 1000 ? `${(profileData.reach / 1000).toFixed(0)}K` : String(profileData.reach), icon: Eye },
             { label: "Контент", value: String(profileData.contentCount), icon: Package },
-            { label: "Рейтинг", value: profileData.rating > 0 ? profileData.rating.toFixed(1) : "—", icon: Star },
           ].map((s) => (
             <div key={s.label} className="rounded-xl border border-border bg-card p-4 text-center">
               <s.icon className="h-4 w-4 mx-auto mb-2 text-muted-foreground" />
@@ -210,9 +209,9 @@ const CreatorProfile = () => {
         </div>
 
         {/* Achievements */}
-        {achievements.length > 0 && (
-          <section className="space-y-3">
-            <h2 className="text-lg font-semibold text-foreground flex items-center gap-2"><Trophy className="h-5 w-5 text-warning" /> Достижения</h2>
+        <section className="space-y-3">
+          <h2 className="text-lg font-semibold text-foreground flex items-center gap-2"><Trophy className="h-5 w-5 text-warning" /> Достижения</h2>
+          {achievements.length > 0 ? (
             <div className="flex flex-wrap gap-3">
               {achievements.map((a: any) => (
                 <div key={a.id} className="flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 hover:border-primary/30 transition-colors">
@@ -224,8 +223,12 @@ const CreatorProfile = () => {
                 </div>
               ))}
             </div>
-          </section>
-        )}
+          ) : (
+            <div className="text-center py-6 text-muted-foreground rounded-xl border border-border bg-card text-sm">
+              Достижений пока нет
+            </div>
+          )}
+        </section>
 
         {/* Portfolio */}
         <section className="space-y-4">
