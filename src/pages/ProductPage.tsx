@@ -203,18 +203,18 @@ const ProductPage = () => {
           </div>
 
           {/* Right sidebar: Related videos */}
-          <aside className="w-full lg:w-[480px] shrink-0 space-y-1.5">
+          <aside className="w-full lg:w-[480px] shrink-0 space-y-1">
             {related.length === 0 ? (
               <p className="text-xs text-muted-foreground">Нет рекомендаций</p>
             ) : (
               related.map((r) => (
                 <div
                   key={r.id}
-                  className="cursor-pointer group space-y-1"
+                  className="cursor-pointer group space-y-0.5"
                   onClick={() => navigate(`/product/${r.id}`)}
                 >
                   <div
-                    className="w-full rounded-lg overflow-hidden bg-muted relative" style={{ aspectRatio: '16/8' }}
+                    className="w-full rounded-lg overflow-hidden bg-muted relative" style={{ aspectRatio: '16/7' }}
                     onMouseEnter={(e) => {
                       const video = e.currentTarget.querySelector("video");
                       if (video) { video.currentTime = 0; video.play().catch(() => {}); }
