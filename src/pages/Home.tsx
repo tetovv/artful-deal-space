@@ -186,8 +186,13 @@ const Home = () => {
   const { profile, user } = useAuth();
   const navigate = useNavigate();
 
-  // Start page redirect — only on first session load, not on every visit to "/"
+  // Redirect creators to studio
   useEffect(() => {
+    if (isCreator) {
+      navigate("/creator-studio", { replace: true });
+      return;
+    }
+    // Start page redirect — only on first session load
     const alreadyRedirected = sessionStorage.getItem("mediaos-start-redirected");
     if (alreadyRedirected) return;
     try {
@@ -201,7 +206,7 @@ const Home = () => {
         }
       }
     } catch {}
-  }, []);
+  }, [isCreator]);
 
   const [showOnboarding, setShowOnboarding] = useState(false);
   useEffect(() => {

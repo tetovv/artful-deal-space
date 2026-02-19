@@ -19,14 +19,13 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface NavItem {
   title: string;
-  titleCreator?: string;
   url: string;
   icon: React.ElementType;
   roles?: string[];
 }
 
 const allNavItems: NavItem[] = [
-  { title: "Главная", titleCreator: "Панель управления", url: "/", icon: Home },
+  { title: "Главная", url: "/", icon: Home, roles: ["user"] },
   { title: "Главная", url: "/explore", icon: Compass, roles: ["creator", "advertiser", "moderator"] },
   { title: "Подписки", url: "/subscriptions", icon: Rss, roles: ["user"] },
   { title: "Студия", url: "/creator-studio", icon: Palette, roles: ["creator", "moderator"] },
@@ -100,7 +99,7 @@ export function TopHeader() {
               activeClassName="text-primary bg-primary/10 font-medium"
             >
               <item.icon className="h-4 w-4" />
-              <span>{item.titleCreator && (isCreator || isAdvertiser) ? item.titleCreator : item.title}</span>
+              <span>{item.title}</span>
             </NavLink>
           ))}
         </nav>
@@ -238,7 +237,7 @@ export function TopHeader() {
                   onClick={() => setMobileMenuOpen(false)}
                 >
                   <item.icon className="h-4 w-4" />
-                  <span>{item.titleCreator && (isCreator || isAdvertiser) ? item.titleCreator : item.title}</span>
+                  <span>{item.title}</span>
                 </NavLink>
               ))}
             </nav>

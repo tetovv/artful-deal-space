@@ -363,6 +363,85 @@ const CreatorStudio = () => {
                     </motion.div>
                   ))}
                 </motion.div>
+
+                {/* Deal stats */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                  {[
+                    { icon: Clock, label: "Ожидают ответа", value: String(pendingDeals.length), color: "bg-warning/10 text-warning" },
+                    { icon: Activity, label: "В работе", value: String(activeDeals.length), color: "bg-primary/10 text-primary" },
+                    { icon: CheckCircle, label: "Завершено", value: String(completedDeals.length), color: "bg-success/10 text-success" },
+                    { icon: Handshake, label: "Заработано", value: `₽${fmtNum(dealsEarned)}`, color: "bg-accent/10 text-accent-foreground" },
+                  ].map((s) => (
+                    <div key={s.label} className="rounded-xl border border-border bg-card p-3 flex items-center gap-3">
+                      <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center shrink-0", s.color.split(" ")[0])}>
+                        <s.icon className={cn("h-4 w-4", s.color.split(" ")[1])} />
+                      </div>
+                      <div>
+                        <p className="text-base font-bold text-card-foreground">{s.value}</p>
+                        <p className="text-[11px] text-muted-foreground">{s.label}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Quick create */}
+                <Card className="overflow-hidden">
+                  <CardContent className="p-0">
+                    <div className="border-b border-border px-5 py-2.5 flex items-center gap-2">
+                      <Plus className="h-4 w-4 text-primary" />
+                      <span className="text-sm font-semibold">Быстрое создание</span>
+                    </div>
+                    <div className="grid grid-cols-3 sm:grid-cols-6 divide-x divide-border">
+                      {([
+                        { type: "video" as const, icon: Video, label: "Видео", color: "text-destructive" },
+                        { type: "book" as const, icon: BookOpen, label: "Книга", color: "text-success" },
+                        { type: "music" as const, icon: Music, label: "Музыка", color: "text-warning" },
+                        { type: "podcast" as const, icon: Mic, label: "Подкаст", color: "text-info" },
+                        { type: "post" as const, icon: FileText, label: "Пост", color: "text-primary" },
+                        { type: "template" as const, icon: Layout, label: "Шаблон", color: "text-muted-foreground" },
+                      ] as const).map((ct) => (
+                        <button key={ct.type} onClick={() => { setEditorMode("create"); setEditorContentType(ct.type); setEditingItem(null); }}
+                          className="flex flex-col items-center gap-2 py-4 hover:bg-muted/50 transition-colors group">
+                          <ct.icon className={cn("h-5 w-5 transition-transform group-hover:scale-110", ct.color)} />
+                          <span className="text-[11px] text-muted-foreground group-hover:text-foreground">{ct.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Pending deals */}
+                {pendingDeals.length > 0 && (
+                  <Card className="border-warning/20">
+                    <CardHeader className="pb-2 pt-4 px-5">
+                      <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                        <Handshake className="h-4 w-4 text-warning" /> Новые предложения
+                        <Badge variant="destructive" className="ml-1 text-[10px]">{pendingDeals.length}</Badge>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="px-5 pb-4 space-y-1">
+                      {pendingDeals.slice(0, 3).map((deal: any) => (
+                        <div key={deal.id} onClick={() => navigate("/marketplace")}
+                          className="flex items-center gap-3 rounded-lg p-2 hover:bg-muted/50 cursor-pointer transition-colors">
+                          <div className="h-8 w-8 rounded-full bg-warning/10 flex items-center justify-center shrink-0">
+                            <Handshake className="h-4 w-4 text-warning" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{deal.title}</p>
+                            <p className="text-[11px] text-muted-foreground">{deal.advertiser_name}</p>
+                          </div>
+                          <span className="text-xs font-semibold text-success">₽{(deal.budget || 0).toLocaleString()}</span>
+                        </div>
+                      ))}
+                      <Button variant="ghost" size="sm" className="w-full mt-1 text-xs" onClick={() => navigate("/marketplace")}>
+                        Все предложения <ChevronRight className="h-3 w-3 ml-1" />
+                      </Button>
+                    </CardContent>
+                  </Card>
+                )}
+
+                <Separator />
+
                 <div className="flex items-center justify-between flex-wrap gap-3">
                   <div className="space-y-1">
                     <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
