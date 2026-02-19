@@ -4,7 +4,7 @@ import {
   Save, Send, Eye, ChevronDown, ChevronUp,
   FileText, AlertCircle, CheckCircle, Loader2,
   DollarSign, Shield, Calendar, Clock, Tag, Globe,
-  BookMarked, Layers, Type, Hash, ImageIcon,
+  BookMarked, Layers, Type, Hash, ImageIcon, ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -450,19 +450,69 @@ export function BookEditor({ editItem, onClose, onSaved }: BookEditorProps) {
                         <p className="text-[11px] text-muted-foreground/60 mt-2">PDF, EPUB, FB2, DOCX · до 100 МБ</p>
                       </div>
                     ) : (
-                      <div className="flex items-center gap-3 p-4 rounded-xl border border-border bg-card">
-                        <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                          <FileText className="h-6 w-6 text-primary" />
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-3 p-4 rounded-xl border border-border bg-card">
+                          <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                            <FileText className="h-6 w-6 text-primary" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-foreground truncate">{bookFileName || "Файл загружен"}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {bookFile ? `${(bookFile.size / 1024 / 1024).toFixed(1)} МБ` : "Ранее загружено"}
+                            </p>
+                          </div>
+                          <Button variant="outline" size="sm" onClick={() => bookFileInputRef.current?.click()}>
+                            Заменить
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => { setBookFile(null); setBookFileName(""); }}>
+                            <X className="h-4 w-4" />
+                          </Button>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-foreground truncate">{bookFileName || "Файл загружен"}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {bookFile ? `${(bookFile.size / 1024 / 1024).toFixed(1)} МБ` : "Ранее загружено"}
-                          </p>
-                        </div>
-                        <Button variant="ghost" size="sm" onClick={() => { setBookFile(null); setBookFileName(""); }}>
-                          <X className="h-4 w-4" />
-                        </Button>
+
+                        {/* File preview */}
+                        {(() => {
+                          const fileExt = bookFileName?.split(".").pop()?.toLowerCase();
+                          const isPdf = fileExt === "pdf";
+                          const previewUrl = bookFile ? URL.createObjectURL(bookFile) : editItem?.video_url;
+
+                          if (isPdf && previewUrl) {
+                            return (
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <Label className="text-sm font-medium flex items-center gap-1.5">
+                                    <Eye className="h-3.5 w-3.5 text-primary" /> Предпросмотр
+                                  </Label>
+                                  <Button variant="ghost" size="sm" className="text-xs" onClick={() => window.open(previewUrl, "_blank")}>
+                                    <ExternalLink className="h-3 w-3 mr-1" /> Открыть отдельно
+                                  </Button>
+                                </div>
+                                <div className="rounded-xl border border-border overflow-hidden bg-muted/20">
+                                  <iframe
+                                    src={previewUrl}
+                                    className="w-full h-[500px] border-0"
+                                    title="Предпросмотр книги"
+                                  />
+                                </div>
+                              </div>
+                            );
+                          }
+
+                          if (previewUrl && !isPdf) {
+                            return (
+                              <div className="rounded-xl border border-border bg-muted/20 p-6 text-center space-y-2">
+                                <FileText className="h-10 w-10 text-muted-foreground mx-auto" />
+                                <p className="text-sm text-muted-foreground">
+                                  Предпросмотр недоступен для формата <span className="font-medium text-foreground uppercase">{fileExt}</span>
+                                </p>
+                                <Button variant="outline" size="sm" onClick={() => window.open(previewUrl, "_blank")}>
+                                  <ExternalLink className="h-3 w-3 mr-1.5" /> Скачать и просмотреть
+                                </Button>
+                              </div>
+                            );
+                          }
+
+                          return null;
+                        })()}
                       </div>
                     )}
                     <input ref={bookFileInputRef} type="file" accept=".pdf,.epub,.fb2,.docx" className="hidden" onChange={handleBookFileSelect} />
