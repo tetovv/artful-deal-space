@@ -210,7 +210,9 @@ const CreatorProfile = () => {
 
         {/* Achievements */}
         <section className="space-y-3">
-          <h2 className="text-lg font-semibold text-foreground flex items-center gap-2"><Trophy className="h-5 w-5 text-warning" /> Достижения</h2>
+          <button onClick={() => navigate("/achievements")} className="text-lg font-semibold text-foreground flex items-center gap-2 hover:text-primary transition-colors">
+            <Trophy className="h-5 w-5 text-warning" /> Достижения
+          </button>
           {achievements.length > 0 ? (
             <div className="flex flex-wrap gap-3">
               {achievements.map((a: any) => (
