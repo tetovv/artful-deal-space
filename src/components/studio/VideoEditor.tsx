@@ -509,7 +509,7 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
       {/* ── Main layout: sidebar + content + right panel ── */}
       <div className="flex h-[calc(100vh-7.5rem)]">
         {/* Left sidebar - section tabs */}
-        <aside className="w-40 shrink-0 border-r border-border bg-card/50 flex flex-col overflow-y-auto">
+        <aside className="w-48 shrink-0 border-r border-border bg-card/50 flex flex-col overflow-y-auto">
           <nav className="py-2 px-2 space-y-0.5 flex-1">
             {EDITOR_TABS.map((tab) => (
               <button
@@ -548,7 +548,7 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
         {/* Center: Video + tab content */}
         <div className="flex-1 min-w-0 overflow-y-auto p-4 space-y-4">
           {/* Video upload/player */}
-          <div className="space-y-3 max-w-3xl">
+          <div className="space-y-3 max-w-4xl mx-auto">
             {!videoPreviewUrl ? (
               <div
                 onDragOver={(e) => { e.preventDefault(); setIsDraggingVideo(true); }}
@@ -556,7 +556,7 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
                 onDrop={handleVideoDrop}
                 onClick={() => videoInputRef.current?.click()}
                 className={cn(
-                  "border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all aspect-video max-h-[360px] flex flex-col items-center justify-center",
+                  "border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all aspect-video max-h-[420px] flex flex-col items-center justify-center",
                   isDraggingVideo ? "border-primary bg-primary/5" : "border-border hover:border-primary/40 hover:bg-muted/30"
                 )}
               >
@@ -567,7 +567,7 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
               </div>
             ) : (
               <div className="space-y-3 max-w-3xl">
-                <div className="relative rounded-xl overflow-hidden bg-black aspect-video max-h-[360px]">
+                <div className="relative rounded-xl overflow-hidden bg-black aspect-video max-h-[420px]">
                   <video
                     ref={videoRef}
                     src={videoPreviewUrl}
@@ -636,7 +636,7 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
 
           {/* Tab content below video */}
           {activeTab !== "media" && (
-            <motion.div key={activeTab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15 }} className="max-w-3xl">
+            <motion.div key={activeTab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15 }} className="max-w-4xl mx-auto">
 
               {activeTab === "basic" && (
                 <Card>
