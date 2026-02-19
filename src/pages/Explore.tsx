@@ -7,11 +7,11 @@ import { ContentType } from "@/types";
 import { useContentItems } from "@/hooks/useDbData";
 import { PageTransition } from "@/components/layout/PageTransition";
 
-const types: (ContentType | "all")[] = ["all", "video", "music", "post", "podcast", "book", "template", "image"];
+const types: ContentType[] = ["video", "music", "post", "podcast", "book", "template", "image"];
 
 const Explore = () => {
   const [search, setSearch] = useState("");
-  const [activeType, setActiveType] = useState<ContentType | "all">("all");
+  const [activeType, setActiveType] = useState<ContentType | null>(null);
   const { data: dbItems, isLoading } = useContentItems();
 
   // Use DB data, fallback to mock
@@ -33,7 +33,7 @@ const Explore = () => {
 
   const filtered = items.filter((item: any) => {
     const matchSearch = item.title.toLowerCase().includes(search.toLowerCase()) || (item.tags || []).some((t: string) => t.toLowerCase().includes(search.toLowerCase()));
-    const matchType = activeType === "all" || item.type === activeType;
+    const matchType = !activeType || item.type === activeType;
     return matchSearch && matchType;
   });
 
@@ -52,11 +52,11 @@ const Explore = () => {
           </div>
           <div className="flex gap-1.5 flex-wrap">
             {types.map((t) => (
-              <button key={t} onClick={() => setActiveType(t)}
+              <button key={t} onClick={() => setActiveType(activeType === t ? null : t)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                   activeType === t ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground hover:bg-accent"
                 }`}>
-                {t === "all" ? "Все" : contentTypeLabels[t] || t}
+                {contentTypeLabels[t] || t}
               </button>
             ))}
           </div>
