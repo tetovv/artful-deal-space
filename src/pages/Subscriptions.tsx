@@ -84,7 +84,7 @@ export default function Subscriptions() {
 
   return (
     <PageTransition>
-      <div className="p-6 lg:p-8 space-y-8 max-w-7xl">
+      <div className="p-6 lg:p-8 space-y-8 max-w-7xl mx-auto">
         <div className="space-y-1">
           <h1 className="text-2xl font-bold text-foreground">Подписки</h1>
           <p className="text-sm text-muted-foreground">Контент от ваших любимых авторов</p>
