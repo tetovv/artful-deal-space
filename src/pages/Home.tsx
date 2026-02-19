@@ -448,15 +448,15 @@ const Home = () => {
   );
 };
 
-const types: (ContentType | "all")[] = ["all", "video", "music", "post", "podcast", "book", "template", "image"];
+const types: ContentType[] = ["video", "music", "post", "podcast", "book", "template", "image"];
 
 function UserCatalog({ allItems, navigate }: { allItems: any[]; navigate: (p: string) => void }) {
   const [search, setSearch] = useState("");
-  const [activeType, setActiveType] = useState<ContentType | "all">("all");
+  const [activeType, setActiveType] = useState<ContentType | null>(null);
 
   const filtered = allItems.filter((item: any) => {
     const matchSearch = item.title.toLowerCase().includes(search.toLowerCase()) || (item.tags || []).some((t: string) => t.toLowerCase().includes(search.toLowerCase()));
-    const matchType = activeType === "all" || item.type === activeType;
+    const matchType = !activeType || item.type === activeType;
     return matchSearch && matchType;
   });
 
@@ -469,11 +469,11 @@ function UserCatalog({ allItems, navigate }: { allItems: any[]; navigate: (p: st
         </div>
         <div className="flex gap-1.5 flex-wrap">
           {types.map((t) => (
-            <button key={t} onClick={() => setActiveType(t)}
+            <button key={t} onClick={() => setActiveType(activeType === t ? null : t)}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                 activeType === t ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground hover:bg-accent"
               }`}>
-              {t === "all" ? "Все" : contentTypeLabels[t] || t}
+              {contentTypeLabels[t] || t}
             </button>
           ))}
         </div>

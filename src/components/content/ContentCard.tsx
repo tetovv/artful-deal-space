@@ -1,5 +1,4 @@
 import { ContentItem } from "@/types";
-import { contentTypeLabels } from "@/data/mockData";
 import { Eye, Heart } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
@@ -20,9 +19,6 @@ export function ContentCard({ item }: { item: ContentItem }) {
     >
       <div className="relative aspect-video overflow-hidden">
         <img src={item.thumbnail} alt={item.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-        <Badge className="absolute top-3 left-3 bg-card/90 text-card-foreground text-[10px] backdrop-blur-sm border-0">
-          {contentTypeLabels[item.type] || item.type}
-        </Badge>
         {item.price === null && (
           <Badge className="absolute top-3 right-3 bg-success text-success-foreground text-[10px] border-0">
             Бесплатно
