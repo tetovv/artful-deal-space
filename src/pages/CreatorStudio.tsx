@@ -540,7 +540,7 @@ const CreatorStudio = () => {
                               <SelectContent>
                                 <SelectItem value="public">Публичный</SelectItem>
                                 <SelectItem value="paid">Платный</SelectItem>
-                                <SelectItem value="subscription">По подписке</SelectItem>
+                                <SelectItem value="subscription">Для подписчиков</SelectItem>
                               </SelectContent>
                             </Select>
                           </div>
