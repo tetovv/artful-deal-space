@@ -121,6 +121,7 @@ const CreatorStudio = () => {
   const [viewsChartType, setViewsChartType] = useState<ChartType>("area");
   const [revenueChartType, setRevenueChartType] = useState<ChartType>("bar");
   const [engagementChartType, setEngagementChartType] = useState<ChartType>("line");
+  const [analyticsPeriod, setAnalyticsPeriod] = useState<"week" | "month" | "year">("month");
 
   // Auto-open editor when navigated with state
   useEffect(() => {
@@ -161,33 +162,38 @@ const CreatorStudio = () => {
   const dealsEarned = completedDeals.reduce((s: number, d: any) => s + (d.budget || 0), 0);
   const engagementRate = totalViews > 0 ? ((totalLikes / totalViews) * 100).toFixed(1) : "0";
 
-  /* ── chart data ── */
+  /* ── chart data (period-aware) ── */
+  const periodLabels = useMemo(() => {
+    if (analyticsPeriod === "week") return ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+    if (analyticsPeriod === "year") return ["Янв", "Фев", "Мар", "Апр", "Май", "Июн", "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек"];
+    return ["1 нед", "2 нед", "3 нед", "4 нед"];
+  }, [analyticsPeriod]);
+
+  const periodScale = analyticsPeriod === "week" ? 0.15 : analyticsPeriod === "year" ? 2 : 1;
+
   const viewsChart = useMemo(() => {
-    const m = ["Янв", "Фев", "Мар", "Апр", "Май", "Июн"];
-    return m.map((n, i) => ({
+    return periodLabels.map((n, i) => ({
       name: n,
-      views: totalViews > 0 ? Math.round(totalViews * (0.4 + i * 0.12)) : 800 + i * 350,
-      likes: totalLikes > 0 ? Math.round(totalLikes * (0.3 + i * 0.14)) : 50 + i * 40,
+      views: totalViews > 0 ? Math.round(totalViews * periodScale * (0.3 + i * 0.07)) : Math.round((400 + i * 200) * periodScale),
+      likes: totalLikes > 0 ? Math.round(totalLikes * periodScale * (0.2 + i * 0.08)) : Math.round((30 + i * 25) * periodScale),
     }));
-  }, [totalViews, totalLikes]);
+  }, [totalViews, totalLikes, periodLabels, periodScale]);
 
   const revenueChart = useMemo(() => {
-    const m = ["Янв", "Фев", "Мар", "Апр", "Май", "Июн"];
-    return m.map((n, i) => ({
+    return periodLabels.map((n, i) => ({
       name: n,
-      sales: totalRevenue > 0 ? Math.round(totalRevenue * (0.15 + i * 0.17)) : 3000 + i * 5000,
-      deals: dealsEarned > 0 ? Math.round(dealsEarned * (0.1 + i * 0.18)) : 2000 + i * 4000,
+      sales: totalRevenue > 0 ? Math.round(totalRevenue * periodScale * (0.1 + i * 0.08)) : Math.round((2000 + i * 3000) * periodScale),
+      deals: dealsEarned > 0 ? Math.round(dealsEarned * periodScale * (0.08 + i * 0.09)) : Math.round((1000 + i * 2500) * periodScale),
     }));
-  }, [totalRevenue, dealsEarned]);
+  }, [totalRevenue, dealsEarned, periodLabels, periodScale]);
 
   const engagementChart = useMemo(() => {
-    const m = ["Янв", "Фев", "Мар", "Апр", "Май", "Июн"];
-    return m.map((n, i) => ({
+    return periodLabels.map((n, i) => ({
       name: n,
-      er: +(2.4 + i * 0.35 + Math.random() * 0.5).toFixed(1),
-      subs: Math.round(1200 + i * 450 + Math.random() * 200),
+      er: +(2.4 + i * 0.25 + Math.random() * 0.5).toFixed(1),
+      subs: Math.round((800 + i * 300 + Math.random() * 200) * periodScale),
     }));
-  }, []);
+  }, [periodLabels, periodScale]);
 
   const typePie = useMemo(() => {
     const t: Record<string, number> = {};
@@ -629,6 +635,24 @@ const CreatorStudio = () => {
                   }}>
                     <ExternalLink className="h-3.5 w-3.5 mr-1.5" /> Экспорт CSV
                   </Button>
+                </div>
+
+                {/* Period filter */}
+                <div className="flex gap-1.5">
+                  {([["week", "Неделя"], ["month", "Месяц"], ["year", "Год"]] as const).map(([key, label]) => (
+                    <button
+                      key={key}
+                      onClick={() => setAnalyticsPeriod(key)}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
+                        analyticsPeriod === key
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-secondary text-secondary-foreground hover:bg-accent"
+                      )}
+                    >
+                      {label}
+                    </button>
+                  ))}
                 </div>
 
                 {/* Hero stats row with gradient cards */}
