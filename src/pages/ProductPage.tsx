@@ -190,7 +190,7 @@ const ProductPage = () => {
                   className="flex gap-3 cursor-pointer group"
                   onClick={() => navigate(`/product/${r.id}`)}
                 >
-                  <div className="w-48 shrink-0 rounded-lg overflow-hidden aspect-video bg-muted">
+                  <div className="w-[45%] shrink-0 rounded-lg overflow-hidden aspect-video bg-muted">
                     {r.thumbnail ? (
                       <img src={r.thumbnail} alt={r.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
                     ) : (
