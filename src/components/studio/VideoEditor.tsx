@@ -529,7 +529,7 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
           </nav>
           {/* Checklist */}
           <div className="p-3 border-t border-border space-y-2">
-            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Чеклист</p>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Чеклист</p>
             {[
               { done: !!videoPreviewUrl, label: "Видео" },
               { done: !!form.title.trim(), label: "Название" },
@@ -537,8 +537,8 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
               { done: !!thumbnailPreviewUrl, label: "Обложка" },
               { done: form.tags.length > 0, label: "Теги" },
             ].map((c) => (
-              <div key={c.label} className="flex items-center gap-1.5 text-[11px]">
-                {c.done ? <CheckCircle className="h-3 w-3 text-success" /> : <div className="h-3 w-3 rounded-full border border-border" />}
+              <div key={c.label} className="flex items-center gap-2 text-sm">
+                {c.done ? <CheckCircle className="h-4 w-4 text-success" /> : <div className="h-4 w-4 rounded-full border border-border" />}
                 <span className={cn(c.done ? "text-foreground" : "text-muted-foreground")}>{c.label}</span>
               </div>
             ))}
