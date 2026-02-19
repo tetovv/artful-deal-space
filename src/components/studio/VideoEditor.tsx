@@ -546,9 +546,9 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
         </aside>
 
         {/* Center: Video + tab content */}
-        <div className="flex-1 min-w-0 overflow-y-auto px-6 py-4 space-y-4">
+        <div className="flex-1 min-w-0 overflow-y-auto px-6 py-4 space-y-4 flex flex-col items-center">
           {/* Video upload/player */}
-          <div className="space-y-3">
+          <div className="space-y-3 w-full max-w-4xl">
             {!videoPreviewUrl ? (
               <div
                 onDragOver={(e) => { e.preventDefault(); setIsDraggingVideo(true); }}
@@ -636,7 +636,7 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
 
           {/* Tab content below video */}
           {activeTab !== "media" && (
-            <motion.div key={activeTab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15 }}>
+            <motion.div key={activeTab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15 }} className="w-full max-w-4xl">
 
               {activeTab === "basic" && (
                 <Card>
