@@ -125,6 +125,7 @@ function AdvertiserCharts({ spendingChartData, dealStatusPie, PIE_COLORS }: { sp
                 <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
                 <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} formatter={(v: number) => `₽${v.toLocaleString()}`} />
                 <Line type="monotone" dataKey="spent" stroke="hsl(var(--primary))" strokeWidth={2.5} name="Расходы" dot={{ r: 4, fill: "hsl(var(--primary))" }} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
               </LineChart>
             ) : spendingChartType === "area" ? (
               <AreaChart data={spendingChartData}>
@@ -139,6 +140,7 @@ function AdvertiserCharts({ spendingChartData, dealStatusPie, PIE_COLORS }: { sp
                 <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
                 <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} formatter={(v: number) => `₽${v.toLocaleString()}`} />
                 <Area type="monotone" dataKey="spent" stroke="hsl(var(--primary))" fill="url(#sg1)" strokeWidth={2.5} name="Расходы" />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
               </AreaChart>
             ) : (
               <BarChart data={spendingChartData}>
@@ -147,6 +149,7 @@ function AdvertiserCharts({ spendingChartData, dealStatusPie, PIE_COLORS }: { sp
                 <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
                 <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} formatter={(v: number) => `₽${v.toLocaleString()}`} />
                 <Bar dataKey="spent" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} name="Расходы" />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
               </BarChart>
             )}
           </ResponsiveContainer>

@@ -375,6 +375,7 @@ const CreatorStudio = () => {
                           <Tooltip {...TT} />
                           <Area type="monotone" dataKey="views" stroke="hsl(var(--primary))" fill="url(#vg)" strokeWidth={2} name="Просмотры" />
                           <Area type="monotone" dataKey="likes" stroke="hsl(var(--destructive))" fill="transparent" strokeWidth={2} strokeDasharray="4 4" name="Лайки" />
+                          <Legend wrapperStyle={{ fontSize: 11 }} />
                         </AreaChart>
                       </ResponsiveContainer>
                     </CardContent>
@@ -394,6 +395,7 @@ const CreatorStudio = () => {
                             {typePie.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
                           </Pie>
                           <Tooltip {...TT} />
+                          <Legend wrapperStyle={{ fontSize: 11 }} />
                         </RePieChart>
                       </ResponsiveContainer>
                     </CardContent>
@@ -707,6 +709,7 @@ const CreatorStudio = () => {
                           <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }} />
                           <Bar dataKey="views" fill="hsl(var(--primary))" radius={[6, 6, 0, 0]} name="Просмотры" />
                           <Bar dataKey="likes" fill="hsl(var(--destructive))" radius={[6, 6, 0, 0]} name="Лайки" />
+                          <Legend wrapperStyle={{ fontSize: 11 }} />
                         </BarChart>
                       ) : viewsChartType === "line" ? (
                         <LineChart data={viewsChart}>
@@ -716,6 +719,7 @@ const CreatorStudio = () => {
                           <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }} />
                           <Line type="monotone" dataKey="views" stroke="hsl(var(--primary))" strokeWidth={2.5} dot={{ r: 4, fill: "hsl(var(--primary))", strokeWidth: 2, stroke: "hsl(var(--background))" }} name="Просмотры" />
                           <Line type="monotone" dataKey="likes" stroke="hsl(var(--destructive))" strokeWidth={2} dot={{ r: 3, fill: "hsl(var(--destructive))", strokeWidth: 2, stroke: "hsl(var(--background))" }} name="Лайки" />
+                          <Legend wrapperStyle={{ fontSize: 11 }} />
                         </LineChart>
                       ) : (
                         <AreaChart data={viewsChart}>
@@ -735,6 +739,7 @@ const CreatorStudio = () => {
                           <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }} />
                           <Area type="monotone" dataKey="views" stroke="hsl(var(--primary))" fill="url(#vg2)" strokeWidth={2.5} dot={{ r: 4, fill: "hsl(var(--primary))", strokeWidth: 2, stroke: "hsl(var(--background))" }} name="Просмотры" />
                           <Area type="monotone" dataKey="likes" stroke="hsl(var(--destructive))" fill="url(#lg2)" strokeWidth={2} dot={{ r: 3, fill: "hsl(var(--destructive))", strokeWidth: 2, stroke: "hsl(var(--background))" }} name="Лайки" />
+                          <Legend wrapperStyle={{ fontSize: 11 }} />
                         </AreaChart>
                       )}
                     </ResponsiveContainer>
@@ -763,6 +768,7 @@ const CreatorStudio = () => {
                             <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }} formatter={(v: number) => `₽${v.toLocaleString()}`} />
                             <Line type="monotone" dataKey="sales" stroke="hsl(var(--success))" strokeWidth={2.5} name="Продажи" dot={{ r: 4, fill: "hsl(var(--success))", strokeWidth: 2, stroke: "hsl(var(--background))" }} />
                             <Line type="monotone" dataKey="deals" stroke="hsl(var(--primary))" strokeWidth={2} name="Сделки" dot={{ r: 3, fill: "hsl(var(--primary))", strokeWidth: 2, stroke: "hsl(var(--background))" }} />
+                            <Legend wrapperStyle={{ fontSize: 11 }} />
                           </LineChart>
                         ) : revenueChartType === "area" ? (
                           <AreaChart data={revenueChart}>
@@ -778,6 +784,7 @@ const CreatorStudio = () => {
                             <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }} formatter={(v: number) => `₽${v.toLocaleString()}`} />
                             <Area type="monotone" dataKey="sales" stroke="hsl(var(--success))" fill="url(#rg1)" strokeWidth={2.5} name="Продажи" />
                             <Area type="monotone" dataKey="deals" stroke="hsl(var(--primary))" fill="transparent" strokeWidth={2} name="Сделки" />
+                            <Legend wrapperStyle={{ fontSize: 11 }} />
                           </AreaChart>
                         ) : (
                           <BarChart data={revenueChart} barGap={4}>
@@ -787,6 +794,7 @@ const CreatorStudio = () => {
                             <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }} formatter={(v: number) => `₽${v.toLocaleString()}`} />
                             <Bar dataKey="sales" fill="hsl(var(--success))" radius={[6, 6, 0, 0]} name="Продажи" />
                             <Bar dataKey="deals" fill="hsl(var(--primary))" radius={[6, 6, 0, 0]} name="Сделки" />
+                            <Legend wrapperStyle={{ fontSize: 11 }} />
                           </BarChart>
                         )}
                       </ResponsiveContainer>
@@ -813,6 +821,7 @@ const CreatorStudio = () => {
                             <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }} />
                             <Bar dataKey="er" fill="hsl(var(--warning))" radius={[6, 6, 0, 0]} name="ER %" />
                             <Bar dataKey="subs" fill="hsl(var(--primary))" radius={[6, 6, 0, 0]} name="Подписчики" />
+                            <Legend wrapperStyle={{ fontSize: 11 }} />
                           </BarChart>
                         ) : engagementChartType === "area" ? (
                           <AreaChart data={engagementChart}>
@@ -828,6 +837,7 @@ const CreatorStudio = () => {
                             <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }} />
                             <Area type="monotone" dataKey="er" stroke="hsl(var(--warning))" fill="url(#eg1)" strokeWidth={2.5} name="ER %" />
                             <Area type="monotone" dataKey="subs" stroke="hsl(var(--primary))" fill="transparent" strokeWidth={2} name="Подписчики" />
+                            <Legend wrapperStyle={{ fontSize: 11 }} />
                           </AreaChart>
                         ) : (
                           <LineChart data={engagementChart}>
@@ -838,6 +848,7 @@ const CreatorStudio = () => {
                             <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }} />
                             <Line yAxisId="l" type="monotone" dataKey="er" stroke="hsl(var(--warning))" strokeWidth={2.5} name="ER %" dot={{ r: 4, fill: "hsl(var(--warning))", strokeWidth: 2, stroke: "hsl(var(--background))" }} />
                             <Line yAxisId="r" type="monotone" dataKey="subs" stroke="hsl(var(--primary))" strokeWidth={2} name="Подписчики" dot={{ r: 3, fill: "hsl(var(--primary))", strokeWidth: 2, stroke: "hsl(var(--background))" }} />
+                            <Legend wrapperStyle={{ fontSize: 11 }} />
                           </LineChart>
                         )}
                       </ResponsiveContainer>
@@ -864,6 +875,7 @@ const CreatorStudio = () => {
                             {typePie.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
                           </Pie>
                           <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }} />
+                          <Legend wrapperStyle={{ fontSize: 11 }} />
                         </RePieChart>
                       </ResponsiveContainer>
                     </CardContent>
