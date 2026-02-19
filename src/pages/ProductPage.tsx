@@ -71,7 +71,7 @@ const ProductPage = () => {
           {/* Left: Video + Info */}
           <div className="flex-1 min-w-0 space-y-4">
             {/* Video Player / Thumbnail */}
-            <div className="rounded-xl overflow-hidden bg-black relative" style={{ height: 'calc((100vh - 240px) / 1.38)', minHeight: '280px' }}>
+            <div className="rounded-xl overflow-hidden bg-black relative aspect-video">
               {item.video_url ? (
                 <video
                   ref={videoRef}
