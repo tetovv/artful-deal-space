@@ -1053,7 +1053,7 @@ const AIWorkspace = () => {
               )}
             </div>
           ) : (
-            <div className="rounded-xl border border-border bg-card p-6 space-y-4 max-w-2xl">
+            <div className="rounded-xl border border-border bg-card p-6 space-y-4">
               <Textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
