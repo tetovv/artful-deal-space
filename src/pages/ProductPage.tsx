@@ -203,7 +203,7 @@ const ProductPage = () => {
           </div>
 
           {/* Right sidebar: Related videos */}
-          <aside className="w-full lg:w-[400px] shrink-0 space-y-2">
+          <aside className="w-full lg:w-[480px] shrink-0 space-y-2">
             {related.length === 0 ? (
               <p className="text-xs text-muted-foreground">Нет рекомендаций</p>
             ) : (
