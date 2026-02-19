@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { Save, User, Tags, MapPin, Upload, Loader2, Shield, Bell, Lock, Monitor, Globe, LayoutDashboard } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { cn } from "@/lib/utils";
 import type { Database } from "@/integrations/supabase/types";
 
 type AppRole = Database["public"]["Enums"]["app_role"];
@@ -29,7 +30,17 @@ const ROLE_OPTIONS: { value: AppRole; label: string; description: string }[] = [
   { value: "advertiser", label: "Рекламодатель", description: "Размещение рекламы и сделки" },
 ];
 
-// Settings stored in localStorage for now
+const SECTIONS = [
+  { id: "profile", label: "Профиль", icon: User },
+  { id: "role", label: "Роль", icon: Shield },
+  { id: "interests", label: "Интересы", icon: Tags },
+  { id: "notifications", label: "Уведомления", icon: Bell },
+  { id: "privacy", label: "Приватность", icon: Lock },
+  { id: "content", label: "Контент", icon: Monitor },
+  { id: "platform", label: "Платформа", icon: LayoutDashboard },
+  { id: "security", label: "Безопасность", icon: Globe },
+] as const;
+
 function useLocalSettings() {
   const [settings, setSettings] = useState(() => {
     const saved = localStorage.getItem("mediaos-settings");
@@ -59,12 +70,25 @@ function useLocalSettings() {
   return { settings, update };
 }
 
+function SettingToggle({ label, description, checked, onChange }: { label: string; description: string; checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div className="flex items-center justify-between">
+      <div>
+        <p className="text-sm font-medium">{label}</p>
+        <p className="text-xs text-muted-foreground">{description}</p>
+      </div>
+      <Switch checked={checked} onCheckedChange={onChange} />
+    </div>
+  );
+}
+
 export default function Settings() {
   const { user, profile } = useAuth();
   const { primaryRole } = useUserRole();
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { settings, update: updateSetting } = useLocalSettings();
+  const [activeSection, setActiveSection] = useState("profile");
 
   const [displayName, setDisplayName] = useState("");
   const [bio, setBio] = useState("");
@@ -148,213 +172,238 @@ export default function Settings() {
     toast.success("Письмо для смены пароля отправлено на вашу почту");
   };
 
-  return (
-    <div className="max-w-2xl mx-auto space-y-6 py-6 px-4">
-      <h1 className="text-2xl font-bold">Настройки</h1>
-
-      {/* Profile */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base"><User className="h-4 w-4" /> Основная информация</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="displayName">Отображаемое имя</Label>
-            <Input id="displayName" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Ваше имя" />
-          </div>
-          <div className="space-y-2">
-            <Label>Аватар</Label>
-            <div className="flex gap-4 items-center">
-              <div className="relative h-16 w-16 rounded-full overflow-hidden border-2 border-border bg-muted flex items-center justify-center shrink-0">
-                {avatarUrl ? <img src={avatarUrl} alt="avatar" className="h-full w-full object-cover" /> : <User className="h-6 w-6 text-muted-foreground" />}
-                {uploading && <div className="absolute inset-0 bg-background/60 flex items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>}
+  const renderSection = () => {
+    switch (activeSection) {
+      case "profile":
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base"><User className="h-4 w-4" /> Основная информация</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="displayName">Отображаемое имя</Label>
+                <Input id="displayName" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Ваше имя" />
               </div>
-              <div className="flex flex-col gap-2">
-                <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
-                  <Upload className="h-4 w-4 mr-2" />Загрузить фото
-                </Button>
-                <p className="text-[11px] text-muted-foreground">JPG, PNG до 2 МБ</p>
-              </div>
-              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="bio">О себе</Label>
-            <Textarea id="bio" value={bio} onChange={(e) => setBio(e.target.value)} placeholder="Расскажите о себе..." rows={3} />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="geo" className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5" /> Регион</Label>
-            <Input id="geo" value={geo} onChange={(e) => setGeo(e.target.value)} placeholder="Москва, Россия" />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Role */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base"><Shield className="h-4 w-4" /> Роль</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-xs text-muted-foreground mb-3">Выберите основную роль — от неё зависят доступные разделы</p>
-          <div className="grid gap-2">
-            {ROLE_OPTIONS.map((r) => (
-              <button key={r.value} onClick={() => setSelectedRole(r.value)}
-                className={`flex items-center gap-3 rounded-lg border p-3 text-left transition-all ${selectedRole === r.value ? "border-primary bg-primary/5 ring-1 ring-primary/20" : "border-border hover:border-muted-foreground/30"}`}>
-                <div className={`h-4 w-4 rounded-full border-2 flex items-center justify-center shrink-0 ${selectedRole === r.value ? "border-primary" : "border-muted-foreground/40"}`}>
-                  {selectedRole === r.value && <div className="h-2 w-2 rounded-full bg-primary" />}
+              <div className="space-y-2">
+                <Label>Аватар</Label>
+                <div className="flex gap-4 items-center">
+                  <div className="relative h-16 w-16 rounded-full overflow-hidden border-2 border-border bg-muted flex items-center justify-center shrink-0">
+                    {avatarUrl ? <img src={avatarUrl} alt="avatar" className="h-full w-full object-cover" /> : <User className="h-6 w-6 text-muted-foreground" />}
+                    {uploading && <div className="absolute inset-0 bg-background/60 flex items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>}
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+                      <Upload className="h-4 w-4 mr-2" />Загрузить фото
+                    </Button>
+                    <p className="text-[11px] text-muted-foreground">JPG, PNG до 2 МБ</p>
+                  </div>
+                  <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
                 </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="bio">О себе</Label>
+                <Textarea id="bio" value={bio} onChange={(e) => setBio(e.target.value)} placeholder="Расскажите о себе..." rows={3} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="geo" className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5" /> Регион</Label>
+                <Input id="geo" value={geo} onChange={(e) => setGeo(e.target.value)} placeholder="Москва, Россия" />
+              </div>
+            </CardContent>
+          </Card>
+        );
+      case "role":
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base"><Shield className="h-4 w-4" /> Роль</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-xs text-muted-foreground mb-3">Выберите основную роль — от неё зависят доступные разделы</p>
+              <div className="grid gap-2">
+                {ROLE_OPTIONS.map((r) => (
+                  <button key={r.value} onClick={() => setSelectedRole(r.value)}
+                    className={`flex items-center gap-3 rounded-lg border p-3 text-left transition-all ${selectedRole === r.value ? "border-primary bg-primary/5 ring-1 ring-primary/20" : "border-border hover:border-muted-foreground/30"}`}>
+                    <div className={`h-4 w-4 rounded-full border-2 flex items-center justify-center shrink-0 ${selectedRole === r.value ? "border-primary" : "border-muted-foreground/40"}`}>
+                      {selectedRole === r.value && <div className="h-2 w-2 rounded-full bg-primary" />}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">{r.label}</p>
+                      <p className="text-xs text-muted-foreground">{r.description}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        );
+      case "interests":
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base"><Tags className="h-4 w-4" /> Интересы</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-xs text-muted-foreground mb-3">Выберите интересы для персонализированных рекомендаций</p>
+              <div className="flex flex-wrap gap-2">
+                {INTEREST_OPTIONS.map((tag) => (
+                  <Badge key={tag} variant={niche.includes(tag) ? "default" : "outline"} className="cursor-pointer transition-all" onClick={() => toggleNiche(tag)}>{tag}</Badge>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        );
+      case "notifications":
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base"><Bell className="h-4 w-4" /> Уведомления</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <SettingToggle label="Email-уведомления" description="Получать уведомления на почту" checked={settings.emailNotifications} onChange={(v) => updateSetting("emailNotifications", v)} />
+              <SettingToggle label="Push-уведомления" description="Уведомления в браузере" checked={settings.pushNotifications} onChange={(v) => updateSetting("pushNotifications", v)} />
+              <SettingToggle label="Сделки и предложения" description="Уведомления о новых сделках" checked={settings.dealNotifications} onChange={(v) => updateSetting("dealNotifications", v)} />
+              <SettingToggle label="Сообщения" description="Уведомления о новых сообщениях" checked={settings.messageNotifications} onChange={(v) => updateSetting("messageNotifications", v)} />
+            </CardContent>
+          </Card>
+        );
+      case "privacy":
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base"><Lock className="h-4 w-4" /> Приватность</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <SettingToggle label="Публичный профиль" description="Ваш профиль виден другим пользователям" checked={settings.profilePublic} onChange={(v) => updateSetting("profilePublic", v)} />
+              <SettingToggle label="Показывать активность" description="Другие видят вашу недавнюю активность" checked={settings.showActivity} onChange={(v) => updateSetting("showActivity", v)} />
+              <SettingToggle label="Показывать покупки" description="Показывать список покупок в профиле" checked={settings.showPurchases} onChange={(v) => updateSetting("showPurchases", v)} />
+            </CardContent>
+          </Card>
+        );
+      case "content":
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base"><Monitor className="h-4 w-4" /> Контент</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <SettingToggle label="Автовоспроизведение" description="Автоматически воспроизводить видео при открытии" checked={settings.autoplay} onChange={(v) => updateSetting("autoplay", v)} />
+              <SettingToggle label="Контент 18+" description="Показывать контент с возрастным ограничением" checked={settings.matureContent} onChange={(v) => updateSetting("matureContent", v)} />
+              <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium">{r.label}</p>
-                  <p className="text-xs text-muted-foreground">{r.description}</p>
+                  <p className="text-sm font-medium">Качество видео</p>
+                  <p className="text-xs text-muted-foreground">Качество воспроизведения по умолчанию</p>
                 </div>
-              </button>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+                <Select value={settings.videoQuality} onValueChange={(v) => updateSetting("videoQuality", v)}>
+                  <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="auto">Авто</SelectItem>
+                    <SelectItem value="1080p">1080p</SelectItem>
+                    <SelectItem value="720p">720p</SelectItem>
+                    <SelectItem value="480p">480p</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium">Язык контента</p>
+                  <p className="text-xs text-muted-foreground">Предпочтительный язык</p>
+                </div>
+                <Select value={settings.contentLanguage} onValueChange={(v) => updateSetting("contentLanguage", v)}>
+                  <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ru">Русский</SelectItem>
+                    <SelectItem value="en">English</SelectItem>
+                    <SelectItem value="any">Любой</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
+        );
+      case "platform":
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base"><LayoutDashboard className="h-4 w-4" /> Платформа</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium">Стартовая страница</p>
+                  <p className="text-xs text-muted-foreground">Страница, на которую вы попадаете при входе</p>
+                </div>
+                <Select value={settings.startPage || "/"} onValueChange={(v) => updateSetting("startPage", v)}>
+                  <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="/">Главная</SelectItem>
+                    <SelectItem value="/explore">Каталог</SelectItem>
+                    <SelectItem value="/creator-studio">Студия</SelectItem>
+                    <SelectItem value="/ad-studio">Биржа</SelectItem>
+                    <SelectItem value="/marketplace">Предложения</SelectItem>
+                    <SelectItem value="/trust-rating">Рейтинг</SelectItem>
+                    <SelectItem value="/ai-workspace">AI</SelectItem>
+                    <SelectItem value="/library">Библиотека</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
+        );
+      case "security":
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base"><Globe className="h-4 w-4" /> Безопасность</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium">Email</p>
+                  <p className="text-xs text-muted-foreground">{user?.email || "—"}</p>
+                </div>
+              </div>
+              <Button variant="outline" size="sm" onClick={handleChangePassword}>
+                <Lock className="h-4 w-4 mr-2" />Сменить пароль
+              </Button>
+            </CardContent>
+          </Card>
+        );
+      default:
+        return null;
+    }
+  };
 
-      {/* Interests */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base"><Tags className="h-4 w-4" /> Интересы</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-xs text-muted-foreground mb-3">Выберите интересы для персонализированных рекомендаций</p>
-          <div className="flex flex-wrap gap-2">
-            {INTEREST_OPTIONS.map((tag) => (
-              <Badge key={tag} variant={niche.includes(tag) ? "default" : "outline"} className="cursor-pointer transition-all" onClick={() => toggleNiche(tag)}>{tag}</Badge>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Notifications */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base"><Bell className="h-4 w-4" /> Уведомления</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <SettingToggle label="Email-уведомления" description="Получать уведомления на почту" checked={settings.emailNotifications} onChange={(v) => updateSetting("emailNotifications", v)} />
-          <SettingToggle label="Push-уведомления" description="Уведомления в браузере" checked={settings.pushNotifications} onChange={(v) => updateSetting("pushNotifications", v)} />
-          <SettingToggle label="Сделки и предложения" description="Уведомления о новых сделках" checked={settings.dealNotifications} onChange={(v) => updateSetting("dealNotifications", v)} />
-          <SettingToggle label="Сообщения" description="Уведомления о новых сообщениях" checked={settings.messageNotifications} onChange={(v) => updateSetting("messageNotifications", v)} />
-        </CardContent>
-      </Card>
-
-      {/* Privacy */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base"><Lock className="h-4 w-4" /> Приватность</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <SettingToggle label="Публичный профиль" description="Ваш профиль виден другим пользователям" checked={settings.profilePublic} onChange={(v) => updateSetting("profilePublic", v)} />
-          <SettingToggle label="Показывать активность" description="Другие видят вашу недавнюю активность" checked={settings.showActivity} onChange={(v) => updateSetting("showActivity", v)} />
-          <SettingToggle label="Показывать покупки" description="Показывать список покупок в профиле" checked={settings.showPurchases} onChange={(v) => updateSetting("showPurchases", v)} />
-        </CardContent>
-      </Card>
-
-      {/* Content Preferences */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base"><Monitor className="h-4 w-4" /> Контент</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <SettingToggle label="Автовоспроизведение" description="Автоматически воспроизводить видео при открытии" checked={settings.autoplay} onChange={(v) => updateSetting("autoplay", v)} />
-          <SettingToggle label="Контент 18+" description="Показывать контент с возрастным ограничением" checked={settings.matureContent} onChange={(v) => updateSetting("matureContent", v)} />
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium">Качество видео</p>
-              <p className="text-xs text-muted-foreground">Качество воспроизведения по умолчанию</p>
-            </div>
-            <Select value={settings.videoQuality} onValueChange={(v) => updateSetting("videoQuality", v)}>
-              <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="auto">Авто</SelectItem>
-                <SelectItem value="1080p">1080p</SelectItem>
-                <SelectItem value="720p">720p</SelectItem>
-                <SelectItem value="480p">480p</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium">Язык контента</p>
-              <p className="text-xs text-muted-foreground">Предпочтительный язык</p>
-            </div>
-            <Select value={settings.contentLanguage} onValueChange={(v) => updateSetting("contentLanguage", v)}>
-              <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ru">Русский</SelectItem>
-                <SelectItem value="en">English</SelectItem>
-                <SelectItem value="any">Любой</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Platform */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base"><LayoutDashboard className="h-4 w-4" /> Платформа</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium">Стартовая страница</p>
-              <p className="text-xs text-muted-foreground">Страница, на которую вы попадаете при входе</p>
-            </div>
-            <Select value={settings.startPage || "/"} onValueChange={(v) => updateSetting("startPage", v)}>
-              <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="/">Главная</SelectItem>
-                <SelectItem value="/explore">Каталог</SelectItem>
-                <SelectItem value="/creator-studio">Студия</SelectItem>
-                <SelectItem value="/ad-studio">Биржа</SelectItem>
-                <SelectItem value="/marketplace">Предложения</SelectItem>
-                <SelectItem value="/trust-rating">Рейтинг</SelectItem>
-                <SelectItem value="/ai-workspace">AI</SelectItem>
-                <SelectItem value="/library">Библиотека</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Security */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base"><Globe className="h-4 w-4" /> Безопасность</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium">Email</p>
-              <p className="text-xs text-muted-foreground">{user?.email || "—"}</p>
-            </div>
-          </div>
-          <Button variant="outline" size="sm" onClick={handleChangePassword}>
-            <Lock className="h-4 w-4 mr-2" />Сменить пароль
-          </Button>
-        </CardContent>
-      </Card>
-
-      <Button onClick={handleSave} disabled={saving} className="w-full">
-        <Save className="h-4 w-4 mr-2" />
-        {saving ? "Сохранение..." : "Сохранить изменения"}
-      </Button>
-    </div>
-  );
-}
-
-function SettingToggle({ label, description, checked, onChange }: { label: string; description: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
-    <div className="flex items-center justify-between">
-      <div>
-        <p className="text-sm font-medium">{label}</p>
-        <p className="text-xs text-muted-foreground">{description}</p>
+    <div className="max-w-4xl mx-auto py-6 px-4 space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Настройки</h1>
+        <Button onClick={handleSave} disabled={saving} size="sm">
+          <Save className="h-4 w-4 mr-2" />
+          {saving ? "Сохранение..." : "Сохранить"}
+        </Button>
       </div>
-      <Switch checked={checked} onCheckedChange={onChange} />
+
+      {/* Horizontal section tabs */}
+      <div className="flex gap-1 overflow-x-auto pb-1 border-b border-border">
+        {SECTIONS.map((s) => (
+          <button
+            key={s.id}
+            onClick={() => setActiveSection(s.id)}
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-2 text-sm rounded-t-lg whitespace-nowrap transition-colors shrink-0",
+              activeSection === s.id
+                ? "text-primary border-b-2 border-primary font-medium bg-primary/5"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+            )}
+          >
+            <s.icon className="h-3.5 w-3.5" />
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      {renderSection()}
     </div>
   );
 }
