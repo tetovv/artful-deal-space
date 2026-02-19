@@ -135,7 +135,7 @@ const CreatorProfile = () => {
 
   return (
     <PageTransition>
-      <div className="p-6 lg:p-8 max-w-5xl space-y-8">
+      <div className="p-6 lg:p-8 max-w-5xl mx-auto space-y-8">
         <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
           <ArrowLeft className="h-4 w-4" /> Назад
         </button>
