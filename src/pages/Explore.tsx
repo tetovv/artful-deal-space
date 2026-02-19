@@ -29,6 +29,7 @@ const Explore = () => {
     likes: item.likes || 0,
     createdAt: item.created_at || item.createdAt || "",
     tags: item.tags || [],
+    duration: item.duration ?? null,
   }));
 
   const filtered = items.filter((item: any) => {
@@ -60,6 +61,12 @@ const Explore = () => {
 
         {isLoading ? (
           <div className="text-center py-16 text-muted-foreground">Загрузка...</div>
+        ) : activeType === "post" ? (
+          <div className="space-y-4 max-w-2xl mx-auto">
+            {filtered.map((item: any) => (
+              <ContentCard key={item.id} item={item} />
+            ))}
+          </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {filtered.map((item: any) => (
