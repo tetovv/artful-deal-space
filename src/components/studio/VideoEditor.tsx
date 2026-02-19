@@ -276,10 +276,21 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
     canvas.getContext("2d")?.drawImage(video, 0, 0);
     canvas.toBlob((blob) => {
       if (blob) {
-        const file = new File([blob], "thumbnail.jpg", { type: "image/jpeg" });
+        const file = new File([blob], `frame-${Date.now()}.jpg`, { type: "image/jpeg" });
+        const previewUrl = URL.createObjectURL(blob);
+        // Set as main thumbnail
         setThumbnailFile(file);
-        setThumbnailPreviewUrl(URL.createObjectURL(blob));
-        toast.success("Обложка захвачена из кадра!");
+        setThumbnailPreviewUrl(previewUrl);
+        // Also add as A/B cover variant
+        const newCover: ABCover = {
+          id: crypto.randomUUID(),
+          file,
+          previewUrl,
+          label: `Вариант ${String.fromCharCode(65 + abCovers.length)}`,
+        };
+        setAbCovers((prev) => [...prev, newCover]);
+        setActiveAbCover(newCover.id);
+        toast.success("Кадр захвачен и добавлен как вариант обложки!");
       }
     }, "image/jpeg", 0.9);
   };
