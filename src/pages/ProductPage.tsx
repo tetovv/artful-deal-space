@@ -203,12 +203,18 @@ const ProductPage = () => {
                   >
                     {r.video_url ? (
                       <>
-                        <img src={r.thumbnail || ""} alt={r.title} className="w-full h-full object-cover group-hover:opacity-0 transition-opacity duration-300" />
+                        {r.thumbnail ? (
+                          <img src={r.thumbnail} alt={r.title} className="w-full h-full object-cover group-hover:opacity-0 transition-opacity duration-300" />
+                        ) : (
+                          <div className="w-full h-full bg-muted flex items-center justify-center text-muted-foreground group-hover:opacity-0 transition-opacity duration-300">
+                            <Play className="h-6 w-6" />
+                          </div>
+                        )}
                         <video
                           src={r.video_url}
                           muted
                           playsInline
-                          preload="none"
+                          preload="metadata"
                           className="absolute inset-0 w-full h-full object-cover opacity-0 group-hover:opacity-100 transition-opacity duration-300"
                         />
                       </>
