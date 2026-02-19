@@ -12,6 +12,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { OnboardingWizard } from "@/components/layout/OnboardingWizard";
 import { useState, useEffect, useMemo } from "react";
+import { ChartTypeSelector, ChartType } from "@/components/ChartTypeSelector";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -23,7 +24,7 @@ import { Input } from "@/components/ui/input";
 import { ContentType } from "@/types";
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, PieChart as RePieChart, Pie, Cell, Legend,
+  ResponsiveContainer, PieChart as RePieChart, Pie, Cell, Legend, LineChart, Line,
 } from "recharts";
 
 const stagger = {
@@ -103,11 +104,100 @@ function DealMiniCard({ deal, navigate }: { deal: any; navigate: (path: string) 
   );
 }
 
-const Home = () => {
+function AdvertiserCharts({ spendingChartData, dealStatusPie, PIE_COLORS }: { spendingChartData: any[]; dealStatusPie: any[]; PIE_COLORS: string[] }) {
+  const [spendingChartType, setSpendingChartType] = useState<ChartType>("bar");
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <Card>
+        <CardContent className="p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Wallet className="h-4 w-4 text-primary" />
+              <span className="text-sm font-semibold">Динамика расходов</span>
+            </div>
+            <ChartTypeSelector value={spendingChartType} onChange={setSpendingChartType} />
+          </div>
+          <ResponsiveContainer width="100%" height={200}>
+            {spendingChartType === "line" ? (
+              <LineChart data={spendingChartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
+                <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
+                <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} formatter={(v: number) => `₽${v.toLocaleString()}`} />
+                <Line type="monotone" dataKey="spent" stroke="hsl(var(--primary))" strokeWidth={2.5} name="Расходы" dot={{ r: 4, fill: "hsl(var(--primary))" }} />
+              </LineChart>
+            ) : spendingChartType === "area" ? (
+              <AreaChart data={spendingChartData}>
+                <defs>
+                  <linearGradient id="sg1" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+                    <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
+                <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
+                <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} formatter={(v: number) => `₽${v.toLocaleString()}`} />
+                <Area type="monotone" dataKey="spent" stroke="hsl(var(--primary))" fill="url(#sg1)" strokeWidth={2.5} name="Расходы" />
+              </AreaChart>
+            ) : (
+              <BarChart data={spendingChartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
+                <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
+                <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} formatter={(v: number) => `₽${v.toLocaleString()}`} />
+                <Bar dataKey="spent" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} name="Расходы" />
+              </BarChart>
+            )}
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardContent className="p-5 space-y-3">
+          <div className="flex items-center gap-2">
+            <PieChart className="h-4 w-4 text-primary" />
+            <span className="text-sm font-semibold">Статусы сделок</span>
+          </div>
+          <ResponsiveContainer width="100%" height={240}>
+            <RePieChart>
+              <Pie data={dealStatusPie} cx="50%" cy="45%" innerRadius={45} outerRadius={75} paddingAngle={4} dataKey="value" label={({ name, value }) => `${name}: ${value}`}>
+                {dealStatusPie.map((_: any, i: number) => {
+                  const colors = ["hsl(var(--warning))", "hsl(var(--primary))", "hsl(var(--success))", "hsl(var(--destructive))"];
+                  return <Cell key={i} fill={colors[i % colors.length]} />;
+                })}
+              </Pie>
+              <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+            </RePieChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+
   const { data: dbItems } = useContentItems();
   const { primaryRole, isCreator, isAdvertiser } = useUserRole();
   const { profile, user } = useAuth();
   const navigate = useNavigate();
+
+  // Start page redirect
+  const [redirectChecked, setRedirectChecked] = useState(false);
+  useEffect(() => {
+    if (redirectChecked) return;
+    setRedirectChecked(true);
+    try {
+      const saved = localStorage.getItem("mediaos-settings");
+      if (saved) {
+        const s = JSON.parse(saved);
+        if (s.startPage && s.startPage !== "/") {
+          navigate(s.startPage, { replace: true });
+          return;
+        }
+      }
+    } catch {}
+  }, []);
 
   const [showOnboarding, setShowOnboarding] = useState(false);
   useEffect(() => {
@@ -320,45 +410,7 @@ const Home = () => {
             </motion.div>
 
             {/* Advertiser Charts */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <Card>
-                <CardContent className="p-5 space-y-3">
-                  <div className="flex items-center gap-2">
-                    <Wallet className="h-4 w-4 text-primary" />
-                    <span className="text-sm font-semibold">Динамика расходов</span>
-                  </div>
-                  <ResponsiveContainer width="100%" height={200}>
-                    <BarChart data={spendingChartData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                      <XAxis dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
-                      <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
-                      <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} formatter={(v: number) => `₽${v.toLocaleString()}`} />
-                      <Bar dataKey="spent" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} name="Расходы" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-5 space-y-3">
-                  <div className="flex items-center gap-2">
-                    <PieChart className="h-4 w-4 text-primary" />
-                    <span className="text-sm font-semibold">Статусы сделок</span>
-                  </div>
-                  <ResponsiveContainer width="100%" height={240}>
-                    <RePieChart>
-                      <Pie data={dealStatusPie} cx="50%" cy="45%" innerRadius={45} outerRadius={75} paddingAngle={4} dataKey="value" label={({ name, value }) => `${name}: ${value}`}>
-                        {dealStatusPie.map((_, i) => {
-                          const colors = ["hsl(var(--warning))", "hsl(var(--primary))", "hsl(var(--success))", "hsl(var(--destructive))"];
-                          return <Cell key={i} fill={colors[i % colors.length]} />;
-                        })}
-                      </Pie>
-                      <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
-                      <Legend wrapperStyle={{ fontSize: 11 }} />
-                    </RePieChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-            </div>
+            <AdvertiserCharts spendingChartData={spendingChartData} dealStatusPie={dealStatusPie} PIE_COLORS={PIE_COLORS} />
 
             {notifCount > 0 && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="rounded-xl border border-primary/20 bg-gradient-to-r from-primary/5 via-accent/5 to-primary/5 p-5 flex items-center gap-4">

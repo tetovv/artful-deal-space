@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Save, User, Tags, MapPin, Upload, Loader2, Shield, Bell, Lock, Monitor, Globe } from "lucide-react";
+import { Save, User, Tags, MapPin, Upload, Loader2, Shield, Bell, Lock, Monitor, Globe, LayoutDashboard } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -287,6 +287,34 @@ export default function Settings() {
                 <SelectItem value="ru">Русский</SelectItem>
                 <SelectItem value="en">English</SelectItem>
                 <SelectItem value="any">Любой</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Platform */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base"><LayoutDashboard className="h-4 w-4" /> Платформа</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">Стартовая страница</p>
+              <p className="text-xs text-muted-foreground">Страница, на которую вы попадаете при входе</p>
+            </div>
+            <Select value={settings.startPage || "/"} onValueChange={(v) => updateSetting("startPage", v)}>
+              <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="/">Главная</SelectItem>
+                <SelectItem value="/explore">Каталог</SelectItem>
+                <SelectItem value="/creator-studio">Студия</SelectItem>
+                <SelectItem value="/ad-studio">Биржа</SelectItem>
+                <SelectItem value="/marketplace">Предложения</SelectItem>
+                <SelectItem value="/trust-rating">Рейтинг</SelectItem>
+                <SelectItem value="/ai-workspace">AI</SelectItem>
+                <SelectItem value="/library">Библиотека</SelectItem>
               </SelectContent>
             </Select>
           </div>
