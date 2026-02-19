@@ -381,7 +381,7 @@ export function BookEditor({ editItem, onClose, onSaved }: BookEditorProps) {
                   {/* Cover upload */}
                   <div className="space-y-2">
                     <Label className="text-sm font-medium">Обложка книги</Label>
-                    <div className="flex gap-6 items-start">
+                    <div className="flex gap-6 items-center justify-center">
                       <div
                         onDragOver={(e) => { e.preventDefault(); setIsDraggingCover(true); }}
                         onDragLeave={() => setIsDraggingCover(false)}
