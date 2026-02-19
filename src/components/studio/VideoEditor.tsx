@@ -244,17 +244,33 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
     const file = e.dataTransfer.files[0];
     if (file && file.type.startsWith("video/")) {
       setVideoFile(file);
-      setVideoPreviewUrl(URL.createObjectURL(file));
+      const url = URL.createObjectURL(file);
+      setVideoPreviewUrl(url);
+      // Extract duration from file
+      extractVideoDuration(url);
     } else {
       toast.error("Поддерживаются только видео-файлы");
     }
   }, []);
 
+  const extractVideoDuration = (url: string) => {
+    const tempVideo = document.createElement("video");
+    tempVideo.preload = "metadata";
+    tempVideo.onloadedmetadata = () => {
+      setVideoDuration(tempVideo.duration);
+      durationRef.current = tempVideo.duration;
+      URL.revokeObjectURL(tempVideo.src);
+    };
+    tempVideo.src = url;
+  };
+
   const handleVideoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       setVideoFile(file);
-      setVideoPreviewUrl(URL.createObjectURL(file));
+      const url = URL.createObjectURL(file);
+      setVideoPreviewUrl(url);
+      extractVideoDuration(url);
     }
   };
 
@@ -463,6 +479,7 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
         creator_id: user.id,
         creator_name: profile?.display_name || "",
         creator_avatar: profile?.avatar_url || "",
+        duration: videoDuration > 0 ? Math.round(videoDuration) : null,
       };
 
       let error;
