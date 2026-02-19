@@ -209,10 +209,15 @@ const CreatorProfile = () => {
         </div>
 
         {/* Achievements */}
-        <section className="space-y-3">
-          <button onClick={() => navigate("/achievements")} className="text-lg font-semibold text-foreground flex items-center gap-2 hover:text-primary transition-colors">
-            <Trophy className="h-5 w-5 text-warning" /> Достижения
-          </button>
+         <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
+              <Trophy className="h-5 w-5 text-warning" /> Достижения
+            </h2>
+            <Button variant="ghost" size="sm" onClick={() => navigate("/achievements")} className="text-xs text-muted-foreground hover:text-primary">
+              Все достижения →
+            </Button>
+          </div>
           {achievements.length > 0 ? (
             <div className="flex flex-wrap gap-3">
               {achievements.map((a: any) => (
