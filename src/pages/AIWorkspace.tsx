@@ -6,7 +6,7 @@ import {
   Upload, Brain, Loader2, CheckCircle2, BookOpen, HelpCircle, PenTool,
   FileText, AlertCircle, Presentation, ChevronRight, ChevronLeft,
   StickyNote, Columns, Quote, LayoutList, Download, Maximize2,
-  Edit3, Save, Trash2, Plus, Settings2, ChevronDown
+  Edit3, Save, Trash2, Plus, Settings2, ChevronDown, ImageIcon
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -56,6 +56,8 @@ interface GenerationSettings {
   language: string;
   slideCount: string;
   additionalNotes: string;
+  generateImages: boolean;
+  imageStyle: string;
 }
 
 const defaultSettings: GenerationSettings = {
@@ -64,6 +66,8 @@ const defaultSettings: GenerationSettings = {
   language: "ru",
   slideCount: "auto",
   additionalNotes: "",
+  generateImages: false,
+  imageStyle: "realistic",
 };
 
 const STYLE_OPTIONS = [
@@ -87,6 +91,16 @@ const LANGUAGE_OPTIONS = [
   { value: "en", label: "English" },
   { value: "es", label: "Español" },
   { value: "de", label: "Deutsch" },
+];
+
+const IMAGE_STYLE_OPTIONS = [
+  { value: "realistic", label: "Реалистичный" },
+  { value: "illustration", label: "Иллюстрация" },
+  { value: "flat", label: "Flat-дизайн" },
+  { value: "watercolor", label: "Акварель" },
+  { value: "3d", label: "3D-рендер" },
+  { value: "sketch", label: "Скетч" },
+  { value: "infographic", label: "Инфографика" },
 ];
 
 const statusLabels: Record<string, string> = {
@@ -161,6 +175,37 @@ const SettingsPanel = ({ settings, onChange, compact = false }: { settings: Gene
                 <SelectItem value="12-20">12–20</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+          <div className={cn("space-y-1.5", compact && "col-span-2")}>
+            <div className="flex items-center justify-between">
+              <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                <ImageIcon className="h-3.5 w-3.5" />
+                Генерация изображений
+              </Label>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={settings.generateImages}
+                onClick={() => onChange({ ...settings, generateImages: !settings.generateImages })}
+                className={cn(
+                  "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors",
+                  settings.generateImages ? "bg-primary" : "bg-muted"
+                )}
+              >
+                <span className={cn(
+                  "pointer-events-none block h-4 w-4 rounded-full bg-background shadow-lg ring-0 transition-transform",
+                  settings.generateImages ? "translate-x-4" : "translate-x-0"
+                )} />
+              </button>
+            </div>
+            {settings.generateImages && (
+              <Select value={settings.imageStyle} onValueChange={(v) => onChange({ ...settings, imageStyle: v })}>
+                <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {IMAGE_STYLE_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            )}
           </div>
           <div className={cn("space-y-1.5", compact && "col-span-2")}>
             <Label className="text-xs text-muted-foreground">Дополнительные указания</Label>
