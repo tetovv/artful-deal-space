@@ -66,7 +66,7 @@ const ProductPage = () => {
 
   return (
     <PageTransition>
-      <div className="max-w-[1400px] mx-auto px-4 lg:px-6 py-4 space-y-0">
+      <div className="max-w-full mx-auto px-4 lg:px-6 py-4 space-y-0">
         <div className="flex flex-col lg:flex-row gap-6">
           {/* Left: Video + Info */}
           <div className="flex-1 min-w-0 space-y-4">
@@ -175,7 +175,7 @@ const ProductPage = () => {
           </div>
 
           {/* Right sidebar: Related videos */}
-          <aside className="w-full lg:w-[520px] shrink-0 space-y-4">
+          <aside className="w-full lg:w-[400px] shrink-0 space-y-3">
             {related.length === 0 ? (
               <p className="text-xs text-muted-foreground">Нет рекомендаций</p>
             ) : (
@@ -185,7 +185,7 @@ const ProductPage = () => {
                   className="flex gap-3 cursor-pointer group"
                   onClick={() => navigate(`/product/${r.id}`)}
                 >
-                  <div className="w-[55%] shrink-0 rounded-lg overflow-hidden aspect-video bg-muted">
+                  <div className="w-[168px] shrink-0 rounded-lg overflow-hidden aspect-video bg-muted">
                     {r.thumbnail ? (
                       <img src={r.thumbnail} alt={r.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
                     ) : (
@@ -194,10 +194,10 @@ const ProductPage = () => {
                       </div>
                     )}
                   </div>
-                  <div className="flex-1 min-w-0 space-y-1">
-                    <p className="text-base font-medium text-foreground group-hover:text-primary transition-colors">{r.title}</p>
-                    <p className="text-sm text-muted-foreground">{r.creator_name}</p>
-                    <p className="text-sm text-muted-foreground">{(r.views || 0).toLocaleString()} просмотров</p>
+                  <div className="flex-1 min-w-0 space-y-0.5">
+                    <p className="text-sm font-medium text-foreground group-hover:text-primary transition-colors leading-snug">{r.title}</p>
+                    <p className="text-xs text-muted-foreground">{r.creator_name}</p>
+                    <p className="text-xs text-muted-foreground">{(r.views || 0).toLocaleString()} просмотров</p>
                   </div>
                 </div>
               ))
