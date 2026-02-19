@@ -203,18 +203,18 @@ const ProductPage = () => {
           </div>
 
           {/* Right sidebar: Related videos */}
-          <aside className="w-full lg:w-[480px] shrink-0 space-y-3">
+          <aside className="w-full lg:w-[400px] shrink-0 space-y-4">
             {related.length === 0 ? (
               <p className="text-xs text-muted-foreground">Нет рекомендаций</p>
             ) : (
               related.map((r) => (
                 <div
                   key={r.id}
-                  className="flex gap-3 cursor-pointer group"
+                  className="cursor-pointer group space-y-2"
                   onClick={() => navigate(`/product/${r.id}`)}
                 >
                   <div
-                    className="w-[180px] shrink-0 rounded-lg overflow-hidden aspect-video bg-muted relative"
+                    className="w-full rounded-lg overflow-hidden aspect-video bg-muted relative"
                     onMouseEnter={(e) => {
                       const video = e.currentTarget.querySelector("video");
                       if (video) { video.currentTime = 0; video.play().catch(() => {}); }
@@ -249,10 +249,10 @@ const ProductPage = () => {
                       </div>
                     )}
                   </div>
-                  <div className="flex-1 min-w-0 space-y-0.5">
+                  <div className="space-y-0.5">
                     <p className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors leading-snug line-clamp-2">{r.title}</p>
                     <p className="text-xs text-muted-foreground">{r.creator_name}</p>
-                    <p className="text-xs text-muted-foreground whitespace-nowrap">
+                    <p className="text-xs text-muted-foreground">
                       {(r.views || 0).toLocaleString()} просм. · {new Date(r.created_at).toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" })}
                     </p>
                   </div>
