@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      achievements: {
+        Row: {
+          description: string | null
+          earned_at: string
+          icon: string | null
+          id: string
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          description?: string | null
+          earned_at?: string
+          icon?: string | null
+          id?: string
+          title: string
+          type: string
+          user_id: string
+        }
+        Update: {
+          description?: string | null
+          earned_at?: string
+          icon?: string | null
+          id?: string
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       ai_courses: {
         Row: {
           created_at: string
@@ -49,6 +79,35 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      bookmarks: {
+        Row: {
+          content_id: string
+          created_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          content_id: string
+          created_at?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          content_id?: string
+          created_at?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bookmarks_content_id_fkey"
+            columns: ["content_id"]
+            isOneToOne: false
+            referencedRelation: "content_items"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       content_items: {
         Row: {
@@ -342,6 +401,33 @@ export type Database = {
           read?: boolean
           title?: string
           type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      paid_subscriptions: {
+        Row: {
+          created_at: string
+          creator_id: string
+          expires_at: string | null
+          id: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          creator_id: string
+          expires_at?: string | null
+          id?: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          creator_id?: string
+          expires_at?: string | null
+          id?: string
+          status?: string
           user_id?: string
         }
         Relationships: []
