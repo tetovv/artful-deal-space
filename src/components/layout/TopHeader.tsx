@@ -1,4 +1,4 @@
-import { Home, Compass, Palette, Megaphone, Store, Shield, Brain, Settings, Bell, Sun, Moon, LogOut, Menu, X, User, ShoppingBag, Check, CheckCheck, Users, Rss, Library } from "lucide-react";
+import { Home, Compass, Palette, Megaphone, Store, Shield, Brain, Settings, Bell, Sun, Moon, LogOut, Menu, X, User, ShoppingBag, Check, CheckCheck, Rss, Library } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -28,7 +28,6 @@ interface NavItem {
 const allNavItems: NavItem[] = [
   { title: "Главная", titleCreator: "Панель управления", url: "/", icon: Home },
   { title: "Главная", url: "/explore", icon: Compass, roles: ["creator", "advertiser", "moderator"] },
-  { title: "Авторы", url: "/authors", icon: Users, roles: ["user"] },
   { title: "Подписки", url: "/subscriptions", icon: Rss, roles: ["user"] },
   { title: "Студия", url: "/creator-studio", icon: Palette, roles: ["creator", "moderator"] },
   { title: "Биржа", url: "/ad-studio", icon: Megaphone, roles: ["advertiser", "moderator"] },
