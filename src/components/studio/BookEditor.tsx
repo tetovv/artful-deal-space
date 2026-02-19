@@ -461,6 +461,12 @@ export function BookEditor({ editItem, onClose, onSaved }: BookEditorProps) {
                               {bookFile ? `${(bookFile.size / 1024 / 1024).toFixed(1)} МБ` : "Ранее загружено"}
                             </p>
                           </div>
+                          <Button variant="outline" size="sm" onClick={() => {
+                            const url = bookFile ? URL.createObjectURL(bookFile) : editItem?.video_url;
+                            if (url) window.open(url, "_blank");
+                          }}>
+                            <Eye className="h-3.5 w-3.5 mr-1.5" /> Просмотр
+                          </Button>
                           <Button variant="outline" size="sm" onClick={() => bookFileInputRef.current?.click()}>
                             Заменить
                           </Button>
@@ -468,51 +474,6 @@ export function BookEditor({ editItem, onClose, onSaved }: BookEditorProps) {
                             <X className="h-4 w-4" />
                           </Button>
                         </div>
-
-                        {/* File preview */}
-                        {(() => {
-                          const fileExt = bookFileName?.split(".").pop()?.toLowerCase();
-                          const isPdf = fileExt === "pdf";
-                          const previewUrl = bookFile ? URL.createObjectURL(bookFile) : editItem?.video_url;
-
-                          if (isPdf && previewUrl) {
-                            return (
-                              <div className="space-y-2">
-                                <div className="flex items-center justify-between">
-                                  <Label className="text-sm font-medium flex items-center gap-1.5">
-                                    <Eye className="h-3.5 w-3.5 text-primary" /> Предпросмотр
-                                  </Label>
-                                  <Button variant="ghost" size="sm" className="text-xs" onClick={() => window.open(previewUrl, "_blank")}>
-                                    <ExternalLink className="h-3 w-3 mr-1" /> Открыть отдельно
-                                  </Button>
-                                </div>
-                                <div className="rounded-xl border border-border overflow-hidden bg-muted/20">
-                                  <iframe
-                                    src={previewUrl}
-                                    className="w-full h-[500px] border-0"
-                                    title="Предпросмотр книги"
-                                  />
-                                </div>
-                              </div>
-                            );
-                          }
-
-                          if (previewUrl && !isPdf) {
-                            return (
-                              <div className="rounded-xl border border-border bg-muted/20 p-6 text-center space-y-2">
-                                <FileText className="h-10 w-10 text-muted-foreground mx-auto" />
-                                <p className="text-sm text-muted-foreground">
-                                  Предпросмотр недоступен для формата <span className="font-medium text-foreground uppercase">{fileExt}</span>
-                                </p>
-                                <Button variant="outline" size="sm" onClick={() => window.open(previewUrl, "_blank")}>
-                                  <ExternalLink className="h-3 w-3 mr-1.5" /> Скачать и просмотреть
-                                </Button>
-                              </div>
-                            );
-                          }
-
-                          return null;
-                        })()}
                       </div>
                     )}
                     <input ref={bookFileInputRef} type="file" accept=".pdf,.epub,.fb2,.docx" className="hidden" onChange={handleBookFileSelect} />
