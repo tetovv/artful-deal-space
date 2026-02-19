@@ -71,7 +71,7 @@ const ProductPage = () => {
           {/* Left: Video + Info */}
           <div className="flex-1 min-w-0 space-y-4">
             {/* Video Player / Thumbnail */}
-            <div className="rounded-xl overflow-hidden bg-black relative aspect-video">
+            <div className="rounded-xl overflow-hidden bg-black relative aspect-[2/1]">
               {item.video_url ? (
                 <video
                   ref={videoRef}
@@ -182,10 +182,10 @@ const ProductPage = () => {
               related.map((r) => (
                 <div
                   key={r.id}
-                  className="flex gap-3 cursor-pointer group"
+                  className="flex gap-2 cursor-pointer group"
                   onClick={() => navigate(`/product/${r.id}`)}
                 >
-                  <div className="w-[240px] shrink-0 rounded-lg overflow-hidden aspect-video bg-muted">
+                  <div className="w-[60%] shrink-0 rounded-lg overflow-hidden aspect-video bg-muted">
                     {r.thumbnail ? (
                       <img src={r.thumbnail} alt={r.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
                     ) : (
