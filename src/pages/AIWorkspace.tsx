@@ -584,6 +584,14 @@ const AIWorkspace = () => {
     e.target.value = "";
   };
 
+  const deleteCourse = useCallback(async (id: string) => {
+    const { error } = await supabase.from("ai_courses").delete().eq("id", id);
+    if (error) { toast.error("Ошибка удаления"); return; }
+    queryClient.invalidateQueries({ queryKey: ["ai-courses"] });
+    if (selectedCourseId === id) setSelectedCourseId(null);
+    toast.success("Удалено");
+  }, [queryClient, selectedCourseId]);
+
   const renderItemList = (items: AICourseRow[], emptyText: string) => (
     <div className="space-y-3">
       <h2 className="text-sm font-semibold text-foreground">
@@ -597,15 +605,24 @@ const AIWorkspace = () => {
             key={course.id}
             onClick={() => { setSelectedCourseId(course.id); setViewingSlideIdx(0); setSlideViewMode("grid"); }}
             className={cn(
-              "rounded-xl border bg-card p-4 cursor-pointer transition-all",
+              "rounded-xl border bg-card p-4 cursor-pointer transition-all group",
               selectedCourseId === course.id ? "border-primary ring-1 ring-primary/20" : "border-border hover:border-primary/30"
             )}
           >
             <div className="flex items-center justify-between mb-2">
-              <h3 className="font-medium text-sm text-card-foreground truncate">{course.title}</h3>
-              {course.status === "completed" ? <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />
-                : course.status === "failed" ? <AlertCircle className="h-4 w-4 text-destructive shrink-0" />
-                : <Loader2 className="h-4 w-4 text-primary animate-spin shrink-0" />}
+              <h3 className="font-medium text-sm text-card-foreground truncate flex-1">{course.title}</h3>
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  onClick={(e) => { e.stopPropagation(); deleteCourse(course.id); }}
+                  className="h-6 w-6 rounded-md flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-all"
+                  title="Удалить"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+                {course.status === "completed" ? <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />
+                  : course.status === "failed" ? <AlertCircle className="h-4 w-4 text-destructive shrink-0" />
+                  : <Loader2 className="h-4 w-4 text-primary animate-spin shrink-0" />}
+              </div>
             </div>
             <p className="text-[11px] text-muted-foreground mb-2">{statusLabels[course.status] || course.status}</p>
             <Progress value={course.progress || 0} className="h-1" />

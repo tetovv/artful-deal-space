@@ -182,16 +182,16 @@ const Home = () => {
   const { profile, user } = useAuth();
   const navigate = useNavigate();
 
-  // Start page redirect
-  const [redirectChecked, setRedirectChecked] = useState(false);
+  // Start page redirect — only on first session load, not on every visit to "/"
   useEffect(() => {
-    if (redirectChecked) return;
-    setRedirectChecked(true);
+    const alreadyRedirected = sessionStorage.getItem("mediaos-start-redirected");
+    if (alreadyRedirected) return;
     try {
       const saved = localStorage.getItem("mediaos-settings");
       if (saved) {
         const s = JSON.parse(saved);
         if (s.startPage && s.startPage !== "/") {
+          sessionStorage.setItem("mediaos-start-redirected", "true");
           navigate(s.startPage, { replace: true });
           return;
         }

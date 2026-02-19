@@ -1,4 +1,4 @@
-import { Home, Compass, Palette, Megaphone, Store, Shield, Brain, Settings, Bell, Sun, Moon, LogOut, Menu, X, User, ShoppingBag, Check, CheckCheck, Users, Rss } from "lucide-react";
+import { Home, Compass, Palette, Megaphone, Store, Shield, Brain, Settings, Bell, Sun, Moon, LogOut, Menu, X, User, ShoppingBag, Check, CheckCheck, Users, Rss, Library } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -35,6 +35,7 @@ const allNavItems: NavItem[] = [
   { title: "Предложения", url: "/marketplace", icon: Store, roles: ["creator", "moderator"] },
   { title: "Рейтинг", url: "/trust-rating", icon: Shield, roles: ["creator", "advertiser", "moderator"] },
   { title: "AI", url: "/ai-workspace", icon: Brain },
+  { title: "Библиотека", url: "/library", icon: Library },
 ];
 
 const roleLabels: Record<string, string> = {
