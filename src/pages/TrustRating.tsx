@@ -219,7 +219,8 @@ export default function TrustRating() {
     return "text-destructive";
   };
 
-  const getScoreBadge = (score: number) => {
+  const getScoreBadge = (score: number, totalRatings: number) => {
+    if (totalRatings === 0) return { label: "🟡 Новый рекламодатель", variant: "outline" as const };
     if (score >= 4.5) return { label: "Отличный партнёр", variant: "default" as const };
     if (score >= 3.5) return { label: "Хороший партнёр", variant: "secondary" as const };
     if (score >= 2.5) return { label: "Средний", variant: "outline" as const };
@@ -267,7 +268,7 @@ export default function TrustRating() {
           ) : (
             advertiserScores.map((adv, idx) => {
               const prof = profileMap.get(adv.advertiserId);
-              const badge = getScoreBadge(adv.partnerScore);
+              const badge = getScoreBadge(adv.partnerScore, adv.totalRatings);
               const isExpanded = expandedAdvertiser === adv.advertiserId;
 
               return (
@@ -292,15 +293,15 @@ export default function TrustRating() {
                             <p className="font-semibold text-card-foreground">
                               {prof?.display_name || `Рекламодатель`}
                             </p>
-                            <p className="text-xs text-muted-foreground">
-                              {adv.completedDeals} {adv.completedDeals === 1 ? "оценка" : "оценок"}
+                          <p className="text-xs text-muted-foreground">
+                              {adv.totalRatings === 0 ? "Сделок пока нет" : `${adv.completedDeals} ${adv.completedDeals === 1 ? "оценка" : "оценок"}`}
                             </p>
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
                           <div className="text-right">
-                            <p className={`text-3xl font-bold ${getScoreColor(adv.partnerScore)}`}>
-                              {adv.partnerScore.toFixed(1)}
+                          <p className={`text-3xl font-bold ${adv.totalRatings === 0 ? "text-muted-foreground" : getScoreColor(adv.partnerScore)}`}>
+                              {adv.totalRatings === 0 ? "—" : adv.partnerScore.toFixed(1)}
                             </p>
                             <Badge variant={badge.variant} className="text-[10px]">{badge.label}</Badge>
                           </div>

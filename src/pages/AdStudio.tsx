@@ -61,7 +61,7 @@ function BirzhaTab() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedNiche, setSelectedNiche] = useState<string>("all");
   const [selectedGeo, setSelectedGeo] = useState<string>("all");
-  const [sortBy, setSortBy] = useState<string>("rating");
+  const [sortBy, setSortBy] = useState<string>("followers");
 
   const filtered = useMemo(() => {
     let result = [...creators];
@@ -81,7 +81,6 @@ function BirzhaTab() {
       result = result.filter((c) => c.geo === selectedGeo);
     }
     result.sort((a, b) => {
-      if (sortBy === "rating") return b.rating - a.rating;
       if (sortBy === "followers") return b.followers - a.followers;
       if (sortBy === "reach") return b.reach - a.reach;
       return 0;
@@ -132,7 +131,6 @@ function BirzhaTab() {
               <SelectValue placeholder="Сортировка" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="rating">По рейтингу</SelectItem>
               <SelectItem value="followers">По подписчикам</SelectItem>
               <SelectItem value="reach">По охвату</SelectItem>
             </SelectContent>
@@ -167,9 +165,6 @@ function BirzhaTab() {
                   ))}
                 </div>
                 <div className="flex items-center gap-4 text-xs text-muted-foreground pt-1">
-                  <span className="flex items-center gap-1">
-                    <Star className="h-3 w-3 text-warning" /> {creator.rating.toFixed(1)}
-                  </span>
                   <span className="flex items-center gap-1">
                     <Users className="h-3 w-3" /> {(creator.followers / 1000).toFixed(0)}K
                   </span>

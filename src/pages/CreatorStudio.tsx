@@ -7,6 +7,7 @@ import {
   Wallet, Handshake, MessageCircle, Calendar, User, ChevronRight,
   ExternalLink, Clock, CheckCircle, AlertCircle, Send,
 } from "lucide-react";
+import { ChartTypeSelector, ChartType } from "@/components/ChartTypeSelector";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -55,14 +56,13 @@ const TT = {
   },
 };
 
-type Section = "home" | "content" | "analytics" | "monetization" | "offers";
+type Section = "home" | "content" | "analytics" | "monetization";
 
 const NAV_ITEMS: { id: Section; label: string; icon: React.ElementType }[] = [
   { id: "home", label: "Главная", icon: Home },
   { id: "content", label: "Контент", icon: FolderOpen },
   { id: "analytics", label: "Аналитика", icon: LineChartIcon },
   { id: "monetization", label: "Монетизация", icon: Wallet },
-  { id: "offers", label: "Предложения", icon: Handshake },
 ];
 
 function mapItem(item: any) {
@@ -102,6 +102,9 @@ const CreatorStudio = () => {
   const [editingItem, setEditingItem] = useState<any>(null);
   const [showOfferChat, setShowOfferChat] = useState(false);
   const [offerChatMsg, setOfferChatMsg] = useState("");
+  const [viewsChartType, setViewsChartType] = useState<ChartType>("area");
+  const [revenueChartType, setRevenueChartType] = useState<ChartType>("bar");
+  const [engagementChartType, setEngagementChartType] = useState<ChartType>("line");
 
   // Auto-open editor when navigated with state
   useEffect(() => {
@@ -251,11 +254,6 @@ const CreatorStudio = () => {
               >
                 <item.icon className="h-4 w-4 shrink-0" />
                 <span>{item.label}</span>
-                {item.id === "offers" && pendingDeals.length > 0 && (
-                  <Badge variant="destructive" className="ml-auto h-5 min-w-5 text-[10px] px-1.5">
-                    {pendingDeals.length}
-                  </Badge>
-                )}
               </button>
             );
           })}
@@ -401,7 +399,7 @@ const CreatorStudio = () => {
                       </CardHeader>
                       <CardContent className="px-5 pb-4 space-y-1">
                         {pendingDeals.slice(0, 3).map((deal: any) => (
-                          <div key={deal.id} onClick={() => { setSection("offers"); setSelectedDeal(deal.id); }}
+                          <div key={deal.id} onClick={() => navigate("/marketplace")}
                             className="flex items-center gap-3 rounded-lg p-2 hover:bg-muted/50 cursor-pointer transition-colors">
                             <div className="h-8 w-8 rounded-full bg-warning/10 flex items-center justify-center shrink-0">
                               <Handshake className="h-4 w-4 text-warning" />
@@ -413,7 +411,7 @@ const CreatorStudio = () => {
                             <span className="text-xs font-semibold text-success">₽{(deal.budget || 0).toLocaleString()}</span>
                           </div>
                         ))}
-                        <Button variant="ghost" size="sm" className="w-full mt-1 text-xs" onClick={() => setSection("offers")}>
+                        <Button variant="ghost" size="sm" className="w-full mt-1 text-xs" onClick={() => navigate("/marketplace")}>
                           Все предложения <ChevronRight className="h-3 w-3 ml-1" />
                         </Button>
                       </CardContent>
@@ -622,28 +620,49 @@ const CreatorStudio = () => {
                     <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
                       <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-primary" /> Просмотры</span>
                       <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-destructive" /> Лайки</span>
+                      <ChartTypeSelector value={viewsChartType} onChange={setViewsChartType} />
                     </div>
                   </CardHeader>
                   <CardContent className="px-6 pb-5 pt-2">
                     <ResponsiveContainer width="100%" height={280}>
-                      <AreaChart data={viewsChart}>
-                        <defs>
-                          <linearGradient id="vg2" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
-                            <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
-                          </linearGradient>
-                          <linearGradient id="lg2" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="hsl(var(--destructive))" stopOpacity={0.2} />
-                            <stop offset="100%" stopColor="hsl(var(--destructive))" stopOpacity={0} />
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5} />
-                        <XAxis dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                        <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                        <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12, boxShadow: "0 8px 30px -12px hsl(var(--foreground) / 0.15)" }} />
-                        <Area type="monotone" dataKey="views" stroke="hsl(var(--primary))" fill="url(#vg2)" strokeWidth={2.5} dot={{ r: 4, fill: "hsl(var(--primary))", strokeWidth: 2, stroke: "hsl(var(--background))" }} name="Просмотры" />
-                        <Area type="monotone" dataKey="likes" stroke="hsl(var(--destructive))" fill="url(#lg2)" strokeWidth={2} dot={{ r: 3, fill: "hsl(var(--destructive))", strokeWidth: 2, stroke: "hsl(var(--background))" }} name="Лайки" />
-                      </AreaChart>
+                      {viewsChartType === "bar" ? (
+                        <BarChart data={viewsChart} barGap={4}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5} />
+                          <XAxis dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                          <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                          <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }} />
+                          <Bar dataKey="views" fill="hsl(var(--primary))" radius={[6, 6, 0, 0]} name="Просмотры" />
+                          <Bar dataKey="likes" fill="hsl(var(--destructive))" radius={[6, 6, 0, 0]} name="Лайки" />
+                        </BarChart>
+                      ) : viewsChartType === "line" ? (
+                        <LineChart data={viewsChart}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5} />
+                          <XAxis dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                          <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                          <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }} />
+                          <Line type="monotone" dataKey="views" stroke="hsl(var(--primary))" strokeWidth={2.5} dot={{ r: 4, fill: "hsl(var(--primary))", strokeWidth: 2, stroke: "hsl(var(--background))" }} name="Просмотры" />
+                          <Line type="monotone" dataKey="likes" stroke="hsl(var(--destructive))" strokeWidth={2} dot={{ r: 3, fill: "hsl(var(--destructive))", strokeWidth: 2, stroke: "hsl(var(--background))" }} name="Лайки" />
+                        </LineChart>
+                      ) : (
+                        <AreaChart data={viewsChart}>
+                          <defs>
+                            <linearGradient id="vg2" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+                              <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                            </linearGradient>
+                            <linearGradient id="lg2" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="hsl(var(--destructive))" stopOpacity={0.2} />
+                              <stop offset="100%" stopColor="hsl(var(--destructive))" stopOpacity={0} />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5} />
+                          <XAxis dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                          <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                          <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }} />
+                          <Area type="monotone" dataKey="views" stroke="hsl(var(--primary))" fill="url(#vg2)" strokeWidth={2.5} dot={{ r: 4, fill: "hsl(var(--primary))", strokeWidth: 2, stroke: "hsl(var(--background))" }} name="Просмотры" />
+                          <Area type="monotone" dataKey="likes" stroke="hsl(var(--destructive))" fill="url(#lg2)" strokeWidth={2} dot={{ r: 3, fill: "hsl(var(--destructive))", strokeWidth: 2, stroke: "hsl(var(--background))" }} name="Лайки" />
+                        </AreaChart>
+                      )}
                     </ResponsiveContainer>
                   </CardContent>
                 </Card>
@@ -651,49 +670,102 @@ const CreatorStudio = () => {
                 {/* Revenue + Engagement side by side */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                   <Card className="overflow-hidden border-0 shadow-md">
-                    <CardHeader className="pb-1 pt-5 px-6">
+                  <CardHeader className="pb-1 pt-5 px-6 flex flex-row items-center justify-between">
                       <CardTitle className="text-sm font-semibold flex items-center gap-2">
                         <div className="h-7 w-7 rounded-lg bg-success/10 flex items-center justify-center">
                           <DollarSign className="h-3.5 w-3.5 text-success" />
                         </div>
                         Доходы
                       </CardTitle>
+                      <ChartTypeSelector value={revenueChartType} onChange={setRevenueChartType} />
                     </CardHeader>
                     <CardContent className="px-6 pb-5 pt-2">
                       <ResponsiveContainer width="100%" height={240}>
-                        <BarChart data={revenueChart} barGap={4}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5} />
-                          <XAxis dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                          <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                          <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12, boxShadow: "0 8px 30px -12px hsl(var(--foreground) / 0.15)" }}
-                            formatter={(v: number) => `₽${v.toLocaleString()}`} />
-                          <Bar dataKey="sales" fill="hsl(var(--success))" radius={[6, 6, 0, 0]} name="Продажи" />
-                          <Bar dataKey="deals" fill="hsl(var(--primary))" radius={[6, 6, 0, 0]} name="Сделки" />
-                        </BarChart>
+                        {revenueChartType === "line" ? (
+                          <LineChart data={revenueChart}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5} />
+                            <XAxis dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                            <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                            <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }} formatter={(v: number) => `₽${v.toLocaleString()}`} />
+                            <Line type="monotone" dataKey="sales" stroke="hsl(var(--success))" strokeWidth={2.5} name="Продажи" dot={{ r: 4, fill: "hsl(var(--success))", strokeWidth: 2, stroke: "hsl(var(--background))" }} />
+                            <Line type="monotone" dataKey="deals" stroke="hsl(var(--primary))" strokeWidth={2} name="Сделки" dot={{ r: 3, fill: "hsl(var(--primary))", strokeWidth: 2, stroke: "hsl(var(--background))" }} />
+                          </LineChart>
+                        ) : revenueChartType === "area" ? (
+                          <AreaChart data={revenueChart}>
+                            <defs>
+                              <linearGradient id="rg1" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="hsl(var(--success))" stopOpacity={0.3} />
+                                <stop offset="100%" stopColor="hsl(var(--success))" stopOpacity={0} />
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5} />
+                            <XAxis dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                            <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                            <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }} formatter={(v: number) => `₽${v.toLocaleString()}`} />
+                            <Area type="monotone" dataKey="sales" stroke="hsl(var(--success))" fill="url(#rg1)" strokeWidth={2.5} name="Продажи" />
+                            <Area type="monotone" dataKey="deals" stroke="hsl(var(--primary))" fill="transparent" strokeWidth={2} name="Сделки" />
+                          </AreaChart>
+                        ) : (
+                          <BarChart data={revenueChart} barGap={4}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5} />
+                            <XAxis dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                            <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                            <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }} formatter={(v: number) => `₽${v.toLocaleString()}`} />
+                            <Bar dataKey="sales" fill="hsl(var(--success))" radius={[6, 6, 0, 0]} name="Продажи" />
+                            <Bar dataKey="deals" fill="hsl(var(--primary))" radius={[6, 6, 0, 0]} name="Сделки" />
+                          </BarChart>
+                        )}
                       </ResponsiveContainer>
                     </CardContent>
                   </Card>
 
                   <Card className="overflow-hidden border-0 shadow-md">
-                    <CardHeader className="pb-1 pt-5 px-6">
+                    <CardHeader className="pb-1 pt-5 px-6 flex flex-row items-center justify-between">
                       <CardTitle className="text-sm font-semibold flex items-center gap-2">
                         <div className="h-7 w-7 rounded-lg bg-warning/10 flex items-center justify-center">
                           <TrendingUp className="h-3.5 w-3.5 text-warning" />
                         </div>
                         Engagement & Аудитория
                       </CardTitle>
+                      <ChartTypeSelector value={engagementChartType} onChange={setEngagementChartType} />
                     </CardHeader>
                     <CardContent className="px-6 pb-5 pt-2">
                       <ResponsiveContainer width="100%" height={240}>
-                        <LineChart data={engagementChart}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5} />
-                          <XAxis dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                          <YAxis yAxisId="l" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                          <YAxis yAxisId="r" orientation="right" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                          <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12, boxShadow: "0 8px 30px -12px hsl(var(--foreground) / 0.15)" }} />
-                          <Line yAxisId="l" type="monotone" dataKey="er" stroke="hsl(var(--warning))" strokeWidth={2.5} name="ER %" dot={{ r: 4, fill: "hsl(var(--warning))", strokeWidth: 2, stroke: "hsl(var(--background))" }} />
-                          <Line yAxisId="r" type="monotone" dataKey="subs" stroke="hsl(var(--primary))" strokeWidth={2} name="Подписчики" dot={{ r: 3, fill: "hsl(var(--primary))", strokeWidth: 2, stroke: "hsl(var(--background))" }} />
-                        </LineChart>
+                        {engagementChartType === "bar" ? (
+                          <BarChart data={engagementChart} barGap={4}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5} />
+                            <XAxis dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                            <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                            <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }} />
+                            <Bar dataKey="er" fill="hsl(var(--warning))" radius={[6, 6, 0, 0]} name="ER %" />
+                            <Bar dataKey="subs" fill="hsl(var(--primary))" radius={[6, 6, 0, 0]} name="Подписчики" />
+                          </BarChart>
+                        ) : engagementChartType === "area" ? (
+                          <AreaChart data={engagementChart}>
+                            <defs>
+                              <linearGradient id="eg1" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="hsl(var(--warning))" stopOpacity={0.3} />
+                                <stop offset="100%" stopColor="hsl(var(--warning))" stopOpacity={0} />
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5} />
+                            <XAxis dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                            <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                            <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }} />
+                            <Area type="monotone" dataKey="er" stroke="hsl(var(--warning))" fill="url(#eg1)" strokeWidth={2.5} name="ER %" />
+                            <Area type="monotone" dataKey="subs" stroke="hsl(var(--primary))" fill="transparent" strokeWidth={2} name="Подписчики" />
+                          </AreaChart>
+                        ) : (
+                          <LineChart data={engagementChart}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5} />
+                            <XAxis dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                            <YAxis yAxisId="l" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                            <YAxis yAxisId="r" orientation="right" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                            <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }} />
+                            <Line yAxisId="l" type="monotone" dataKey="er" stroke="hsl(var(--warning))" strokeWidth={2.5} name="ER %" dot={{ r: 4, fill: "hsl(var(--warning))", strokeWidth: 2, stroke: "hsl(var(--background))" }} />
+                            <Line yAxisId="r" type="monotone" dataKey="subs" stroke="hsl(var(--primary))" strokeWidth={2} name="Подписчики" dot={{ r: 3, fill: "hsl(var(--primary))", strokeWidth: 2, stroke: "hsl(var(--background))" }} />
+                          </LineChart>
+                        )}
                       </ResponsiveContainer>
                     </CardContent>
                   </Card>
@@ -880,174 +952,7 @@ const CreatorStudio = () => {
               </>
             )}
 
-            {/* ═══ OFFERS ═══ */}
-            {section === "offers" && (
-              <>
-                {!openDeal ? (
-                  <>
-                    <div className="space-y-1">
-                      <h1 className="text-xl font-bold text-foreground">Предложения</h1>
-                      <p className="text-sm text-muted-foreground">Рекламные предложения от рекламодателей</p>
-                    </div>
-
-                    {dbDeals.length === 0 ? (
-                      <div className="text-center py-20 space-y-3">
-                        <Handshake className="h-12 w-12 text-muted-foreground/30 mx-auto" />
-                        <p className="text-muted-foreground">Пока нет предложений</p>
-                        <p className="text-xs text-muted-foreground/60">Когда рекламодатели отправят вам предложение, оно появится здесь</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {dbDeals.map((deal: any) => {
-                          const st = statusLabel(deal.status);
-                          const StIcon = st.icon;
-                          return (
-                            <Card
-                              key={deal.id}
-                              className="cursor-pointer hover:border-primary/20 transition-all"
-                              onClick={() => setSelectedDeal(deal.id)}
-                            >
-                              <CardContent className="p-4">
-                                <div className="flex items-start gap-4">
-                                  <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                                    <User className="h-5 w-5 text-primary" />
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex items-start justify-between gap-2 mb-1">
-                                      <div>
-                                        <h3 className="text-sm font-semibold text-foreground">{deal.title}</h3>
-                                        <p className="text-xs text-muted-foreground">от {deal.advertiser_name}</p>
-                                      </div>
-                                      <Badge className={cn("text-[10px] shrink-0", st.color)}>
-                                        <StIcon className="h-3 w-3 mr-1" />{st.text}
-                                      </Badge>
-                                    </div>
-                                    {deal.description && (
-                                      <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{deal.description}</p>
-                                    )}
-                                    <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
-                                      <span className="flex items-center gap-1"><DollarSign className="h-3 w-3" /> ₽{(deal.budget || 0).toLocaleString()}</span>
-                                      {deal.deadline && (
-                                        <span className="flex items-center gap-1"><Calendar className="h-3 w-3" /> {new Date(deal.deadline).toLocaleDateString("ru")}</span>
-                                      )}
-                                    </div>
-                                  </div>
-                                  <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 mt-1" />
-                                </div>
-                              </CardContent>
-                            </Card>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  /* ── Deal Detail ── */
-                  <>
-                    <Button variant="ghost" size="sm" className="text-xs mb-2" onClick={() => setSelectedDeal(null)}>
-                      ← Все предложения
-                    </Button>
-
-                    <Card>
-                      <CardContent className="p-6 space-y-6">
-                        {/* Header */}
-                        <div className="flex items-start gap-4">
-                          <div className="h-14 w-14 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                            <User className="h-7 w-7 text-primary" />
-                          </div>
-                          <div className="flex-1">
-                            <h2 className="text-lg font-bold text-foreground">{openDeal.title}</h2>
-                            <p className="text-sm text-muted-foreground">Рекламодатель: <span className="font-medium text-foreground">{openDeal.advertiser_name}</span></p>
-                            <Badge className={cn("mt-2 text-xs", statusLabel(openDeal.status).color)}>
-                              {statusLabel(openDeal.status).text}
-                            </Badge>
-                          </div>
-                        </div>
-
-                        <Separator />
-
-                        {/* Details grid */}
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                          <div className="space-y-1">
-                            <p className="text-[11px] text-muted-foreground uppercase tracking-wider">Бюджет</p>
-                            <p className="text-lg font-bold text-success">₽{(openDeal.budget || 0).toLocaleString()}</p>
-                          </div>
-                          {openDeal.deadline && (
-                            <div className="space-y-1">
-                              <p className="text-[11px] text-muted-foreground uppercase tracking-wider">Дедлайн</p>
-                              <p className="text-sm font-semibold text-foreground flex items-center gap-1">
-                                <Calendar className="h-3.5 w-3.5" /> {new Date(openDeal.deadline).toLocaleDateString("ru")}
-                              </p>
-                            </div>
-                          )}
-                          <div className="space-y-1">
-                            <p className="text-[11px] text-muted-foreground uppercase tracking-wider">Создано</p>
-                            <p className="text-sm font-semibold text-foreground">{new Date(openDeal.created_at).toLocaleDateString("ru")}</p>
-                          </div>
-                        </div>
-
-                        {/* Description */}
-                        {openDeal.description && (
-                          <div className="space-y-2">
-                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Описание рекламы</p>
-                            <div className="rounded-lg bg-muted/50 border border-border p-4 text-sm text-foreground leading-relaxed">
-                              {openDeal.description}
-                            </div>
-                          </div>
-                        )}
-
-                        <Separator />
-
-                        {/* Actions */}
-                        <div className="flex items-center gap-3">
-                          {openDeal.status === "pending" && (
-                            <>
-                              <Button className="flex-1">
-                                <CheckCircle className="h-4 w-4 mr-2" /> Принять предложение
-                              </Button>
-                              <Button variant="outline" className="text-destructive border-destructive/20 hover:bg-destructive/10">
-                                Отклонить
-                              </Button>
-                            </>
-                          )}
-                          <Button variant="outline" className="flex-1" onClick={() => setShowOfferChat(!showOfferChat)}>
-                            <MessageCircle className="h-4 w-4 mr-2" /> {showOfferChat ? "Скрыть чат" : "Открыть чат"}
-                          </Button>
-                        </div>
-
-                        {/* Embedded Chat */}
-                        {showOfferChat && (
-                          <>
-                            <Separator />
-                            <div className="rounded-xl border border-border overflow-hidden">
-                              <div className="bg-muted/30 px-4 py-2.5 border-b border-border">
-                                <p className="text-xs font-semibold text-foreground">Чат с {openDeal.advertiser_name}</p>
-                              </div>
-                              <div className="h-64 overflow-y-auto p-4 space-y-3 bg-background">
-                                <div className="text-center text-xs text-muted-foreground py-8">
-                                  Начните диалог — напишите первое сообщение
-                                </div>
-                              </div>
-                              <div className="p-3 border-t border-border bg-card flex gap-2">
-                                <Input
-                                  value={offerChatMsg}
-                                  onChange={(e) => setOfferChatMsg(e.target.value)}
-                                  placeholder="Написать сообщение..."
-                                  className="flex-1 bg-background text-sm"
-                                />
-                                <Button size="icon" disabled={!offerChatMsg.trim()}>
-                                  <Send className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </div>
-                          </>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </>
-                )}
-              </>
-            )}
+            {/* offers section removed — use header Предложения nav */}
           </motion.div>
         </AnimatePresence>
         )}
