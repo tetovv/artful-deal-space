@@ -3,7 +3,7 @@ import {
   Plus, DollarSign, BarChart3, Package, Eye, Heart, TrendingUp,
   Trash2, Edit, PieChart, Activity, ArrowUpRight, Crown, Flame,
   FileText, Video, Image, Music, Mic, BookOpen, Layout,
-  ArrowUpDown, Filter, Search, X, Home, FolderOpen, LineChart as LineChartIcon,
+  ArrowUpDown, Filter, Search, X, FolderOpen, LineChart as LineChartIcon,
   Wallet, Handshake, MessageCircle, Calendar, User, ChevronRight,
   ExternalLink, Clock, CheckCircle, AlertCircle, Send,
 } from "lucide-react";
@@ -61,10 +61,9 @@ const TT = {
   },
 };
 
-type Section = "home" | "content" | "analytics" | "monetization";
+type Section = "content" | "analytics" | "monetization";
 
 const NAV_ITEMS: { id: Section; label: string; icon: React.ElementType }[] = [
-  { id: "home", label: "Главная", icon: Home },
   { id: "content", label: "Контент", icon: FolderOpen },
   { id: "analytics", label: "Аналитика", icon: LineChartIcon },
   { id: "monetization", label: "Монетизация", icon: Wallet },
@@ -97,7 +96,7 @@ const CreatorStudio = () => {
   const location = useLocation();
   const { data: dbItems } = useContentItems();
 
-  const [section, setSection] = useState<Section>("home");
+  const [section, setSection] = useState<Section>("content");
   const [sortBy, setSortBy] = useState("date");
   const [filterType, setFilterType] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -337,14 +336,10 @@ const CreatorStudio = () => {
             transition={{ duration: 0.2 }}
             className="p-6 lg:p-8 max-w-6xl space-y-8"
           >
-            {/* ═══ HOME ═══ */}
-            {section === "home" && (
+            {/* ═══ CONTENT ═══ */}
+            {section === "content" && (
               <>
-                <div className="space-y-1">
-                  <h1 className="text-xl font-bold text-foreground">Обзор</h1>
-                  <p className="text-sm text-muted-foreground">Ключевые метрики и быстрый доступ</p>
-                </div>
-
+                {/* Quick stats */}
                 <motion.div variants={stagger} initial="hidden" animate="show" className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                   {[
                     { icon: Package, label: "Публикации", value: myItems.length, trend: "+3", color: "bg-primary/10 text-primary" },
@@ -368,115 +363,6 @@ const CreatorStudio = () => {
                     </motion.div>
                   ))}
                 </motion.div>
-
-                {/* Quick charts */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  <Card>
-                    <CardHeader className="pb-2 pt-4 px-5">
-                      <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                        <Eye className="h-4 w-4 text-primary" /> Просмотры и лайки
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="px-5 pb-4">
-                      <ResponsiveContainer width="100%" height={200}>
-                        <AreaChart data={viewsChart}>
-                          <defs>
-                            <linearGradient id="vg" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.25} />
-                              <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
-                            </linearGradient>
-                          </defs>
-                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                          <XAxis dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
-                          <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
-                          <Tooltip {...TT} />
-                          <Area type="monotone" dataKey="views" stroke="hsl(var(--primary))" fill="url(#vg)" strokeWidth={2} name="Просмотры" />
-                          <Area type="monotone" dataKey="likes" stroke="hsl(var(--destructive))" fill="transparent" strokeWidth={2} strokeDasharray="4 4" name="Лайки" />
-                          <Legend wrapperStyle={{ fontSize: 11 }} />
-                        </AreaChart>
-                      </ResponsiveContainer>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader className="pb-2 pt-4 px-5">
-                      <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                        <PieChart className="h-4 w-4 text-primary" /> Контент по типам
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="px-5 pb-4">
-                      <ResponsiveContainer width="100%" height={200}>
-                        <RePieChart>
-                          <Pie data={typePie} cx="50%" cy="45%" innerRadius={40} outerRadius={68} paddingAngle={3} dataKey="value"
-                            label={({ name, value }) => `${name}: ${value}`} labelLine={{ stroke: "hsl(var(--muted-foreground))", strokeWidth: 0.5 }}>
-                            {typePie.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
-                          </Pie>
-                          <Tooltip {...TT} />
-                          <Legend wrapperStyle={{ fontSize: 11 }} />
-                        </RePieChart>
-                      </ResponsiveContainer>
-                    </CardContent>
-                  </Card>
-                </div>
-
-                {/* Recent + top */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  <Card>
-                    <CardHeader className="pb-3 pt-4 px-5">
-                      <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                        <Crown className="h-4 w-4 text-warning" /> Топ по просмотрам
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="px-5 pb-4 space-y-1">
-                      {topByViews.slice(0, 3).map((item, i) => (
-                        <div key={item.id} onClick={() => navigate(`/product/${item.id}`)}
-                          className="flex items-center gap-3 rounded-lg p-2 hover:bg-muted/50 cursor-pointer transition-colors">
-                          <span className="text-sm font-bold w-5 text-center shrink-0">
-                            {i === 0 ? "🥇" : i === 1 ? "🥈" : "🥉"}
-                          </span>
-                          <img src={item.thumbnail} alt="" className="h-8 w-11 rounded object-cover shrink-0" />
-                          <p className="text-sm font-medium truncate flex-1">{item.title}</p>
-                          <span className="text-xs font-semibold text-primary">{fmtNum(item.views)}</span>
-                        </div>
-                      ))}
-                    </CardContent>
-                  </Card>
-
-                  {pendingDeals.length > 0 && (
-                    <Card className="border-warning/20">
-                      <CardHeader className="pb-3 pt-4 px-5">
-                        <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                          <Handshake className="h-4 w-4 text-warning" /> Новые предложения
-                          <Badge variant="destructive" className="ml-1 text-[10px]">{pendingDeals.length}</Badge>
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="px-5 pb-4 space-y-1">
-                        {pendingDeals.slice(0, 3).map((deal: any) => (
-                          <div key={deal.id} onClick={() => navigate("/marketplace")}
-                            className="flex items-center gap-3 rounded-lg p-2 hover:bg-muted/50 cursor-pointer transition-colors">
-                            <div className="h-8 w-8 rounded-full bg-warning/10 flex items-center justify-center shrink-0">
-                              <Handshake className="h-4 w-4 text-warning" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate">{deal.title}</p>
-                              <p className="text-[11px] text-muted-foreground">{deal.advertiser_name}</p>
-                            </div>
-                            <span className="text-xs font-semibold text-success">₽{(deal.budget || 0).toLocaleString()}</span>
-                          </div>
-                        ))}
-                        <Button variant="ghost" size="sm" className="w-full mt-1 text-xs" onClick={() => navigate("/marketplace")}>
-                          Все предложения <ChevronRight className="h-3 w-3 ml-1" />
-                        </Button>
-                      </CardContent>
-                    </Card>
-                  )}
-                </div>
-              </>
-            )}
-
-            {/* ═══ CONTENT ═══ */}
-            {section === "content" && (
-              <>
                 <div className="flex items-center justify-between flex-wrap gap-3">
                   <div className="space-y-1">
                     <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
