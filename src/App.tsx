@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { ProtectedRoute } from "@/components/layout/ProtectedRoute";
@@ -23,7 +23,6 @@ import Auth from "./pages/Auth";
 import ResetPassword from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
 import Library from "./pages/Library";
-import Authors from "./pages/Authors";
 import Subscriptions from "./pages/Subscriptions";
 import Achievements from "./pages/Achievements";
 
@@ -49,7 +48,7 @@ const App = () => (
               <Route path="/" element={<Protected><Home /></Protected>} />
               <Route path="/explore" element={<Protected><Explore /></Protected>} />
               <Route path="/library" element={<Protected><Library /></Protected>} />
-              <Route path="/authors" element={<Protected><Authors /></Protected>} />
+              <Route path="/authors" element={<Navigate to="/subscriptions" replace />} />
               <Route path="/subscriptions" element={<Protected><Subscriptions /></Protected>} />
               <Route path="/product/:id" element={<Protected><ProductPage /></Protected>} />
               <Route path="/creator-studio" element={<Protected><CreatorStudio /></Protected>} />
