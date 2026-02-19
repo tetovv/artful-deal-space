@@ -107,10 +107,10 @@ const CreatorStudio = () => {
     return (saved === "create" || saved === "edit") ? saved : "none";
   });
   type EditorContentType = "video" | "book" | "music" | "podcast" | "post" | "template";
-  const [editorContentType, setEditorContentType] = useState<EditorContentType>(() => {
+  const [editorContentType, setEditorContentType] = useState<EditorContentType | null>(() => {
     const saved = sessionStorage.getItem("studio-editor-type");
     if (["video", "book", "music", "podcast", "post", "template"].includes(saved || "")) return saved as EditorContentType;
-    return "video";
+    return null;
   });
   const [editingItem, setEditingItem] = useState<any>(() => {
     try { return JSON.parse(sessionStorage.getItem("studio-editing-item") || "null"); } catch { return null; }
@@ -119,7 +119,7 @@ const CreatorStudio = () => {
   // Persist editor state to sessionStorage
   useEffect(() => {
     sessionStorage.setItem("studio-editor-mode", editorMode);
-    sessionStorage.setItem("studio-editor-type", editorContentType);
+    sessionStorage.setItem("studio-editor-type", editorContentType || "");
     sessionStorage.setItem("studio-editing-item", JSON.stringify(editingItem));
   }, [editorMode, editorContentType, editingItem]);
   const [showOfferChat, setShowOfferChat] = useState(false);
@@ -310,35 +310,16 @@ const CreatorStudio = () => {
       <main className="flex-1 overflow-y-auto">
         {editorMode !== "none" ? (
           <div className="h-full">
-            {(() => {
-              const editorProps = {
-                editItem: editingItem,
-                onClose: () => { setEditorMode("none"); setEditingItem(null); },
-                onSaved: () => { setEditorMode("none"); setEditingItem(null); },
-              };
-              switch (editorContentType) {
-                case "book": return <BookEditor {...editorProps} />;
-                case "music": return <MusicEditor {...editorProps} />;
-                case "podcast": return <PodcastEditor {...editorProps} />;
-                case "post": return <PostEditor {...editorProps} />;
-                case "template": return <TemplateEditor {...editorProps} />;
-                default: return <VideoEditor {...editorProps} />;
-              }
-            })()}
-          </div>
-        ) : (
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={section}
-            initial={{ opacity: 0, x: 12 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -12 }}
-            transition={{ duration: 0.2 }}
-            className="p-6 lg:p-8 max-w-6xl space-y-8"
-          >
-            {/* ═══ CONTENT ═══ */}
-            {section === "content" && (
-              <>
+            {editorMode === "create" && !editingItem && !editorContentType ? (
+              /* ── Create Dashboard Panel ── */
+              <div className="p-6 lg:p-8 max-w-6xl space-y-6">
+                <div className="flex items-center justify-between">
+                  <h1 className="text-xl font-bold text-foreground">Создание контента</h1>
+                  <Button variant="ghost" size="sm" onClick={() => setEditorMode("none")}>
+                    <X className="h-4 w-4 mr-1" /> Закрыть
+                  </Button>
+                </div>
+
                 {/* Quick stats */}
                 <motion.div variants={stagger} initial="hidden" animate="show" className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                   {[
@@ -400,7 +381,7 @@ const CreatorStudio = () => {
                         { type: "post" as const, icon: FileText, label: "Пост", color: "text-primary" },
                         { type: "template" as const, icon: Layout, label: "Шаблон", color: "text-muted-foreground" },
                       ] as const).map((ct) => (
-                        <button key={ct.type} onClick={() => { setEditorMode("create"); setEditorContentType(ct.type); setEditingItem(null); }}
+                        <button key={ct.type} onClick={() => { setEditorContentType(ct.type); }}
                           className="flex flex-col items-center gap-2 py-4 hover:bg-muted/50 transition-colors group">
                           <ct.icon className={cn("h-5 w-5 transition-transform group-hover:scale-110", ct.color)} />
                           <span className="text-[11px] text-muted-foreground group-hover:text-foreground">{ct.label}</span>
@@ -421,7 +402,7 @@ const CreatorStudio = () => {
                     </CardHeader>
                     <CardContent className="px-5 pb-4 space-y-1">
                       {pendingDeals.slice(0, 3).map((deal: any) => (
-                        <div key={deal.id} onClick={() => navigate("/marketplace")}
+                        <div key={deal.id} onClick={() => { setEditorMode("none"); navigate("/marketplace"); }}
                           className="flex items-center gap-3 rounded-lg p-2 hover:bg-muted/50 cursor-pointer transition-colors">
                           <div className="h-8 w-8 rounded-full bg-warning/10 flex items-center justify-center shrink-0">
                             <Handshake className="h-4 w-4 text-warning" />
@@ -433,15 +414,44 @@ const CreatorStudio = () => {
                           <span className="text-xs font-semibold text-success">₽{(deal.budget || 0).toLocaleString()}</span>
                         </div>
                       ))}
-                      <Button variant="ghost" size="sm" className="w-full mt-1 text-xs" onClick={() => navigate("/marketplace")}>
+                      <Button variant="ghost" size="sm" className="w-full mt-1 text-xs" onClick={() => { setEditorMode("none"); navigate("/marketplace"); }}>
                         Все предложения <ChevronRight className="h-3 w-3 ml-1" />
                       </Button>
                     </CardContent>
                   </Card>
                 )}
-
-                <Separator />
-
+              </div>
+            ) : (
+            (() => {
+              const editorProps = {
+                editItem: editingItem,
+                onClose: () => { setEditorMode("none"); setEditingItem(null); setEditorContentType(null); },
+                onSaved: () => { setEditorMode("none"); setEditingItem(null); setEditorContentType(null); },
+              };
+              switch (editorContentType) {
+                case "book": return <BookEditor {...editorProps} />;
+                case "music": return <MusicEditor {...editorProps} />;
+                case "podcast": return <PodcastEditor {...editorProps} />;
+                case "post": return <PostEditor {...editorProps} />;
+                case "template": return <TemplateEditor {...editorProps} />;
+                default: return <VideoEditor {...editorProps} />;
+              }
+            })()
+            )}
+          </div>
+        ) : (
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={section}
+            initial={{ opacity: 0, x: 12 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -12 }}
+            transition={{ duration: 0.2 }}
+            className="p-6 lg:p-8 max-w-6xl space-y-8"
+          >
+            {/* ═══ CONTENT ═══ */}
+             {section === "content" && (
+              <>
                 <div className="flex items-center justify-between flex-wrap gap-3">
                   <div className="space-y-1">
                     <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
@@ -449,7 +459,7 @@ const CreatorStudio = () => {
                     </h1>
                     <p className="text-sm text-muted-foreground">Управление публикациями</p>
                   </div>
-                  <Button size="sm" onClick={() => { setEditorMode("create"); setEditingItem(null); }}><Plus className="h-3.5 w-3.5 mr-1.5" /> Создать</Button>
+                  <Button size="sm" onClick={() => { setEditorMode("create"); setEditingItem(null); setEditorContentType(null); }}><Plus className="h-3.5 w-3.5 mr-1.5" /> Создать</Button>
                 </div>
 
                 {/* Filters */}
