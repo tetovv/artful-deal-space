@@ -509,7 +509,7 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
       {/* ── Main layout: sidebar + content + right panel ── */}
       <div className="flex h-[calc(100vh-7.5rem)]">
         {/* Left sidebar - section tabs */}
-        <aside className="w-48 shrink-0 border-r border-border bg-card/50 flex flex-col overflow-y-auto">
+        <aside className="w-64 shrink-0 border-r border-border bg-card/50 flex flex-col overflow-y-auto">
           <nav className="py-2 px-2 space-y-0.5 flex-1">
             {EDITOR_TABS.map((tab) => (
               <button
