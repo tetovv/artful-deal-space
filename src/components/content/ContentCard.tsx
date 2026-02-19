@@ -19,11 +19,6 @@ export function ContentCard({ item }: { item: ContentItem }) {
     >
       <div className="relative aspect-video overflow-hidden">
         <img src={item.thumbnail} alt={item.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-        {item.price === null && (
-          <Badge className="absolute top-3 right-3 bg-success text-success-foreground text-[10px] border-0">
-            Бесплатно
-          </Badge>
-        )}
       </div>
       <div className="p-4 space-y-2">
         <h3 className="font-semibold text-sm text-card-foreground line-clamp-2 group-hover:text-primary transition-colors">{item.title}</h3>
