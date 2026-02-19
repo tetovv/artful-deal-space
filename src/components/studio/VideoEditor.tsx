@@ -22,6 +22,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
+import { ContentPreview } from "@/components/studio/ContentPreview";
 
 /* ── Types ── */
 interface Chapter {
@@ -192,6 +193,7 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
   });
   const [isPlaying, setIsPlaying] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
   const [displayProgress, setDisplayProgress] = useState(0);
   const [videoDuration, setVideoDuration] = useState(0);
   const [videoVolume, setVideoVolume] = useState(100);
@@ -532,6 +534,7 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
           </Badge>
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={() => setShowPreview(true)}><Eye className="h-3.5 w-3.5 mr-1.5" /> Превью</Button>
           <Button variant="outline" size="sm" onClick={() => handleSave("draft")} disabled={saving}>
             <Save className="h-3.5 w-3.5 mr-1.5" /> Черновик
           </Button>
@@ -966,6 +969,11 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
           </Card>
         </aside>
       </div>
+      <ContentPreview open={showPreview} onOpenChange={setShowPreview} data={{
+        title: form.title, description: form.description, thumbnail: thumbnailPreviewUrl,
+        tags: form.tags, price: form.price, monetization_type: form.monetization_type,
+        creatorName: profile?.display_name || "", creatorAvatar: profile?.avatar_url || "", type: "video",
+      }} />
     </div>
   );
 }

@@ -600,7 +600,7 @@ const CreatorStudio = () => {
                           {/* Actions */}
                           <div className="flex items-center gap-0.5 shrink-0" onClick={(e) => e.stopPropagation()}>
                             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate(`/product/${item.id}`)} title="Открыть"><Eye className="h-4 w-4" /></Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8" title="Редактировать" onClick={() => { setEditingItem(item); setEditorContentType(item.type === "book" ? "book" : "video"); setEditorMode("edit"); }}><Edit className="h-4 w-4" /></Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" title="Редактировать" onClick={() => { setEditingItem(item); setEditorContentType((["video","book","music","podcast","post","template"].includes(item.type) ? item.type : "video") as EditorContentType); setEditorMode("edit"); }}><Edit className="h-4 w-4" /></Button>
                             <Button variant="ghost" size="icon" className="h-8 w-8 text-primary" title="Аналитика" onClick={() => setDetailItem(item.id)}><BarChart3 className="h-4 w-4" /></Button>
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
