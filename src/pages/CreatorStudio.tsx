@@ -34,6 +34,10 @@ import {
 import { toast } from "sonner";
 import { VideoEditor } from "@/components/studio/VideoEditor";
 import { BookEditor } from "@/components/studio/BookEditor";
+import { MusicEditor } from "@/components/studio/MusicEditor";
+import { PodcastEditor } from "@/components/studio/PodcastEditor";
+import { PostEditor } from "@/components/studio/PostEditor";
+import { TemplateEditor } from "@/components/studio/TemplateEditor";
 
 /* ── constants ── */
 const PIE_COLORS = [
@@ -103,8 +107,11 @@ const CreatorStudio = () => {
     const saved = sessionStorage.getItem("studio-editor-mode");
     return (saved === "create" || saved === "edit") ? saved : "none";
   });
-  const [editorContentType, setEditorContentType] = useState<"video" | "book">(() => {
-    return (sessionStorage.getItem("studio-editor-type") === "book" ? "book" : "video");
+  type EditorContentType = "video" | "book" | "music" | "podcast" | "post" | "template";
+  const [editorContentType, setEditorContentType] = useState<EditorContentType>(() => {
+    const saved = sessionStorage.getItem("studio-editor-type");
+    if (["video", "book", "music", "podcast", "post", "template"].includes(saved || "")) return saved as EditorContentType;
+    return "video";
   });
   const [editingItem, setEditingItem] = useState<any>(() => {
     try { return JSON.parse(sessionStorage.getItem("studio-editing-item") || "null"); } catch { return null; }
@@ -128,7 +135,8 @@ const CreatorStudio = () => {
     const state = location.state as { openEditor?: boolean; contentType?: string } | null;
     if (state?.openEditor) {
       setEditorMode("create");
-      setEditorContentType((state.contentType === "book" ? "book" : "video") as "video" | "book");
+      const ct = state.contentType as EditorContentType;
+      setEditorContentType(["video", "book", "music", "podcast", "post", "template"].includes(ct) ? ct : "video");
       setEditingItem(null);
       // Clear location state so it doesn't re-trigger
       window.history.replaceState({}, document.title);
@@ -281,13 +289,20 @@ const CreatorStudio = () => {
             );
           })}
         </nav>
-        <div className="p-3 border-t border-border space-y-1.5">
-          <Button size="sm" className="w-full text-xs" onClick={() => { setEditorMode("create"); setEditorContentType("video"); setEditingItem(null); }}>
-            <Video className="h-3.5 w-3.5 mr-1.5" /> Новое видео
-          </Button>
-          <Button size="sm" variant="outline" className="w-full text-xs" onClick={() => { setEditorMode("create"); setEditorContentType("book"); setEditingItem(null); }}>
-            <BookOpen className="h-3.5 w-3.5 mr-1.5" /> Новая книга
-          </Button>
+        <div className="p-3 border-t border-border space-y-1">
+          {([
+            { type: "video" as const, icon: Video, label: "Видео" },
+            { type: "book" as const, icon: BookOpen, label: "Книга" },
+            { type: "music" as const, icon: Music, label: "Музыка" },
+            { type: "podcast" as const, icon: Mic, label: "Подкаст" },
+            { type: "post" as const, icon: FileText, label: "Пост" },
+            { type: "template" as const, icon: Layout, label: "Шаблон" },
+          ] as const).map(({ type, icon: BtnIcon, label }) => (
+            <Button key={type} size="sm" variant={type === "video" ? "default" : "outline"} className="w-full text-xs justify-start"
+              onClick={() => { setEditorMode("create"); setEditorContentType(type); setEditingItem(null); }}>
+              <BtnIcon className="h-3.5 w-3.5 mr-1.5" /> {label}
+            </Button>
+          ))}
         </div>
       </aside>
       )}
@@ -296,19 +311,21 @@ const CreatorStudio = () => {
       <main className="flex-1 overflow-y-auto">
         {editorMode !== "none" ? (
           <div className="h-full">
-            {editorContentType === "book" ? (
-              <BookEditor
-                editItem={editingItem}
-                onClose={() => { setEditorMode("none"); setEditingItem(null); }}
-                onSaved={() => { setEditorMode("none"); setEditingItem(null); }}
-              />
-            ) : (
-              <VideoEditor
-                editItem={editingItem}
-                onClose={() => { setEditorMode("none"); setEditingItem(null); }}
-                onSaved={() => { setEditorMode("none"); setEditingItem(null); }}
-              />
-            )}
+            {(() => {
+              const editorProps = {
+                editItem: editingItem,
+                onClose: () => { setEditorMode("none"); setEditingItem(null); },
+                onSaved: () => { setEditorMode("none"); setEditingItem(null); },
+              };
+              switch (editorContentType) {
+                case "book": return <BookEditor {...editorProps} />;
+                case "music": return <MusicEditor {...editorProps} />;
+                case "podcast": return <PodcastEditor {...editorProps} />;
+                case "post": return <PostEditor {...editorProps} />;
+                case "template": return <TemplateEditor {...editorProps} />;
+                default: return <VideoEditor {...editorProps} />;
+              }
+            })()}
           </div>
         ) : (
         <AnimatePresence mode="wait">
