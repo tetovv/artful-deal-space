@@ -327,18 +327,6 @@ const Home = () => {
     <PageTransition>
       {showOnboarding && <OnboardingWizard onComplete={handleOnboardingComplete} />}
       <div className="p-6 lg:p-8 space-y-8 max-w-7xl mx-auto">
-        {/* Greeting */}
-        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex items-end justify-between gap-4 flex-wrap">
-          <div className="space-y-1">
-            <h1 className="text-3xl font-bold text-foreground">
-              {timeGreeting}, <span className="gradient-text">{displayName}</span> 👋
-            </h1>
-            <p className="text-muted-foreground">
-              {isCreator ? "Управляйте контентом и отслеживайте статистику" : isAdvertiser ? "Ваши кампании и аналитика" : "Откройте для себя лучший контент"}
-            </p>
-          </div>
-        
-        </motion.div>
 
         {/* ============ CREATOR DASHBOARD ============ */}
         {isCreator && (
