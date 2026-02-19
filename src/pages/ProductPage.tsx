@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { contentItems as mockItems, contentTypeLabels, purchasedItems } from "@/data/mockData";
-import { ArrowLeft, Eye, Heart, ShoppingCart, Check, Play, ThumbsUp, ThumbsDown, Share2, Bookmark, MoreHorizontal } from "lucide-react";
+import { Eye, Heart, ShoppingCart, Check, Play, ThumbsUp, ThumbsDown, Share2, Bookmark } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useState, useRef, useEffect } from "react";
@@ -11,6 +11,7 @@ import { PageTransition } from "@/components/layout/PageTransition";
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
 import { CommentsSection } from "@/components/comments/CommentsSection";
+import { VideoPlayer } from "@/components/VideoPlayer";
 
 const ProductPage = () => {
   const { id } = useParams();
@@ -25,7 +26,6 @@ const ProductPage = () => {
   const [disliked, setDisliked] = useState(false);
   const [bookmarked, setBookmarked] = useState(false);
   const [bookmarking, setBookmarking] = useState(false);
-  const videoRef = useRef<HTMLVideoElement>(null);
 
   // Check if bookmarked
   useEffect(() => {
@@ -70,7 +70,6 @@ const ProductPage = () => {
     monetization_type: (raw as any).monetization_type || "free",
   };
 
-  // Related videos (same creator or same tags, excluding current)
   const related = (allItems || [])
     .filter((i) => i.id !== item.id && i.status === "published")
     .slice(0, 10);
@@ -98,12 +97,10 @@ const ProductPage = () => {
             {/* Video Player / Thumbnail */}
             <div className="rounded-xl overflow-hidden bg-black relative" style={{ height: 'calc(100vh - 210px)', minHeight: '250px' }}>
               {item.video_url ? (
-                <video
-                  ref={videoRef}
+                <VideoPlayer
                   src={item.video_url}
                   poster={item.thumbnail}
-                  controls
-                  className="w-full h-full object-contain"
+                  className="w-full h-full"
                 />
               ) : (
                 <img src={item.thumbnail} alt={item.title} className="w-full h-full object-cover" />
@@ -126,10 +123,7 @@ const ProductPage = () => {
                     {item.creatorName.charAt(0).toUpperCase()}
                   </div>
                 )}
-                <div>
-                  <p className="text-sm font-semibold text-foreground">{item.creatorName}</p>
-                  <p className="text-xs text-muted-foreground">Автор</p>
-                </div>
+                <p className="text-sm font-semibold text-foreground">{item.creatorName}</p>
               </div>
 
               <div className="flex items-center gap-2 flex-wrap">
@@ -169,7 +163,7 @@ const ProductPage = () => {
               </div>
             </div>
 
-            {/* Views + Date - separate from description */}
+            {/* Views + Date */}
             <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2">
               <span>{item.views.toLocaleString()} просмотров</span>
               <span>·</span>
@@ -190,10 +184,8 @@ const ProductPage = () => {
               )}
             </div>
 
-            {/* Comments */}
             <CommentsSection contentId={item.id} />
 
-            {/* Price / Buy section */}
             {!isFree && (
               <div className="rounded-xl border border-border p-4 flex items-center justify-between">
                 <p className="text-2xl font-bold text-foreground">{item.price?.toLocaleString()} ₽</p>
@@ -218,11 +210,11 @@ const ProductPage = () => {
               related.map((r) => (
                 <div
                   key={r.id}
-                  className="flex gap-2 cursor-pointer group"
+                  className="flex gap-3 cursor-pointer group"
                   onClick={() => navigate(`/product/${r.id}`)}
                 >
                   <div
-                    className="w-[65%] shrink-0 rounded-lg overflow-hidden aspect-video bg-muted relative"
+                    className="w-[180px] shrink-0 rounded-lg overflow-hidden aspect-video bg-muted relative"
                     onMouseEnter={(e) => {
                       const video = e.currentTarget.querySelector("video");
                       if (video) { video.currentTime = 0; video.play().catch(() => {}); }
@@ -258,13 +250,11 @@ const ProductPage = () => {
                     )}
                   </div>
                   <div className="flex-1 min-w-0 space-y-0.5">
-                    <p className="text-base font-semibold text-foreground group-hover:text-primary transition-colors leading-snug">{r.title}</p>
-                    <p className="text-sm text-muted-foreground">{r.creator_name}</p>
-                    <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                      <span>{(r.views || 0).toLocaleString()} просмотров</span>
-                      <span>·</span>
-                      <span>{new Date(r.created_at).toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" })}</span>
-                    </div>
+                    <p className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors leading-snug line-clamp-2">{r.title}</p>
+                    <p className="text-xs text-muted-foreground">{r.creator_name}</p>
+                    <p className="text-xs text-muted-foreground whitespace-nowrap">
+                      {(r.views || 0).toLocaleString()} просм. · {new Date(r.created_at).toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" })}
+                    </p>
                   </div>
                 </div>
               ))
