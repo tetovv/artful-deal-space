@@ -176,7 +176,7 @@ function AdvertiserCharts({ spendingChartData, dealStatusPie, PIE_COLORS }: { sp
   );
 }
 
-
+const Home = () => {
   const { data: dbItems } = useContentItems();
   const { primaryRole, isCreator, isAdvertiser } = useUserRole();
   const { profile, user } = useAuth();
