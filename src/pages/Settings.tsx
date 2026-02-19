@@ -267,6 +267,7 @@ export default function Settings() {
               <SettingToggle label="Push-уведомления" description="Уведомления в браузере" checked={settings.pushNotifications} onChange={(v) => updateSetting("pushNotifications", v)} />
               <SettingToggle label="Сделки и предложения" description="Уведомления о новых сделках" checked={settings.dealNotifications} onChange={(v) => updateSetting("dealNotifications", v)} />
               <SettingToggle label="Сообщения" description="Уведомления о новых сообщениях" checked={settings.messageNotifications} onChange={(v) => updateSetting("messageNotifications", v)} />
+              <SettingToggle label="Достижения" description="Показывать уведомления о новых достижениях" checked={settings.achievementNotifications !== false} onChange={(v) => updateSetting("achievementNotifications", v)} />
             </CardContent>
           </Card>
         );
