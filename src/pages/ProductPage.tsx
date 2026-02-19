@@ -71,7 +71,7 @@ const ProductPage = () => {
           {/* Left: Video + Info */}
           <div className="flex-1 min-w-0 space-y-3">
             {/* Video Player / Thumbnail */}
-            <div className="rounded-xl overflow-hidden bg-black relative" style={{ height: 'calc(100vh - 260px)', minHeight: '280px' }}>
+            <div className="rounded-xl overflow-hidden bg-black relative" style={{ height: 'calc(100vh - 380px)', minHeight: '250px' }}>
               {item.video_url ? (
                 <video
                   ref={videoRef}
@@ -137,14 +137,15 @@ const ProductPage = () => {
               </div>
             </div>
 
+            {/* Views + Date - separate from description */}
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <span>{item.views.toLocaleString()} просмотров</span>
+              <span>·</span>
+              <span>{new Date((raw as any).created_at || Date.now()).toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" })}</span>
+            </div>
+
             {/* Description */}
             <div className="rounded-xl bg-muted/50 p-4 space-y-2">
-              {/* Views + Date inline */}
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <span>{item.views.toLocaleString()} просмотров</span>
-                <span>·</span>
-                <span>{new Date((raw as any).created_at || Date.now()).toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" })}</span>
-              </div>
               {item.description && (
                 <p className="text-sm text-foreground whitespace-pre-wrap">{item.description}</p>
               )}
