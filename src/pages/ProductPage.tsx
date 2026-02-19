@@ -67,15 +67,11 @@ const ProductPage = () => {
   return (
     <PageTransition>
       <div className="max-w-[1400px] mx-auto px-4 lg:px-6 py-4 space-y-0">
-        <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4">
-          <ArrowLeft className="h-4 w-4" /> Назад
-        </button>
-
         <div className="flex flex-col lg:flex-row gap-6">
           {/* Left: Video + Info */}
           <div className="flex-1 min-w-0 space-y-4">
             {/* Video Player / Thumbnail */}
-            <div className="rounded-xl overflow-hidden bg-black aspect-video relative">
+            <div className="rounded-xl overflow-hidden bg-black aspect-[16/9] relative">
               {item.video_url ? (
                 <video
                   ref={videoRef}
@@ -141,15 +137,14 @@ const ProductPage = () => {
               </div>
             </div>
 
-            {/* Views + Date inline */}
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <span>{item.views.toLocaleString()} просмотров</span>
-              <span>·</span>
-              <span>{new Date((raw as any).created_at || Date.now()).toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" })}</span>
-            </div>
-
             {/* Description */}
             <div className="rounded-xl bg-muted/50 p-4 space-y-2">
+              {/* Views + Date inline */}
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span>{item.views.toLocaleString()} просмотров</span>
+                <span>·</span>
+                <span>{new Date((raw as any).created_at || Date.now()).toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" })}</span>
+              </div>
               {item.description && (
                 <p className="text-sm text-foreground whitespace-pre-wrap">{item.description}</p>
               )}
@@ -200,9 +195,9 @@ const ProductPage = () => {
                     )}
                   </div>
                   <div className="flex-1 min-w-0 space-y-1">
-                    <p className="text-sm font-medium text-foreground line-clamp-2 group-hover:text-primary transition-colors">{r.title}</p>
-                    <p className="text-xs text-muted-foreground">{r.creator_name}</p>
-                    <p className="text-xs text-muted-foreground">{(r.views || 0).toLocaleString()} просм.</p>
+                    <p className="text-base font-medium text-foreground group-hover:text-primary transition-colors">{r.title}</p>
+                    <p className="text-sm text-muted-foreground">{r.creator_name}</p>
+                    <p className="text-sm text-muted-foreground">{(r.views || 0).toLocaleString()} просм.</p>
                   </div>
                 </div>
               ))
