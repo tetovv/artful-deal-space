@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { contentItems as mockItems, contentTypeLabels, purchasedItems } from "@/data/mockData";
-import { ArrowLeft, Eye, Heart, ShoppingCart, Check, Play, ThumbsUp, Share2, Bookmark, MoreHorizontal } from "lucide-react";
+import { ArrowLeft, Eye, Heart, ShoppingCart, Check, Play, ThumbsUp, ThumbsDown, Share2, Bookmark, MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useState, useRef } from "react";
@@ -21,6 +21,7 @@ const ProductPage = () => {
   const [bought, setBought] = useState(purchasedItems.includes(id || ""));
   const [buying, setBuying] = useState(false);
   const [liked, setLiked] = useState(false);
+  const [disliked, setDisliked] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const raw = dbItem || mockItem;
@@ -111,15 +112,26 @@ const ProductPage = () => {
               </div>
 
               <div className="flex items-center gap-2 flex-wrap">
-                <Button
-                  variant={liked ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setLiked(!liked)}
-                  className="gap-1.5"
-                >
-                  <ThumbsUp className={cn("h-4 w-4", liked && "fill-current")} />
-                  {item.likes.toLocaleString()}
-                </Button>
+                <div className="flex items-center rounded-lg overflow-hidden border border-border">
+                  <Button
+                    variant={liked ? "default" : "ghost"}
+                    size="sm"
+                    onClick={() => { setLiked(!liked); if (disliked) setDisliked(false); }}
+                    className="gap-1.5 rounded-none border-0"
+                  >
+                    <ThumbsUp className={cn("h-4 w-4", liked && "fill-current")} />
+                    {item.likes.toLocaleString()}
+                  </Button>
+                  <Separator orientation="vertical" className="h-5" />
+                  <Button
+                    variant={disliked ? "default" : "ghost"}
+                    size="sm"
+                    onClick={() => { setDisliked(!disliked); if (liked) setLiked(false); }}
+                    className="rounded-none border-0"
+                  >
+                    <ThumbsDown className={cn("h-4 w-4", disliked && "fill-current")} />
+                  </Button>
+                </div>
                 <Button variant="outline" size="sm" className="gap-1.5">
                   <Share2 className="h-4 w-4" /> Поделиться
                 </Button>
@@ -129,12 +141,16 @@ const ProductPage = () => {
               </div>
             </div>
 
-            {/* Stats + Description */}
+            {/* Views + Date inline */}
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <span className="flex items-center gap-1"><Eye className="h-4 w-4" /> {item.views.toLocaleString()} просмотров</span>
+              <span>·</span>
+              <span>{new Date((raw as any).created_at || Date.now()).toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" })}</span>
+              <Badge variant="outline" className="text-[10px] ml-1">{contentTypeLabels[item.type] || item.type}</Badge>
+            </div>
+
+            {/* Description */}
             <div className="rounded-xl bg-muted/50 p-4 space-y-2">
-              <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                <span className="flex items-center gap-1"><Eye className="h-4 w-4" /> {item.views.toLocaleString()} просмотров</span>
-                <Badge variant="outline" className="text-[10px]">{contentTypeLabels[item.type] || item.type}</Badge>
-              </div>
               {item.description && (
                 <p className="text-sm text-foreground whitespace-pre-wrap">{item.description}</p>
               )}
@@ -165,8 +181,7 @@ const ProductPage = () => {
           </div>
 
           {/* Right sidebar: Related videos */}
-          <aside className="w-full lg:w-96 shrink-0 space-y-3">
-            <h3 className="text-sm font-semibold text-foreground">Рекомендации</h3>
+          <aside className="w-full lg:w-[420px] shrink-0 space-y-3">
             {related.length === 0 ? (
               <p className="text-xs text-muted-foreground">Нет рекомендаций</p>
             ) : (
@@ -176,7 +191,7 @@ const ProductPage = () => {
                   className="flex gap-3 cursor-pointer group"
                   onClick={() => navigate(`/product/${r.id}`)}
                 >
-                  <div className="w-40 shrink-0 rounded-lg overflow-hidden aspect-video bg-muted">
+                  <div className="w-44 shrink-0 rounded-lg overflow-hidden aspect-video bg-muted">
                     {r.thumbnail ? (
                       <img src={r.thumbnail} alt={r.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
                     ) : (

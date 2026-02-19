@@ -281,16 +281,20 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
         // Set as main thumbnail
         setThumbnailFile(file);
         setThumbnailPreviewUrl(previewUrl);
-        // Also add as A/B cover variant
-        const newCover: ABCover = {
-          id: crypto.randomUUID(),
-          file,
-          previewUrl,
-          label: `Вариант ${String.fromCharCode(65 + abCovers.length)}`,
-        };
-        setAbCovers((prev) => [...prev, newCover]);
-        setActiveAbCover(newCover.id);
-        toast.success("Кадр захвачен и добавлен как вариант обложки!");
+        // Also add as A/B cover variant (max 4)
+        if (abCovers.length < 4) {
+          const newCover: ABCover = {
+            id: crypto.randomUUID(),
+            file,
+            previewUrl,
+            label: `Вариант ${String.fromCharCode(65 + abCovers.length)}`,
+          };
+          setAbCovers((prev) => [...prev, newCover]);
+          setActiveAbCover(newCover.id);
+          toast.success("Кадр захвачен и добавлен как вариант обложки!");
+        } else {
+          toast.info("Максимум 4 варианта обложки. Кадр установлен как основная обложка.");
+        }
       }
     }, "image/jpeg", 0.9);
   };
@@ -303,6 +307,11 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
   const handleAbCoverSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && file.type.startsWith("image/")) {
+      if (abCovers.length >= 4) {
+        toast.error("Максимум 4 варианта обложки");
+        if (e.target) e.target.value = "";
+        return;
+      }
       const newCover: ABCover = {
         id: crypto.randomUUID(),
         file,
