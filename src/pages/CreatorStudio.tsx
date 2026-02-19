@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { VideoEditor } from "@/components/studio/VideoEditor";
+import { BookEditor } from "@/components/studio/BookEditor";
 
 /* ── constants ── */
 const PIE_COLORS = [
@@ -99,6 +100,7 @@ const CreatorStudio = () => {
   const [detailItem, setDetailItem] = useState<string | null>(null);
   const [selectedDeal, setSelectedDeal] = useState<string | null>(null);
   const [editorMode, setEditorMode] = useState<"none" | "create" | "edit">("none");
+  const [editorContentType, setEditorContentType] = useState<"video" | "book">("video");
   const [editingItem, setEditingItem] = useState<any>(null);
   const [showOfferChat, setShowOfferChat] = useState(false);
   const [offerChatMsg, setOfferChatMsg] = useState("");
@@ -111,6 +113,7 @@ const CreatorStudio = () => {
     const state = location.state as { openEditor?: boolean; contentType?: string } | null;
     if (state?.openEditor) {
       setEditorMode("create");
+      setEditorContentType((state.contentType === "book" ? "book" : "video") as "video" | "book");
       setEditingItem(null);
       // Clear location state so it doesn't re-trigger
       window.history.replaceState({}, document.title);
@@ -258,9 +261,12 @@ const CreatorStudio = () => {
             );
           })}
         </nav>
-        <div className="p-3 border-t border-border">
-          <Button size="sm" className="w-full text-xs" onClick={() => { setEditorMode("create"); setEditingItem(null); }}>
-            <Plus className="h-3.5 w-3.5 mr-1.5" /> Создать контент
+        <div className="p-3 border-t border-border space-y-1.5">
+          <Button size="sm" className="w-full text-xs" onClick={() => { setEditorMode("create"); setEditorContentType("video"); setEditingItem(null); }}>
+            <Video className="h-3.5 w-3.5 mr-1.5" /> Новое видео
+          </Button>
+          <Button size="sm" variant="outline" className="w-full text-xs" onClick={() => { setEditorMode("create"); setEditorContentType("book"); setEditingItem(null); }}>
+            <BookOpen className="h-3.5 w-3.5 mr-1.5" /> Новая книга
           </Button>
         </div>
       </aside>
@@ -270,11 +276,19 @@ const CreatorStudio = () => {
       <main className="flex-1 overflow-y-auto">
         {editorMode !== "none" ? (
           <div className="h-full">
-            <VideoEditor
-              editItem={editingItem}
-              onClose={() => { setEditorMode("none"); setEditingItem(null); }}
-              onSaved={() => { setEditorMode("none"); setEditingItem(null); }}
-            />
+            {editorContentType === "book" ? (
+              <BookEditor
+                editItem={editingItem}
+                onClose={() => { setEditorMode("none"); setEditingItem(null); }}
+                onSaved={() => { setEditorMode("none"); setEditingItem(null); }}
+              />
+            ) : (
+              <VideoEditor
+                editItem={editingItem}
+                onClose={() => { setEditorMode("none"); setEditingItem(null); }}
+                onSaved={() => { setEditorMode("none"); setEditingItem(null); }}
+              />
+            )}
           </div>
         ) : (
         <AnimatePresence mode="wait">
