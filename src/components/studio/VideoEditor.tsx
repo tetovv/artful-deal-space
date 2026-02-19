@@ -636,7 +636,7 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
 
           {/* Tab content below video */}
           {activeTab !== "media" && (
-            <motion.div key={activeTab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15 }} className="w-full max-w-4xl">
+            <motion.div key={activeTab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15 }} className="w-full">
 
               {activeTab === "basic" && (
                 <Card>

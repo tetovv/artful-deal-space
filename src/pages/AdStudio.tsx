@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { deals, messages as allMessages } from "@/data/mockData";
+import { deals, messages as allMessages, creators } from "@/data/mockData";
 import { useRealtimeMessages } from "@/hooks/useRealtimeMessages";
 import { useAdvertiserScores } from "@/hooks/useAdvertiserScores";
 import { Badge } from "@/components/ui/badge";
@@ -7,7 +7,13 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Send, Paperclip, CheckCircle2, AlertTriangle, ShieldAlert, Palette } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Send, Paperclip, CheckCircle2, AlertTriangle, ShieldAlert, Palette,
+  Search, Star, MapPin, Users, Filter, MessageSquarePlus, Eye, Megaphone,
+} from "lucide-react";
 import { Deal, DealStatus } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -47,14 +53,166 @@ const CHAT_BG_PRESETS = [
   { name: "Тёплый", className: "bg-gradient-to-b from-[hsl(30,15%,10%)] to-[hsl(20,12%,7%)]" },
 ];
 
-const AdStudio = () => {
+const NICHES = ["Образование", "Технологии", "Дизайн", "Фото", "Музыка", "Подкасты", "Бизнес", "Видео", "Motion"];
+const GEOS = ["Россия", "Беларусь", "Казахстан", "Украина"];
+
+/* ── Биржа (Marketplace) Tab ── */
+function BirzhaTab() {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedNiche, setSelectedNiche] = useState<string>("all");
+  const [selectedGeo, setSelectedGeo] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<string>("rating");
+
+  const filtered = useMemo(() => {
+    let result = [...creators];
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(
+        (c) =>
+          c.displayName.toLowerCase().includes(q) ||
+          c.bio.toLowerCase().includes(q) ||
+          c.niche.some((n) => n.toLowerCase().includes(q))
+      );
+    }
+    if (selectedNiche !== "all") {
+      result = result.filter((c) => c.niche.includes(selectedNiche));
+    }
+    if (selectedGeo !== "all") {
+      result = result.filter((c) => c.geo === selectedGeo);
+    }
+    result.sort((a, b) => {
+      if (sortBy === "rating") return b.rating - a.rating;
+      if (sortBy === "followers") return b.followers - a.followers;
+      if (sortBy === "reach") return b.reach - a.reach;
+      return 0;
+    });
+    return result;
+  }, [searchQuery, selectedNiche, selectedGeo, sortBy]);
+
+  return (
+    <div className="flex-1 overflow-y-auto">
+      {/* Filters */}
+      <div className="p-4 border-b border-border bg-card space-y-3">
+        <div className="flex items-center gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Поиск авторов по имени, нише..."
+              className="pl-9 bg-background"
+            />
+          </div>
+          <Select value={selectedNiche} onValueChange={setSelectedNiche}>
+            <SelectTrigger className="w-44">
+              <Filter className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+              <SelectValue placeholder="Ниша" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Все ниши</SelectItem>
+              {NICHES.map((n) => (
+                <SelectItem key={n} value={n}>{n}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={selectedGeo} onValueChange={setSelectedGeo}>
+            <SelectTrigger className="w-40">
+              <MapPin className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+              <SelectValue placeholder="Гео" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Все регионы</SelectItem>
+              {GEOS.map((g) => (
+                <SelectItem key={g} value={g}>{g}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={sortBy} onValueChange={setSortBy}>
+            <SelectTrigger className="w-44">
+              <SelectValue placeholder="Сортировка" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="rating">По рейтингу</SelectItem>
+              <SelectItem value="followers">По подписчикам</SelectItem>
+              <SelectItem value="reach">По охвату</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Найдено авторов: <span className="font-medium text-foreground">{filtered.length}</span>
+        </p>
+      </div>
+
+      {/* Creator cards */}
+      <div className="p-4 grid gap-3">
+        {filtered.map((creator) => (
+          <Card key={creator.userId} className="overflow-hidden hover:border-primary/30 transition-colors">
+            <CardContent className="p-4 flex items-start gap-4">
+              <img
+                src={creator.avatar}
+                alt={creator.displayName}
+                className="h-14 w-14 rounded-full bg-muted shrink-0"
+              />
+              <div className="flex-1 min-w-0 space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-semibold text-foreground">{creator.displayName}</p>
+                  {creator.verified && (
+                    <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground line-clamp-1">{creator.bio}</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {creator.niche.map((n) => (
+                    <Badge key={n} variant="secondary" className="text-[10px]">{n}</Badge>
+                  ))}
+                </div>
+                <div className="flex items-center gap-4 text-xs text-muted-foreground pt-1">
+                  <span className="flex items-center gap-1">
+                    <Star className="h-3 w-3 text-warning" /> {creator.rating.toFixed(1)}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Users className="h-3 w-3" /> {(creator.followers / 1000).toFixed(0)}K
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Eye className="h-3 w-3" /> {(creator.reach / 1000).toFixed(0)}K охват
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <MapPin className="h-3 w-3" /> {creator.geo}
+                  </span>
+                </div>
+              </div>
+              <div className="flex flex-col gap-2 shrink-0">
+                <Button size="sm" className="text-xs">
+                  <MessageSquarePlus className="h-3.5 w-3.5 mr-1.5" />
+                  Предложить сделку
+                </Button>
+                <Button size="sm" variant="outline" className="text-xs" asChild>
+                  <a href={`/creator/${creator.userId}`}>
+                    <Eye className="h-3.5 w-3.5 mr-1.5" />
+                    Профиль
+                  </a>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+        {filtered.length === 0 && (
+          <div className="text-center py-16 text-sm text-muted-foreground">
+            Авторы не найдены. Попробуйте изменить параметры поиска.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Deals Chat Tab ── */
+function DealsTab() {
   const [selectedDeal, setSelectedDeal] = useState<Deal>(deals[0]);
   useRealtimeMessages(selectedDeal?.id);
   const dealMessages = allMessages.filter((m) => m.dealId === selectedDeal.id);
   const [newMsg, setNewMsg] = useState("");
   const { scores: advertiserScores } = useAdvertiserScores();
-
-  // Chat customization
   const [chatColorIdx, setChatColorIdx] = useState(0);
   const [chatBgIdx, setChatBgIdx] = useState(0);
 
@@ -71,11 +229,11 @@ const AdStudio = () => {
   const currentBg = CHAT_BG_PRESETS[chatBgIdx];
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)] max-h-[calc(100vh-3.5rem)]">
+    <div className="flex-1 flex">
       {/* Deals list */}
       <div className="w-72 border-r border-border bg-card overflow-y-auto shrink-0">
         <div className="p-4 border-b border-border">
-          <h2 className="font-semibold text-foreground">Сделки</h2>
+          <h2 className="font-semibold text-foreground text-sm">Сделки</h2>
         </div>
         {sortedDeals.map((deal) => {
           const advScore = advertiserScores.get(deal.advertiserId);
@@ -205,8 +363,6 @@ const AdStudio = () => {
             </PopoverTrigger>
             <PopoverContent align="end" className="w-72 p-4 space-y-4">
               <p className="text-sm font-semibold text-foreground">Оформление чата</p>
-
-              {/* Message colors */}
               <div className="space-y-2">
                 <p className="text-xs font-medium text-muted-foreground">Цвет сообщений</p>
                 <div className="grid grid-cols-6 gap-2">
@@ -227,8 +383,6 @@ const AdStudio = () => {
                   ))}
                 </div>
               </div>
-
-              {/* Background */}
               <div className="space-y-2">
                 <p className="text-xs font-medium text-muted-foreground">Фон чата</p>
                 <div className="grid grid-cols-3 gap-2">
@@ -247,8 +401,6 @@ const AdStudio = () => {
                   ))}
                 </div>
               </div>
-
-              {/* Preview */}
               <div className="space-y-1.5">
                 <p className="text-xs font-medium text-muted-foreground">Превью</p>
                 <div className={cn("rounded-lg p-3 space-y-2 border border-border", currentBg.className)}>
@@ -268,6 +420,34 @@ const AdStudio = () => {
           </Popover>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ── Main AdStudio Page ── */
+const AdStudio = () => {
+  const [activeTab, setActiveTab] = useState<"birzha" | "deals">("birzha");
+
+  return (
+    <div className="flex flex-col h-[calc(100vh-3.5rem)] max-h-[calc(100vh-3.5rem)]">
+      {/* Tab switcher */}
+      <div className="px-4 pt-3 pb-0 bg-card border-b border-border">
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "birzha" | "deals")}>
+          <TabsList className="bg-muted/50">
+            <TabsTrigger value="birzha" className="text-sm gap-1.5">
+              <Search className="h-3.5 w-3.5" />
+              Биржа авторов
+            </TabsTrigger>
+            <TabsTrigger value="deals" className="text-sm gap-1.5">
+              <Megaphone className="h-3.5 w-3.5" />
+              Мои сделки
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
+
+      {/* Tab content */}
+      {activeTab === "birzha" ? <BirzhaTab /> : <DealsTab />}
     </div>
   );
 };
