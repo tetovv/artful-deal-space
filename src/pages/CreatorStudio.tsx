@@ -604,9 +604,31 @@ const CreatorStudio = () => {
             {/* ═══ ANALYTICS ═══ */}
             {section === "analytics" && (
               <>
-                <div className="space-y-1">
-                  <h1 className="text-xl font-bold text-foreground">Аналитика канала</h1>
-                  <p className="text-sm text-muted-foreground">Подробная статистика и динамика</p>
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <h1 className="text-xl font-bold text-foreground">Аналитика канала</h1>
+                    <p className="text-sm text-muted-foreground">Подробная статистика и динамика</p>
+                  </div>
+                  <Button size="sm" variant="outline" onClick={() => {
+                    const headers = ["Название", "Тип", "Просмотры", "Лайки", "Цена", "Дата"];
+                    const rows = myItems.map((i) => [
+                      `"${i.title.replace(/"/g, '""')}"`,
+                      TYPE_LABELS[i.type] || i.type,
+                      i.views,
+                      i.likes,
+                      i.price ?? 0,
+                      new Date(i.createdAt).toLocaleDateString("ru"),
+                    ].join(","));
+                    const csv = "\uFEFF" + [headers.join(","), ...rows].join("\n");
+                    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url; a.download = "analytics.csv"; a.click();
+                    URL.revokeObjectURL(url);
+                    toast.success("CSV экспортирован");
+                  }}>
+                    <ExternalLink className="h-3.5 w-3.5 mr-1.5" /> Экспорт CSV
+                  </Button>
                 </div>
 
                 {/* Hero stats row with gradient cards */}
