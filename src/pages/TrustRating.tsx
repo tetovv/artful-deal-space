@@ -228,7 +228,7 @@ export default function TrustRating() {
   };
 
   return (
-    <div className="p-6 lg:p-8 space-y-6 max-w-5xl">
+    <div className="p-6 lg:p-8 space-y-6 max-w-5xl mx-auto">
       <div>
         <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
           <Shield className="h-6 w-6 text-primary" />

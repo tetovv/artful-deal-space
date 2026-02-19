@@ -161,7 +161,7 @@ function CreatorOffers() {
 
   return (
     <PageTransition>
-      <div className="p-6 lg:p-8 space-y-6 max-w-5xl">
+      <div className="p-6 lg:p-8 space-y-6 max-w-5xl mx-auto">
         <div>
           <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
             <Briefcase className="h-6 w-6 text-primary" />
@@ -386,7 +386,7 @@ function AdvertiserMarketplace() {
 
   return (
     <PageTransition>
-      <div className="p-6 lg:p-8 space-y-6 max-w-7xl">
+      <div className="p-6 lg:p-8 space-y-6 max-w-7xl mx-auto">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Биржа размещений</h1>
           <p className="text-sm text-muted-foreground">Найдите идеального автора для рекламной интеграции</p>
