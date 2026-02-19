@@ -66,12 +66,12 @@ const ProductPage = () => {
 
   return (
     <PageTransition>
-      <div className="max-w-[1400px] mx-auto px-4 lg:px-6 pt-1 pb-4 space-y-0">
+      <div className="max-w-[1400px] mx-auto px-4 lg:px-6 py-4 space-y-0">
         <div className="flex flex-col lg:flex-row gap-6">
           {/* Left: Video + Info */}
           <div className="flex-1 min-w-0 space-y-4">
             {/* Video Player / Thumbnail */}
-            <div className="rounded-xl overflow-hidden bg-black aspect-[16/9] relative">
+            <div className="rounded-xl overflow-hidden bg-black relative" style={{ height: 'calc(100vh - 320px)', minHeight: '300px' }}>
               {item.video_url ? (
                 <video
                   ref={videoRef}
