@@ -200,9 +200,9 @@ const ProductPage = () => {
                     )}
                   </div>
                   <div className="flex-1 min-w-0 space-y-0.5">
-                    <p className="text-sm font-medium text-foreground group-hover:text-primary transition-colors leading-snug">{r.title}</p>
-                    <p className="text-xs text-muted-foreground">{r.creator_name}</p>
-                    <p className="text-xs text-muted-foreground">{(r.views || 0).toLocaleString()} просмотров</p>
+                    <p className="text-base font-semibold text-foreground group-hover:text-primary transition-colors leading-snug">{r.title}</p>
+                    <p className="text-sm text-muted-foreground">{r.creator_name}</p>
+                    <p className="text-sm text-muted-foreground">{(r.views || 0).toLocaleString()} просмотров</p>
                   </div>
                 </div>
               ))
