@@ -90,7 +90,7 @@ const ProductPage = () => {
 
   return (
     <PageTransition>
-      <div className="max-w-full mx-auto px-4 lg:px-6 py-4 space-y-0">
+      <div className="max-w-full mx-auto px-6 lg:px-10 py-4 space-y-0">
         <div className="flex flex-col lg:flex-row gap-6">
           {/* Left: Video + Info */}
           <div className="flex-1 min-w-0">
