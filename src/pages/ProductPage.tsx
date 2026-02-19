@@ -197,7 +197,7 @@ const ProductPage = () => {
                   <div className="flex-1 min-w-0 space-y-1">
                     <p className="text-base font-medium text-foreground group-hover:text-primary transition-colors">{r.title}</p>
                     <p className="text-sm text-muted-foreground">{r.creator_name}</p>
-                    <p className="text-sm text-muted-foreground">{(r.views || 0).toLocaleString()} просм.</p>
+                    <p className="text-sm text-muted-foreground">{(r.views || 0).toLocaleString()} просмотров</p>
                   </div>
                 </div>
               ))
