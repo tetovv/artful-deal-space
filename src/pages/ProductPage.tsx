@@ -187,7 +187,7 @@ const ProductPage = () => {
               related.map((r) => (
                 <div
                   key={r.id}
-                  className="flex gap-2 cursor-pointer group rounded-lg p-1.5 -mx-1.5 hover:bg-accent/50 transition-colors duration-200"
+                  className="flex gap-2 cursor-pointer group"
                   onClick={() => navigate(`/product/${r.id}`)}
                 >
                   <div className="w-[65%] shrink-0 rounded-lg overflow-hidden aspect-video bg-muted relative">
