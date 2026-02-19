@@ -203,18 +203,18 @@ const ProductPage = () => {
           </div>
 
           {/* Right sidebar: Related videos */}
-          <aside className="w-full lg:w-[400px] shrink-0 space-y-4">
+          <aside className="w-full lg:w-[400px] shrink-0 space-y-2">
             {related.length === 0 ? (
               <p className="text-xs text-muted-foreground">Нет рекомендаций</p>
             ) : (
               related.map((r) => (
                 <div
                   key={r.id}
-                  className="cursor-pointer group space-y-2"
+                  className="flex gap-2 cursor-pointer group"
                   onClick={() => navigate(`/product/${r.id}`)}
                 >
                   <div
-                    className="w-full rounded-lg overflow-hidden aspect-video bg-muted relative"
+                    className="w-[168px] shrink-0 rounded-lg overflow-hidden aspect-video bg-muted relative"
                     onMouseEnter={(e) => {
                       const video = e.currentTarget.querySelector("video");
                       if (video) { video.currentTime = 0; video.play().catch(() => {}); }
@@ -230,7 +230,7 @@ const ProductPage = () => {
                           <img src={r.thumbnail} alt={r.title} className="w-full h-full object-cover group-hover:opacity-0 transition-opacity duration-300" />
                         ) : (
                           <div className="w-full h-full bg-muted flex items-center justify-center text-muted-foreground group-hover:opacity-0 transition-opacity duration-300">
-                            <Play className="h-6 w-6" />
+                            <Play className="h-5 w-5" />
                           </div>
                         )}
                         <video
@@ -245,14 +245,14 @@ const ProductPage = () => {
                       <img src={r.thumbnail} alt={r.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-                        <Play className="h-6 w-6" />
+                        <Play className="h-5 w-5" />
                       </div>
                     )}
                   </div>
-                  <div className="space-y-0.5">
-                    <p className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors leading-snug line-clamp-2">{r.title}</p>
-                    <p className="text-xs text-muted-foreground">{r.creator_name}</p>
-                    <p className="text-xs text-muted-foreground">
+                  <div className="flex-1 min-w-0 space-y-0.5 py-0.5">
+                    <p className="text-xs font-semibold text-foreground group-hover:text-primary transition-colors leading-snug line-clamp-2">{r.title}</p>
+                    <p className="text-[11px] text-muted-foreground">{r.creator_name}</p>
+                    <p className="text-[11px] text-muted-foreground whitespace-nowrap">
                       {(r.views || 0).toLocaleString()} просм. · {new Date(r.created_at).toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" })}
                     </p>
                   </div>
