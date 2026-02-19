@@ -20,7 +20,7 @@ serve(async (req) => {
       });
     }
 
-    const { courseId, fileContent, fileName } = await req.json();
+    const { courseId, fileContent, fileName, settings } = await req.json();
     if (!courseId || !fileContent) {
       return new Response(JSON.stringify({ error: "courseId and fileContent required" }), {
         status: 400,
@@ -41,18 +41,24 @@ serve(async (req) => {
     // Truncate content to ~30k chars to fit context
     const truncated = fileContent.slice(0, 30000);
 
+    // Build settings instructions
+    const settingsBlock = settings ? `\n\nUser preferences (MUST follow):\n${settings}` : "";
+
     const systemPrompt = `You are an expert course designer. Analyze the provided educational material and generate a comprehensive structured course.
 
 You MUST respond by calling the "create_course" tool with the generated course structure. Do not return plain text.
+${settingsBlock}
 
 Guidelines:
-- Create 3-6 modules based on the material's topics
+- Create 3-6 modules based on the material's topics (unless user specifies a different count)
 - Each module should have 3-5 lessons
 - Include different lesson types: "text" (theory), "quiz" (test questions), "exercise" (practical tasks)
 - For quiz lessons, include 3-5 questions in the content field as numbered list
 - For exercise lessons, describe the practical task in detail
 - For text lessons, provide a summary of the key concepts
-- All content must be in Russian
+- All content must match the language specified in user preferences (default: Russian)
+- Adapt your tone, vocabulary, and examples to the specified audience
+- Apply the specified style throughout the course
 - Make titles clear and descriptive`;
 
     // Update to generating
@@ -79,7 +85,7 @@ Guidelines:
               parameters: {
                 type: "object",
                 properties: {
-                  title: { type: "string", description: "Course title in Russian" },
+                  title: { type: "string", description: "Course title" },
                   modules: {
                     type: "array",
                     items: {
