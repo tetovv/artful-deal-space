@@ -109,6 +109,57 @@ export type Database = {
           },
         ]
       }
+      comments: {
+        Row: {
+          content: string
+          content_id: string
+          created_at: string
+          id: string
+          likes: number
+          parent_id: string | null
+          user_avatar: string | null
+          user_id: string
+          user_name: string
+        }
+        Insert: {
+          content: string
+          content_id: string
+          created_at?: string
+          id?: string
+          likes?: number
+          parent_id?: string | null
+          user_avatar?: string | null
+          user_id: string
+          user_name?: string
+        }
+        Update: {
+          content?: string
+          content_id?: string
+          created_at?: string
+          id?: string
+          likes?: number
+          parent_id?: string | null
+          user_avatar?: string | null
+          user_id?: string
+          user_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comments_content_id_fkey"
+            columns: ["content_id"]
+            isOneToOne: false
+            referencedRelation: "content_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comments_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "comments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       content_items: {
         Row: {
           age_restricted: boolean | null
