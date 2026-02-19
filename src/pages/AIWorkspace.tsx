@@ -12,11 +12,11 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { PageTransition } from "@/components/layout/PageTransition";
@@ -121,6 +121,16 @@ const slideTypeLabels: Record<string, string> = {
   quote: "Цитата",
   summary: "Итоги",
 };
+
+/* ---------- Output type definitions ---------- */
+type OutputType = "course" | "quiz" | "presentation" | "document";
+
+const OUTPUT_TYPE_OPTIONS: { value: OutputType; label: string; description: string; icon: React.ElementType }[] = [
+  { value: "course", label: "Курс", description: "Модули с уроками и заданиями", icon: BookOpen },
+  { value: "quiz", label: "Квиз", description: "Тесты и вопросы по материалу", icon: HelpCircle },
+  { value: "presentation", label: "Презентация", description: "Слайды для выступления", icon: Presentation },
+  { value: "document", label: "Документ", description: "Структурированный конспект", icon: FileText },
+];
 
 /* ---------- Settings panel ---------- */
 const SettingsPanel = ({ settings, onChange, compact = false }: { settings: GenerationSettings; onChange: (s: GenerationSettings) => void; compact?: boolean }) => {
@@ -296,7 +306,7 @@ const SlidePreview = ({ slide, index, large = false }: { slide: Slide; index: nu
             )}
           </div>
         );
-      default: // content
+      default:
         return (
           <div className="absolute inset-0 bg-card flex flex-col p-4">
             <h3 className={cn("font-bold text-foreground mb-2", large ? "text-xl" : "text-[9px] md:text-[11px]")}>{slide.title}</h3>
@@ -410,7 +420,7 @@ const exportToPptx = async (title: string, slides: Slide[]) => {
         }
         break;
 
-      default: // content
+      default:
         s.addText(slide.title, {
           x: 0.5, y: 0.3, w: 12.33, h: 0.8,
           fontSize: 28, bold: true, color: "1E293B",
@@ -438,23 +448,19 @@ const AIWorkspace = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const presFileInputRef = useRef<HTMLInputElement>(null);
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [isPresDropDragging, setIsPresDropDragging] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [expandedLesson, setExpandedLesson] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<string>("courses");
-  const [presDescription, setPresDescription] = useState("");
+  const [description, setDescription] = useState("");
   const [viewingSlideIdx, setViewingSlideIdx] = useState(0);
   const [slideViewMode, setSlideViewMode] = useState<"grid" | "single">("grid");
   const [editingSlide, setEditingSlide] = useState<Slide | null>(null);
   const [isSavingSlides, setIsSavingSlides] = useState(false);
-  const [courseSettings, setCourseSettings] = useState<GenerationSettings>({ ...defaultSettings });
-  const [presSettings, setPresSettings] = useState<GenerationSettings>({ ...defaultSettings });
-  // Pending files for course generation (to show settings before generating)
-  const [pendingCourseFiles, setPendingCourseFiles] = useState<File[] | null>(null);
-  const [pendingPresFiles, setPendingPresFiles] = useState<File[] | null>(null);
+  const [settings, setSettings] = useState<GenerationSettings>({ ...defaultSettings });
+  const [pendingFiles, setPendingFiles] = useState<File[] | null>(null);
+  const [selectedOutputTypes, setSelectedOutputTypes] = useState<OutputType[]>(["course"]);
+  const [inputMode, setInputMode] = useState<"file" | "description">("file");
 
   const { data: courses = [], isLoading } = useQuery({
     queryKey: ["ai-courses", user?.id],
@@ -476,11 +482,15 @@ const AIWorkspace = () => {
     },
   });
 
-  const courseItems = courses.filter((c) => c.type === "course");
-  const presItems = courses.filter((c) => c.type === "presentation");
   const selectedCourse = courses.find((c) => c.id === selectedCourseId) || null;
   const modules: CourseModule[] = selectedCourse?.modules || [];
   const slides: Slide[] = selectedCourse?.slides || [];
+
+  const toggleOutputType = (type: OutputType) => {
+    setSelectedOutputTypes((prev) =>
+      prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]
+    );
+  };
 
   const readFileAsText = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -491,95 +501,108 @@ const AIWorkspace = () => {
     });
   };
 
-  const buildSettingsPrompt = (settings: GenerationSettings) => {
+  const buildSettingsPrompt = (s: GenerationSettings) => {
     const parts: string[] = [];
-    const styleLbl = STYLE_OPTIONS.find((o) => o.value === settings.style)?.label || settings.style;
-    const audLbl = AUDIENCE_OPTIONS.find((o) => o.value === settings.audience)?.label || settings.audience;
-    const langLbl = LANGUAGE_OPTIONS.find((o) => o.value === settings.language)?.label || settings.language;
+    const styleLbl = STYLE_OPTIONS.find((o) => o.value === s.style)?.label || s.style;
+    const audLbl = AUDIENCE_OPTIONS.find((o) => o.value === s.audience)?.label || s.audience;
+    const langLbl = LANGUAGE_OPTIONS.find((o) => o.value === s.language)?.label || s.language;
     parts.push(`Стиль: ${styleLbl}`);
     parts.push(`Целевая аудитория: ${audLbl}`);
     parts.push(`Язык: ${langLbl}`);
-    if (settings.slideCount !== "auto") parts.push(`Количество слайдов/модулей: ${settings.slideCount}`);
-    if (settings.additionalNotes.trim()) parts.push(`Дополнительные указания: ${settings.additionalNotes.trim()}`);
+    if (s.slideCount !== "auto") parts.push(`Количество слайдов/модулей: ${s.slideCount}`);
+    if (s.additionalNotes.trim()) parts.push(`Дополнительные указания: ${s.additionalNotes.trim()}`);
     return parts.join("\n");
   };
 
-  const startGeneration = useCallback(async (files: File[], type: "course" | "presentation", settings: GenerationSettings) => {
+  const startGeneration = useCallback(async (content: string, fileName: string, outputTypes: OutputType[], genSettings: GenerationSettings) => {
     if (!user) { toast.error("Войдите в аккаунт"); return; }
+    if (outputTypes.length === 0) { toast.error("Выберите хотя бы один тип вывода"); return; }
     setIsGenerating(true);
-    try {
-      let combinedContent = "";
-      let mainFileName = files[0].name;
 
-      for (const file of files) {
-        try {
-          const text = await readFileAsText(file);
-          combinedContent += `\n\n--- ${file.name} ---\n\n${text}`;
-        } catch { toast.error(`Не удалось прочитать: ${file.name}`); }
+    try {
+      const settingsPrompt = buildSettingsPrompt(genSettings);
+
+      // Generate each selected output type
+      for (const outputType of outputTypes) {
+        const type = outputType === "presentation" ? "presentation" : "course";
+        const titlePrefix = outputType === "course" ? "Курс" : outputType === "quiz" ? "Квиз" : outputType === "presentation" ? "Презентация" : "Документ";
+
+        const { data: course, error: insertError } = await supabase
+          .from("ai_courses")
+          .insert({
+            user_id: user.id,
+            title: `${titlePrefix} из ${fileName}`,
+            status: "uploading",
+            progress: 10,
+            type,
+          })
+          .select().single();
+        if (insertError) throw insertError;
+
+        queryClient.invalidateQueries({ queryKey: ["ai-courses"] });
+        setSelectedCourseId(course.id);
+
+        // Adjust settings prompt based on output type
+        let adjustedSettings = settingsPrompt;
+        if (outputType === "quiz") {
+          adjustedSettings += "\n\nВАЖНО: Генерируй ТОЛЬКО тестовые вопросы (quiz) — каждый модуль должен содержать только уроки типа 'quiz' с вопросами и вариантами ответов.";
+        } else if (outputType === "document") {
+          adjustedSettings += "\n\nВАЖНО: Генерируй структурированный документ-конспект — каждый модуль = раздел документа, каждый урок = подраздел с подробным текстовым содержанием (тип 'text').";
+        }
+
+        const fnName = type === "presentation" ? "generate-presentation" : "generate-course";
+        const { error: fnError } = await supabase.functions.invoke(fnName, {
+          body: { courseId: course.id, fileContent: content, fileName, settings: adjustedSettings },
+        });
+
+        if (fnError) {
+          console.error("Edge function error:", fnError);
+          toast.error(`Ошибка генерации: ${titlePrefix}`);
+        } else {
+          toast.success(`${titlePrefix} сгенерирован!`);
+        }
       }
 
-      if (!combinedContent.trim()) { toast.error("Не удалось извлечь текст"); setIsGenerating(false); return; }
-
-      const { data: course, error: insertError } = await supabase
-        .from("ai_courses")
-        .insert({ user_id: user.id, title: type === "course" ? `Курс из ${mainFileName}` : `Презентация из ${mainFileName}`, status: "uploading", progress: 10, type })
-        .select().single();
-      if (insertError) throw insertError;
-
       queryClient.invalidateQueries({ queryKey: ["ai-courses"] });
-      setSelectedCourseId(course.id);
-      if (type === "presentation") setActiveTab("presentations");
-
-      const fnName = type === "course" ? "generate-course" : "generate-presentation";
-      const { error: fnError } = await supabase.functions.invoke(fnName, {
-        body: { courseId: course.id, fileContent: combinedContent, fileName: mainFileName, settings: buildSettingsPrompt(settings) },
-      });
-
-      if (fnError) { console.error("Edge function error:", fnError); toast.error("Ошибка генерации. Попробуйте снова."); }
-      else toast.success(type === "course" ? "Курс сгенерирован!" : "Презентация сгенерирована!");
-
-      queryClient.invalidateQueries({ queryKey: ["ai-courses"] });
-      setPendingCourseFiles(null);
-      setPendingPresFiles(null);
-    } catch (e) { console.error("Creation error:", e); toast.error("Произошла ошибка"); }
-    finally { setIsGenerating(false); }
+      setPendingFiles(null);
+      setDescription("");
+    } catch (e) {
+      console.error("Creation error:", e);
+      toast.error("Произошла ошибка");
+    } finally {
+      setIsGenerating(false);
+    }
   }, [user, queryClient]);
 
-  const handleFiles = useCallback(async (files: FileList | File[], type: "course" | "presentation" = "course") => {
+  const handleFilesUpload = useCallback(async (files: FileList | File[]) => {
     const validExtensions = [".pdf", ".txt", ".md", ".docx"];
     const fileArray = Array.from(files);
     const validFiles = fileArray.filter((f) => validExtensions.some((ext) => f.name.toLowerCase().endsWith(ext)));
     if (validFiles.length === 0) { toast.error("Поддерживаемые форматы: PDF, TXT, MD, DOCX"); return; }
-
-    // Set pending files — user can configure settings before generating
-    if (type === "course") setPendingCourseFiles(validFiles);
-    else setPendingPresFiles(validFiles);
+    setPendingFiles(validFiles);
+    setInputMode("file");
   }, []);
 
-  const generatePresFromDescription = useCallback(async () => {
-    if (!user || !presDescription.trim()) { toast.error("Введите описание"); return; }
-    setIsGenerating(true);
-    try {
-      const { data: course, error: insertError } = await supabase
-        .from("ai_courses")
-        .insert({ user_id: user.id, title: `Презентация: ${presDescription.slice(0, 50)}...`, status: "uploading", progress: 10, type: "presentation" })
-        .select().single();
-      if (insertError) throw insertError;
+  const handleStartFromFiles = useCallback(async () => {
+    if (!pendingFiles || pendingFiles.length === 0) return;
+    let combinedContent = "";
+    const mainFileName = pendingFiles[0].name;
 
-      queryClient.invalidateQueries({ queryKey: ["ai-courses"] });
-      setSelectedCourseId(course.id);
+    for (const file of pendingFiles) {
+      try {
+        const text = await readFileAsText(file);
+        combinedContent += `\n\n--- ${file.name} ---\n\n${text}`;
+      } catch { toast.error(`Не удалось прочитать: ${file.name}`); }
+    }
 
-      const { error: fnError } = await supabase.functions.invoke("generate-presentation", {
-        body: { courseId: course.id, description: presDescription, settings: buildSettingsPrompt(presSettings) },
-      });
+    if (!combinedContent.trim()) { toast.error("Не удалось извлечь текст"); return; }
+    await startGeneration(combinedContent, mainFileName, selectedOutputTypes, settings);
+  }, [pendingFiles, selectedOutputTypes, settings, startGeneration]);
 
-      if (fnError) { console.error("Edge function error:", fnError); toast.error("Ошибка генерации."); }
-      else { toast.success("Презентация сгенерирована!"); setPresDescription(""); }
-
-      queryClient.invalidateQueries({ queryKey: ["ai-courses"] });
-    } catch (e) { console.error("Error:", e); toast.error("Произошла ошибка"); }
-    finally { setIsGenerating(false); }
-  }, [user, presDescription, presSettings, queryClient]);
+  const handleStartFromDescription = useCallback(async () => {
+    if (!description.trim()) { toast.error("Введите описание"); return; }
+    await startGeneration(description, description.slice(0, 50) + "...", selectedOutputTypes, settings);
+  }, [description, selectedOutputTypes, settings, startGeneration]);
 
   const saveSlideEdit = useCallback(async (updatedSlide: Slide) => {
     if (!selectedCourse) return;
@@ -619,13 +642,13 @@ const AIWorkspace = () => {
     toast.success("Слайд добавлен");
   }, [selectedCourse, slides, queryClient]);
 
-  const handleDrop = (e: React.DragEvent, type: "course" | "presentation" = "course") => {
-    e.preventDefault(); setIsDragging(false); setIsPresDropDragging(false);
-    if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files, type);
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault(); setIsDragging(false);
+    if (e.dataTransfer.files.length) handleFilesUpload(e.dataTransfer.files);
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>, type: "course" | "presentation" = "course") => {
-    if (e.target.files?.length) handleFiles(e.target.files, type);
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files?.length) handleFilesUpload(e.target.files);
     e.target.value = "";
   };
 
@@ -637,53 +660,77 @@ const AIWorkspace = () => {
     toast.success("Удалено");
   }, [queryClient, selectedCourseId]);
 
-  const renderItemList = (items: AICourseRow[], emptyText: string) => (
+  const getItemTypeLabel = (item: AICourseRow) => {
+    if (item.type === "presentation") return "Презентация";
+    // Check title prefix to determine type
+    if (item.title.startsWith("Квиз")) return "Квиз";
+    if (item.title.startsWith("Документ")) return "Документ";
+    return "Курс";
+  };
+
+  const getItemTypeIcon = (item: AICourseRow) => {
+    const label = getItemTypeLabel(item);
+    if (label === "Презентация") return Presentation;
+    if (label === "Квиз") return HelpCircle;
+    if (label === "Документ") return FileText;
+    return BookOpen;
+  };
+
+  const renderItemList = () => (
     <div className="space-y-3">
       <h2 className="text-sm font-semibold text-foreground">
-        {activeTab === "courses" ? "Мои курсы" : "Мои презентации"} ({items.length})
+        Мои материалы ({courses.length})
       </h2>
-      {items.length === 0 ? (
-        <p className="text-xs text-muted-foreground py-4">{emptyText}</p>
+      {courses.length === 0 ? (
+        <p className="text-xs text-muted-foreground py-4">Ещё нет сгенерированных материалов</p>
       ) : (
-        items.map((course) => (
-          <div
-            key={course.id}
-            onClick={() => { setSelectedCourseId(course.id); setViewingSlideIdx(0); setSlideViewMode("grid"); }}
-            className={cn(
-              "rounded-xl border bg-card p-4 cursor-pointer transition-all group",
-              selectedCourseId === course.id ? "border-primary ring-1 ring-primary/20" : "border-border hover:border-primary/30"
-            )}
-          >
-          <div className="flex items-center justify-between mb-2">
-              <h3 className="font-medium text-sm text-card-foreground truncate flex-1">{course.title}</h3>
-              <div className="flex items-center gap-1 shrink-0">
-                <button
-                  onClick={(e) => { e.stopPropagation(); deleteCourse(course.id); }}
-                  className="h-6 w-6 rounded-md flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-all"
-                  title="Удалить"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-                {course.status === "completed" ? <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />
-                  : course.status === "failed" ? <AlertCircle className="h-4 w-4 text-destructive shrink-0" />
-                  : <Loader2 className="h-4 w-4 text-primary animate-spin shrink-0" />}
-              </div>
-            </div>
-            {/* Show source file name */}
-            {(() => {
-              const fileMatch = course.title.match(/(?:Курс из|Презентация из|Презентация:)\s*(.+)/);
-              const fileName = fileMatch ? fileMatch[1].trim() : null;
-              return fileName ? (
-                <div className="flex items-center gap-1.5 mb-1.5">
-                  <FileText className="h-3 w-3 text-muted-foreground shrink-0" />
-                  <span className="text-[11px] text-muted-foreground truncate">{fileName}</span>
+        courses.map((course) => {
+          const TypeIcon = getItemTypeIcon(course);
+          return (
+            <div
+              key={course.id}
+              onClick={() => { setSelectedCourseId(course.id); setViewingSlideIdx(0); setSlideViewMode("grid"); }}
+              className={cn(
+                "rounded-xl border bg-card p-4 cursor-pointer transition-all group",
+                selectedCourseId === course.id ? "border-primary ring-1 ring-primary/20" : "border-border hover:border-primary/30"
+              )}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <TypeIcon className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <h3 className="font-medium text-sm text-card-foreground truncate">{course.title}</h3>
                 </div>
-              ) : null;
-            })()}
-            <p className="text-[11px] text-muted-foreground mb-2">{statusLabels[course.status] || course.status}</p>
-            <Progress value={course.progress || 0} className="h-1" />
-          </div>
-        ))
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); deleteCourse(course.id); }}
+                    className="h-6 w-6 rounded-md flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-all"
+                    title="Удалить"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                  {course.status === "completed" ? <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />
+                    : course.status === "failed" ? <AlertCircle className="h-4 w-4 text-destructive shrink-0" />
+                    : <Loader2 className="h-4 w-4 text-primary animate-spin shrink-0" />}
+                </div>
+              </div>
+              {(() => {
+                const fileMatch = course.title.match(/(?:Курс из|Квиз из|Документ из|Презентация из|Презентация:)\s*(.+)/);
+                const fileName = fileMatch ? fileMatch[1].trim() : null;
+                return fileName ? (
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <FileText className="h-3 w-3 text-muted-foreground shrink-0" />
+                    <span className="text-[11px] text-muted-foreground truncate">{fileName}</span>
+                  </div>
+                ) : null;
+              })()}
+              <div className="flex items-center gap-2 mb-2">
+                <Badge variant="outline" className="text-[10px]">{getItemTypeLabel(course)}</Badge>
+                <p className="text-[11px] text-muted-foreground">{statusLabels[course.status] || course.status}</p>
+              </div>
+              <Progress value={course.progress || 0} className="h-1" />
+            </div>
+          );
+        })
       )}
     </div>
   );
@@ -895,48 +942,102 @@ const AIWorkspace = () => {
     );
   };
 
+  const showPendingConfig = pendingFiles || inputMode === "description";
+
   return (
     <PageTransition>
       <div className="p-6 lg:p-8 space-y-6 max-w-6xl mx-auto">
         <div>
           <h1 className="text-2xl font-bold text-foreground">AI Workspace</h1>
-          <p className="text-sm text-muted-foreground">Генерируйте курсы и презентации с помощью AI</p>
+          <p className="text-sm text-muted-foreground">Генерируйте курсы, квизы, презентации и документы с помощью AI</p>
         </div>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList>
-            <TabsTrigger value="courses" className="gap-2"><Brain className="h-4 w-4" /> Курсы</TabsTrigger>
-            <TabsTrigger value="presentations" className="gap-2"><Presentation className="h-4 w-4" /> Презентации</TabsTrigger>
-          </TabsList>
+        {/* Unified input area */}
+        <div className="space-y-4">
+          {/* Input mode toggle */}
+          <div className="flex gap-2">
+            <Button
+              variant={inputMode === "file" ? "default" : "outline"}
+              size="sm"
+              onClick={() => { setInputMode("file"); setDescription(""); }}
+            >
+              <Upload className="h-4 w-4 mr-2" /> Из файла
+            </Button>
+            <Button
+              variant={inputMode === "description" ? "default" : "outline"}
+              size="sm"
+              onClick={() => { setInputMode("description"); setPendingFiles(null); }}
+            >
+              <PenTool className="h-4 w-4 mr-2" /> По описанию
+            </Button>
+          </div>
 
-          <TabsContent value="courses" className="space-y-6 mt-4">
-            {/* File drop zone */}
+          {inputMode === "file" ? (
             <div
               onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
               onDragLeave={() => setIsDragging(false)}
-              onDrop={(e) => handleDrop(e, "course")}
-              onClick={() => !isGenerating && !pendingCourseFiles && fileInputRef.current?.click()}
+              onDrop={handleDrop}
+              onClick={() => !isGenerating && !pendingFiles && fileInputRef.current?.click()}
               className={cn(
-                "rounded-xl border-2 border-dashed bg-card p-10 text-center space-y-3 transition-all",
-                !pendingCourseFiles && "cursor-pointer",
+                "rounded-xl border-2 border-dashed bg-card p-8 text-center space-y-3 transition-all",
+                !pendingFiles && "cursor-pointer",
                 isDragging ? "border-primary bg-primary/5" : "border-border hover:border-primary/40 hover:bg-muted/30",
                 isGenerating && "pointer-events-none opacity-60"
               )}
             >
-              {pendingCourseFiles ? (
-                <div className="space-y-4 max-w-lg mx-auto" onClick={(e) => e.stopPropagation()}>
+              {pendingFiles ? (
+                <div className="space-y-4 max-w-2xl mx-auto" onClick={(e) => e.stopPropagation()}>
                   <div className="flex items-center gap-2 justify-center">
                     <FileText className="h-5 w-5 text-primary" />
                     <span className="text-sm font-medium text-foreground">
-                      {pendingCourseFiles.map((f) => f.name).join(", ")}
+                      {pendingFiles.map((f) => f.name).join(", ")}
                     </span>
+                    <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setPendingFiles(null)}>✕</Button>
                   </div>
-                  <SettingsPanel settings={courseSettings} onChange={setCourseSettings} compact />
+
+                  {/* Output type selection */}
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium text-foreground">Что сгенерировать?</Label>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                      {OUTPUT_TYPE_OPTIONS.map((opt) => {
+                        const Icon = opt.icon;
+                        const isSelected = selectedOutputTypes.includes(opt.value);
+                        return (
+                          <button
+                            key={opt.value}
+                            onClick={() => toggleOutputType(opt.value)}
+                            className={cn(
+                              "flex flex-col items-center gap-1.5 p-3 rounded-lg border-2 transition-all text-center",
+                              isSelected
+                                ? "border-primary bg-primary/5 text-foreground"
+                                : "border-border bg-card hover:border-primary/30 text-muted-foreground"
+                            )}
+                          >
+                            <Icon className={cn("h-5 w-5", isSelected ? "text-primary" : "text-muted-foreground")} />
+                            <span className="text-xs font-medium">{opt.label}</span>
+                            <span className="text-[10px] text-muted-foreground leading-tight">{opt.description}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {selectedOutputTypes.length > 1 && (
+                      <p className="text-[11px] text-muted-foreground text-center">
+                        Будет сгенерировано {selectedOutputTypes.length} материала из одного источника
+                      </p>
+                    )}
+                  </div>
+
+                  <SettingsPanel settings={settings} onChange={setSettings} compact />
+
                   <div className="flex gap-2 justify-center">
-                    <Button variant="outline" size="sm" onClick={() => setPendingCourseFiles(null)}>Отмена</Button>
-                    <Button size="sm" onClick={() => startGeneration(pendingCourseFiles, "course", courseSettings)} disabled={isGenerating}>
+                    <Button variant="outline" size="sm" onClick={() => setPendingFiles(null)}>Отмена</Button>
+                    <Button
+                      size="sm"
+                      onClick={handleStartFromFiles}
+                      disabled={isGenerating || selectedOutputTypes.length === 0}
+                    >
                       {isGenerating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Brain className="h-4 w-4 mr-2" />}
-                      Создать курс
+                      Создать {selectedOutputTypes.length > 1 ? `(${selectedOutputTypes.length})` : ""}
                     </Button>
                   </div>
                 </div>
@@ -945,95 +1046,83 @@ const AIWorkspace = () => {
                   <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center mx-auto">
                     {isGenerating ? <Loader2 className="h-6 w-6 text-primary animate-spin" /> : <Upload className="h-6 w-6 text-primary" />}
                   </div>
-                  <h3 className="font-semibold text-foreground">{isGenerating ? "Генерация курса..." : "Перетащите файлы или нажмите для выбора"}</h3>
-                  <p className="text-xs text-muted-foreground max-w-md mx-auto">PDF, TXT, MD, DOCX — AI сгенерирует курс с уроками и тестами</p>
-                  {!isGenerating && <Button size="sm"><Brain className="h-4 w-4 mr-2" /> Выбрать файл</Button>}
+                  <h3 className="font-semibold text-foreground">{isGenerating ? "Генерация..." : "Перетащите файлы или нажмите для выбора"}</h3>
+                  <p className="text-xs text-muted-foreground max-w-md mx-auto">PDF, TXT, MD, DOCX — AI сгенерирует выбранные вами материалы</p>
+                  {!isGenerating && <Button size="sm"><Upload className="h-4 w-4 mr-2" /> Выбрать файл</Button>}
                 </>
               )}
             </div>
-            <input ref={fileInputRef} type="file" accept=".pdf,.txt,.md,.docx" multiple className="hidden" onChange={(e) => handleFileSelect(e, "course")} />
+          ) : (
+            <div className="rounded-xl border border-border bg-card p-6 space-y-4 max-w-2xl">
+              <Textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Опишите тему — AI сгенерирует материалы по вашему описанию..."
+                className="min-h-[100px] text-sm resize-none"
+              />
 
-            {isLoading ? (
-              <div className="text-center py-12 text-muted-foreground"><Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" /> Загрузка...</div>
-            ) : courseItems.length === 0 && !pendingCourseFiles ? (
-              <div className="text-center py-12 text-muted-foreground">
-                <BookOpen className="h-10 w-10 mx-auto mb-3 opacity-40" /><p>Загрузите файлы для первого AI-курса</p>
-              </div>
-            ) : courseItems.length > 0 && (
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {renderItemList(courseItems, "Нет курсов")}
-                <div className="lg:col-span-2">{renderCoursePreview()}</div>
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="presentations" className="space-y-6 mt-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* File upload for presentation */}
-              <div
-                onDragOver={(e) => { e.preventDefault(); setIsPresDropDragging(true); }}
-                onDragLeave={() => setIsPresDropDragging(false)}
-                onDrop={(e) => handleDrop(e, "presentation")}
-                onClick={() => !isGenerating && !pendingPresFiles && presFileInputRef.current?.click()}
-                className={cn(
-                  "rounded-xl border-2 border-dashed bg-card p-8 text-center space-y-3 transition-all",
-                  !pendingPresFiles && "cursor-pointer",
-                  isPresDropDragging ? "border-primary bg-primary/5" : "border-border hover:border-primary/40 hover:bg-muted/30",
-                  isGenerating && "pointer-events-none opacity-60"
+              {/* Output type selection */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-foreground">Что сгенерировать?</Label>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  {OUTPUT_TYPE_OPTIONS.map((opt) => {
+                    const Icon = opt.icon;
+                    const isSelected = selectedOutputTypes.includes(opt.value);
+                    return (
+                      <button
+                        key={opt.value}
+                        onClick={() => toggleOutputType(opt.value)}
+                        className={cn(
+                          "flex flex-col items-center gap-1.5 p-3 rounded-lg border-2 transition-all text-center",
+                          isSelected
+                            ? "border-primary bg-primary/5 text-foreground"
+                            : "border-border bg-card hover:border-primary/30 text-muted-foreground"
+                        )}
+                      >
+                        <Icon className={cn("h-5 w-5", isSelected ? "text-primary" : "text-muted-foreground")} />
+                        <span className="text-xs font-medium">{opt.label}</span>
+                        <span className="text-[10px] text-muted-foreground leading-tight">{opt.description}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {selectedOutputTypes.length > 1 && (
+                  <p className="text-[11px] text-muted-foreground text-center">
+                    Будет сгенерировано {selectedOutputTypes.length} материала
+                  </p>
                 )}
+              </div>
+
+              <SettingsPanel settings={settings} onChange={setSettings} />
+
+              <Button
+                size="sm"
+                className="w-full"
+                onClick={handleStartFromDescription}
+                disabled={isGenerating || !description.trim() || selectedOutputTypes.length === 0}
               >
-                {pendingPresFiles ? (
-                  <div className="space-y-3" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex items-center gap-2 justify-center">
-                      <FileText className="h-4 w-4 text-primary" />
-                      <span className="text-xs font-medium text-foreground truncate">{pendingPresFiles.map((f) => f.name).join(", ")}</span>
-                    </div>
-                    <SettingsPanel settings={presSettings} onChange={setPresSettings} />
-                    <div className="flex gap-2 justify-center">
-                      <Button variant="outline" size="sm" onClick={() => setPendingPresFiles(null)}>Отмена</Button>
-                      <Button size="sm" onClick={() => startGeneration(pendingPresFiles, "presentation", presSettings)} disabled={isGenerating}>
-                        {isGenerating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Presentation className="h-4 w-4 mr-2" />}
-                        Создать
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center mx-auto"><Upload className="h-5 w-5 text-primary" /></div>
-                    <h3 className="font-semibold text-sm text-foreground">Из файла</h3>
-                    <p className="text-xs text-muted-foreground">Загрузите документ — AI создаст презентацию</p>
-                  </>
-                )}
-              </div>
-              <input ref={presFileInputRef} type="file" accept=".pdf,.txt,.md,.docx" multiple className="hidden" onChange={(e) => handleFileSelect(e, "presentation")} />
-
-              {/* Description-based generation */}
-              <div className="rounded-xl border border-border bg-card p-6 space-y-3">
-                <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center mx-auto"><PenTool className="h-5 w-5 text-primary" /></div>
-                <h3 className="font-semibold text-sm text-foreground text-center">По описанию</h3>
-                <Textarea value={presDescription} onChange={(e) => setPresDescription(e.target.value)} placeholder="Опишите тему презентации..." className="min-h-[80px] text-sm resize-none" />
-                <SettingsPanel settings={presSettings} onChange={setPresSettings} />
-                <Button size="sm" className="w-full" onClick={generatePresFromDescription} disabled={isGenerating || !presDescription.trim()}>
-                  {isGenerating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Presentation className="h-4 w-4 mr-2" />}
-                  Создать презентацию
-                </Button>
-              </div>
+                {isGenerating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Brain className="h-4 w-4 mr-2" />}
+                Создать {selectedOutputTypes.length > 1 ? `(${selectedOutputTypes.length})` : ""}
+              </Button>
             </div>
+          )}
 
-            {isLoading ? (
-              <div className="text-center py-12 text-muted-foreground"><Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" /> Загрузка...</div>
-            ) : presItems.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
-                <Presentation className="h-10 w-10 mx-auto mb-3 opacity-40" /><p>Создайте первую AI-презентацию</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {renderItemList(presItems, "Нет презентаций")}
-                <div className="lg:col-span-2">{renderCoursePreview()}</div>
-              </div>
-            )}
-          </TabsContent>
-        </Tabs>
+          <input ref={fileInputRef} type="file" accept=".pdf,.txt,.md,.docx" multiple className="hidden" onChange={handleFileSelect} />
+        </div>
+
+        {/* Items list + preview */}
+        {isLoading ? (
+          <div className="text-center py-12 text-muted-foreground"><Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" /> Загрузка...</div>
+        ) : courses.length === 0 ? (
+          <div className="text-center py-12 text-muted-foreground">
+            <Brain className="h-10 w-10 mx-auto mb-3 opacity-40" /><p>Загрузите файлы или опишите тему для первого AI-материала</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {renderItemList()}
+            <div className="lg:col-span-2">{renderCoursePreview()}</div>
+          </div>
+        )}
       </div>
     </PageTransition>
   );
