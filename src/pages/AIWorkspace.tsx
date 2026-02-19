@@ -609,7 +609,7 @@ const AIWorkspace = () => {
               selectedCourseId === course.id ? "border-primary ring-1 ring-primary/20" : "border-border hover:border-primary/30"
             )}
           >
-            <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center justify-between mb-2">
               <h3 className="font-medium text-sm text-card-foreground truncate flex-1">{course.title}</h3>
               <div className="flex items-center gap-1 shrink-0">
                 <button
@@ -624,6 +624,17 @@ const AIWorkspace = () => {
                   : <Loader2 className="h-4 w-4 text-primary animate-spin shrink-0" />}
               </div>
             </div>
+            {/* Show source file name */}
+            {(() => {
+              const fileMatch = course.title.match(/(?:Курс из|Презентация из|Презентация:)\s*(.+)/);
+              const fileName = fileMatch ? fileMatch[1].trim() : null;
+              return fileName ? (
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <FileText className="h-3 w-3 text-muted-foreground shrink-0" />
+                  <span className="text-[11px] text-muted-foreground truncate">{fileName}</span>
+                </div>
+              ) : null;
+            })()}
             <p className="text-[11px] text-muted-foreground mb-2">{statusLabels[course.status] || course.status}</p>
             <Progress value={course.progress || 0} className="h-1" />
           </div>

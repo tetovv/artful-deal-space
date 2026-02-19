@@ -19,6 +19,17 @@ export function ContentCard({ item }: { item: ContentItem }) {
     >
       <div className="relative aspect-video overflow-hidden">
         <img src={item.thumbnail} alt={item.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+        {item.type === "video" && (
+          <span className="absolute bottom-2 right-2 bg-black/80 text-white text-[10px] font-medium px-1.5 py-0.5 rounded">
+            {(() => {
+              // Generate a stable pseudo-duration from item id
+              const hash = item.id.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
+              const mins = (hash % 45) + 1;
+              const secs = hash % 60;
+              return `${mins}:${secs.toString().padStart(2, "0")}`;
+            })()}
+          </span>
+        )}
       </div>
       <div className="p-4 space-y-2">
         <h3 className="font-semibold text-sm text-card-foreground line-clamp-2 group-hover:text-primary transition-colors">{item.title}</h3>
