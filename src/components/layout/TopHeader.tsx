@@ -36,7 +36,6 @@ const allNavItems: NavItem[] = [
   { title: "Рейтинг", url: "/trust-rating", icon: Shield, roles: ["creator", "advertiser", "moderator"] },
   { title: "AI", url: "/ai-workspace", icon: Brain },
   { title: "Библиотека", url: "/library", icon: Library },
-  { title: "Профиль", url: "/creator/me", icon: User },
 ];
 
 const roleLabels: Record<string, string> = {
