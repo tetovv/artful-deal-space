@@ -19,7 +19,7 @@ serve(async (req) => {
       });
     }
 
-    const { courseId, fileContent, fileName, description } = await req.json();
+    const { courseId, fileContent, fileName, description, settings } = await req.json();
     if (!courseId || (!fileContent && !description)) {
       return new Response(JSON.stringify({ error: "courseId and fileContent or description required" }), {
         status: 400,
@@ -38,19 +38,25 @@ serve(async (req) => {
 
     const truncated = (fileContent || description || "").slice(0, 30000);
 
+    // Build settings instructions
+    const settingsBlock = settings ? `\n\nUser preferences (MUST follow):\n${settings}` : "";
+
     const systemPrompt = `You are an expert presentation designer. Analyze the provided material and generate a structured presentation with slides.
 
 You MUST respond by calling the "create_presentation" tool. Do not return plain text.
+${settingsBlock}
 
 Guidelines:
-- Create 8-15 slides based on the material
+- Create 8-15 slides based on the material (unless user specifies a different count)
 - First slide is always the title slide
 - Last slide is a summary/conclusion
 - Each slide should have a title, bullet points or content text, and optional speaker notes
 - Slide types: "title", "content", "bullets", "two-column", "quote", "image-placeholder", "summary"
 - For "bullets" slides, provide 3-6 bullet points
 - For "two-column" slides, provide left and right column content
-- All content must be in Russian
+- All content must match the language specified in user preferences (default: Russian)
+- Adapt your tone, vocabulary, and examples to the specified audience
+- Apply the specified style throughout the presentation
 - Make titles concise and impactful
 - Speaker notes should be detailed talking points`;
 
@@ -81,7 +87,7 @@ Guidelines:
               parameters: {
                 type: "object",
                 properties: {
-                  title: { type: "string", description: "Presentation title in Russian" },
+                  title: { type: "string", description: "Presentation title" },
                   slides: {
                     type: "array",
                     items: {
