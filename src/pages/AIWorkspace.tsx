@@ -5,7 +5,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
   Upload, Brain, Loader2, CheckCircle2, BookOpen, HelpCircle, PenTool,
   FileText, AlertCircle, Presentation, ChevronRight, ChevronLeft,
-  StickyNote, Columns, Quote, LayoutList, Download, Maximize2
+  StickyNote, Columns, Quote, LayoutList, Download, Maximize2,
+  Edit3, Save, Trash2, Plus
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -13,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { PageTransition } from "@/components/layout/PageTransition";
@@ -291,6 +293,8 @@ const AIWorkspace = () => {
   const [presDescription, setPresDescription] = useState("");
   const [viewingSlideIdx, setViewingSlideIdx] = useState(0);
   const [slideViewMode, setSlideViewMode] = useState<"grid" | "single">("grid");
+  const [editingSlide, setEditingSlide] = useState<Slide | null>(null);
+  const [isSavingSlides, setIsSavingSlides] = useState(false);
 
   const { data: courses = [], isLoading } = useQuery({
     queryKey: ["ai-courses", user?.id],
@@ -397,6 +401,44 @@ const AIWorkspace = () => {
     finally { setIsGenerating(false); }
   }, [user, presDescription, queryClient]);
 
+  const saveSlideEdit = useCallback(async (updatedSlide: Slide) => {
+    if (!selectedCourse) return;
+    setIsSavingSlides(true);
+    try {
+      const newSlides = slides.map((s) => (s.id === updatedSlide.id ? updatedSlide : s));
+      const { error } = await supabase.from("ai_courses").update({ slides: newSlides as any }).eq("id", selectedCourse.id);
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["ai-courses"] });
+      setEditingSlide(null);
+      toast.success("Слайд сохранён");
+    } catch { toast.error("Ошибка сохранения"); }
+    finally { setIsSavingSlides(false); }
+  }, [selectedCourse, slides, queryClient]);
+
+  const deleteSlide = useCallback(async (slideId: string) => {
+    if (!selectedCourse) return;
+    const newSlides = slides.filter((s) => s.id !== slideId);
+    const { error } = await supabase.from("ai_courses").update({ slides: newSlides as any }).eq("id", selectedCourse.id);
+    if (error) { toast.error("Ошибка удаления"); return; }
+    queryClient.invalidateQueries({ queryKey: ["ai-courses"] });
+    if (viewingSlideIdx >= newSlides.length) setViewingSlideIdx(Math.max(0, newSlides.length - 1));
+    toast.success("Слайд удалён");
+  }, [selectedCourse, slides, queryClient, viewingSlideIdx]);
+
+  const addSlideAfter = useCallback(async (afterIdx: number) => {
+    if (!selectedCourse) return;
+    const newSlide: Slide = { id: crypto.randomUUID(), type: "content", title: "Новый слайд", content: "" };
+    const newSlides = [...slides];
+    newSlides.splice(afterIdx + 1, 0, newSlide);
+    const { error } = await supabase.from("ai_courses").update({ slides: newSlides as any }).eq("id", selectedCourse.id);
+    if (error) { toast.error("Ошибка"); return; }
+    queryClient.invalidateQueries({ queryKey: ["ai-courses"] });
+    setViewingSlideIdx(afterIdx + 1);
+    setSlideViewMode("single");
+    setEditingSlide(newSlide);
+    toast.success("Слайд добавлен");
+  }, [selectedCourse, slides, queryClient]);
+
   const handleDrop = (e: React.DragEvent, type: "course" | "presentation" = "course") => {
     e.preventDefault(); setIsDragging(false); setIsPresDropDragging(false);
     if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files, type);
@@ -438,6 +480,60 @@ const AIWorkspace = () => {
     </div>
   );
 
+  const renderSlideEditor = (slide: Slide) => (
+    <div className="space-y-3 p-4 rounded-lg border border-border bg-muted/20">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium text-foreground">Редактирование слайда</span>
+        <div className="flex gap-2">
+          <Button size="sm" variant="ghost" onClick={() => setEditingSlide(null)}>Отмена</Button>
+          <Button size="sm" onClick={() => saveSlideEdit(editingSlide!)} disabled={isSavingSlides}>
+            {isSavingSlides ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Save className="h-3.5 w-3.5 mr-1" />} Сохранить
+          </Button>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground">Заголовок</label>
+          <Input value={editingSlide?.title || ""} onChange={(e) => setEditingSlide((s) => s ? { ...s, title: e.target.value } : s)} />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground">Тип</label>
+          <select value={editingSlide?.type || "content"} onChange={(e) => setEditingSlide((s) => s ? { ...s, type: e.target.value as Slide["type"] } : s)} className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm">
+            {Object.entries(slideTypeLabels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+        </div>
+      </div>
+      {(editingSlide?.type === "content" || editingSlide?.type === "title" || editingSlide?.type === "quote" || editingSlide?.type === "summary") && (
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground">Контент</label>
+          <Textarea value={editingSlide?.content || ""} onChange={(e) => setEditingSlide((s) => s ? { ...s, content: e.target.value } : s)} className="min-h-[80px]" />
+        </div>
+      )}
+      {(editingSlide?.type === "bullets" || editingSlide?.type === "summary") && (
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground">Пункты (каждый с новой строки)</label>
+          <Textarea value={(editingSlide?.bullets || []).join("\n")} onChange={(e) => setEditingSlide((s) => s ? { ...s, bullets: e.target.value.split("\n") } : s)} className="min-h-[100px]" />
+        </div>
+      )}
+      {editingSlide?.type === "two-column" && (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Левая колонка</label>
+            <Textarea value={editingSlide?.leftColumn || ""} onChange={(e) => setEditingSlide((s) => s ? { ...s, leftColumn: e.target.value } : s)} className="min-h-[80px]" />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Правая колонка</label>
+            <Textarea value={editingSlide?.rightColumn || ""} onChange={(e) => setEditingSlide((s) => s ? { ...s, rightColumn: e.target.value } : s)} className="min-h-[80px]" />
+          </div>
+        </div>
+      )}
+      <div className="space-y-1">
+        <label className="text-xs text-muted-foreground">Заметки докладчика</label>
+        <Textarea value={editingSlide?.notes || ""} onChange={(e) => setEditingSlide((s) => s ? { ...s, notes: e.target.value } : s)} className="min-h-[60px]" />
+      </div>
+    </div>
+  );
+
   const renderPresentationPreview = () => {
     if (!selectedCourse || selectedCourse.type !== "presentation") return null;
     if (selectedCourse.status !== "completed" || slides.length === 0) return null;
@@ -448,26 +544,37 @@ const AIWorkspace = () => {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setSlideViewMode("grid")}>
+              <Button variant="ghost" size="sm" onClick={() => { setSlideViewMode("grid"); setEditingSlide(null); }}>
                 <LayoutList className="h-4 w-4 mr-1" /> Все слайды
               </Button>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" disabled={viewingSlideIdx === 0} onClick={() => setViewingSlideIdx((i) => i - 1)}>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditingSlide(editingSlide ? null : { ...currentSlide })}>
+                <Edit3 className="h-4 w-4" />
+              </Button>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => addSlideAfter(viewingSlideIdx)}>
+                <Plus className="h-4 w-4" />
+              </Button>
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => { if (slides.length > 1) deleteSlide(currentSlide.id); else toast.error("Нельзя удалить последний слайд"); }}>
+                <Trash2 className="h-4 w-4" />
+              </Button>
+              <Button variant="outline" size="sm" disabled={viewingSlideIdx === 0} onClick={() => { setViewingSlideIdx((i) => i - 1); setEditingSlide(null); }}>
                 <ChevronLeft className="h-4 w-4" />
               </Button>
               <span className="text-sm text-muted-foreground">{viewingSlideIdx + 1} / {slides.length}</span>
-              <Button variant="outline" size="sm" disabled={viewingSlideIdx === slides.length - 1} onClick={() => setViewingSlideIdx((i) => i + 1)}>
+              <Button variant="outline" size="sm" disabled={viewingSlideIdx === slides.length - 1} onClick={() => { setViewingSlideIdx((i) => i + 1); setEditingSlide(null); }}>
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
           </div>
-          <SlidePreview slide={currentSlide} index={viewingSlideIdx} large />
-          {currentSlide.notes && (
-            <div className="p-4 rounded-lg bg-accent/10 border border-border">
-              <p className="text-xs font-semibold text-foreground mb-1">Заметки докладчика:</p>
-              <p className="text-sm text-muted-foreground">{currentSlide.notes}</p>
-            </div>
+          <SlidePreview slide={editingSlide || currentSlide} index={viewingSlideIdx} large />
+          {editingSlide ? renderSlideEditor(editingSlide) : (
+            currentSlide.notes && (
+              <div className="p-4 rounded-lg bg-accent/10 border border-border">
+                <p className="text-xs font-semibold text-foreground mb-1">Заметки докладчика:</p>
+                <p className="text-sm text-muted-foreground">{currentSlide.notes}</p>
+              </div>
+            )
           )}
         </div>
       );
