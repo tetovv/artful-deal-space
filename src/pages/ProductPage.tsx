@@ -190,17 +190,35 @@ const ProductPage = () => {
                   className="flex gap-2 cursor-pointer group"
                   onClick={() => navigate(`/product/${r.id}`)}
                 >
-                  <div className="w-[65%] shrink-0 rounded-lg overflow-hidden aspect-video bg-muted relative">
-                    {r.thumbnail ? (
+                  <div
+                    className="w-[65%] shrink-0 rounded-lg overflow-hidden aspect-video bg-muted relative"
+                    onMouseEnter={(e) => {
+                      const video = e.currentTarget.querySelector("video");
+                      if (video) { video.currentTime = 0; video.play().catch(() => {}); }
+                    }}
+                    onMouseLeave={(e) => {
+                      const video = e.currentTarget.querySelector("video");
+                      if (video) { video.pause(); video.currentTime = 0; }
+                    }}
+                  >
+                    {r.video_url ? (
+                      <>
+                        <img src={r.thumbnail || ""} alt={r.title} className="w-full h-full object-cover group-hover:opacity-0 transition-opacity duration-300" />
+                        <video
+                          src={r.video_url}
+                          muted
+                          playsInline
+                          preload="none"
+                          className="absolute inset-0 w-full h-full object-cover opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                        />
+                      </>
+                    ) : r.thumbnail ? (
                       <img src={r.thumbnail} alt={r.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-muted-foreground">
                         <Play className="h-6 w-6" />
                       </div>
                     )}
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-200 flex items-center justify-center">
-                      <Play className="h-8 w-8 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200 drop-shadow-lg" fill="white" />
-                    </div>
                   </div>
                   <div className="flex-1 min-w-0 space-y-0.5">
                     <p className="text-base font-semibold text-foreground group-hover:text-primary transition-colors leading-snug">{r.title}</p>
