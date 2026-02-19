@@ -143,10 +143,9 @@ const ProductPage = () => {
 
             {/* Views + Date inline */}
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <span className="flex items-center gap-1"><Eye className="h-4 w-4" /> {item.views.toLocaleString()} просмотров</span>
+              <span>{item.views.toLocaleString()} просмотров</span>
               <span>·</span>
               <span>{new Date((raw as any).created_at || Date.now()).toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" })}</span>
-              <Badge variant="outline" className="text-[10px] ml-1">{contentTypeLabels[item.type] || item.type}</Badge>
             </div>
 
             {/* Description */}
@@ -181,7 +180,7 @@ const ProductPage = () => {
           </div>
 
           {/* Right sidebar: Related videos */}
-          <aside className="w-full lg:w-[420px] shrink-0 space-y-3">
+          <aside className="w-full lg:w-[480px] shrink-0 space-y-4">
             {related.length === 0 ? (
               <p className="text-xs text-muted-foreground">Нет рекомендаций</p>
             ) : (
@@ -191,7 +190,7 @@ const ProductPage = () => {
                   className="flex gap-3 cursor-pointer group"
                   onClick={() => navigate(`/product/${r.id}`)}
                 >
-                  <div className="w-44 shrink-0 rounded-lg overflow-hidden aspect-video bg-muted">
+                  <div className="w-48 shrink-0 rounded-lg overflow-hidden aspect-video bg-muted">
                     {r.thumbnail ? (
                       <img src={r.thumbnail} alt={r.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
                     ) : (

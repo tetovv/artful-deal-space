@@ -227,6 +227,16 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
     return () => cancelAnimationFrame(animFrameRef.current);
   }, [videoPreviewUrl, isSeeking]);
 
+  /* ── Sync edit item video URL on mount ── */
+  useEffect(() => {
+    if (editItem?.video_url && !videoPreviewUrl) {
+      setVideoPreviewUrl(editItem.video_url);
+    }
+    if (editItem?.thumbnail && !thumbnailPreviewUrl) {
+      setThumbnailPreviewUrl(editItem.thumbnail);
+    }
+  }, [editItem]);
+
   /* ── Video drag & drop ── */
   const handleVideoDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
