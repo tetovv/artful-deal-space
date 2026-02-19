@@ -3,7 +3,7 @@ import { contentItems as mockItems, contentTypeLabels, purchasedItems } from "@/
 import { ArrowLeft, Eye, Heart, ShoppingCart, Check, Play, ThumbsUp, ThumbsDown, Share2, Bookmark, MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useContentItem, useContentItems } from "@/hooks/useDbData";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -23,7 +23,31 @@ const ProductPage = () => {
   const [buying, setBuying] = useState(false);
   const [liked, setLiked] = useState(false);
   const [disliked, setDisliked] = useState(false);
+  const [bookmarked, setBookmarked] = useState(false);
+  const [bookmarking, setBookmarking] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Check if bookmarked
+  useEffect(() => {
+    if (!user || !id) return;
+    supabase.from("bookmarks").select("id").eq("user_id", user.id).eq("content_id", id).maybeSingle()
+      .then(({ data }) => { if (data) setBookmarked(true); });
+  }, [user, id]);
+
+  const toggleBookmark = async () => {
+    if (!user || !id) return;
+    setBookmarking(true);
+    try {
+      if (bookmarked) {
+        await supabase.from("bookmarks").delete().eq("user_id", user.id).eq("content_id", id);
+        setBookmarked(false);
+      } else {
+        await supabase.from("bookmarks").insert({ user_id: user.id, content_id: id });
+        setBookmarked(true);
+      }
+    } catch {}
+    setBookmarking(false);
+  };
 
   const raw = dbItem || mockItem;
   if (isLoading) return <div className="p-8 text-muted-foreground">Загрузка...</div>;
@@ -132,8 +156,15 @@ const ProductPage = () => {
                 <Button variant="outline" size="sm" className="gap-1.5">
                   <Share2 className="h-4 w-4" /> Поделиться
                 </Button>
-                <Button variant="outline" size="sm" className="gap-1.5">
-                  <Bookmark className="h-4 w-4" /> Сохранить
+                <Button
+                  variant={bookmarked ? "default" : "outline"}
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={toggleBookmark}
+                  disabled={bookmarking}
+                >
+                  <Bookmark className={cn("h-4 w-4", bookmarked && "fill-current")} />
+                  {bookmarked ? "В закладках" : "Сохранить"}
                 </Button>
               </div>
             </div>

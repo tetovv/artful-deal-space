@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import {
   Upload, X, Plus, Trash2, GripVertical, BookOpen,
   Save, Send, Eye, ChevronDown, ChevronUp,
@@ -117,6 +117,26 @@ export function BookEditor({ editItem, onClose, onSaved }: BookEditorProps) {
   const [isDraggingCover, setIsDraggingCover] = useState(false);
   const [isDraggingBook, setIsDraggingBook] = useState(false);
   const [activeTab, setActiveTab] = useState<EditorTab>("cover");
+  const [dragChapterId, setDragChapterId] = useState<string | null>(null);
+
+  // Persist form to localStorage
+  const STORAGE_KEY = editItem ? `book-editor-${editItem.id}` : "book-editor-new";
+  
+  useEffect(() => {
+    if (!editItem) {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          setForm(parsed);
+        } catch {}
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(form));
+  }, [form, STORAGE_KEY]);
 
   /* ── Cover drag & drop ── */
   const handleCoverDrop = useCallback((e: React.DragEvent) => {
@@ -267,6 +287,7 @@ export function BookEditor({ editItem, onClose, onSaved }: BookEditorProps) {
       if (error) throw error;
 
       toast.success(publishStatus === "published" ? "Книга опубликована!" : "Сохранено как черновик");
+      localStorage.removeItem(STORAGE_KEY);
       onSaved();
     } catch (e: any) {
       toast.error(`Ошибка: ${e.message}`);
@@ -440,14 +461,13 @@ export function BookEditor({ editItem, onClose, onSaved }: BookEditorProps) {
                         onDrop={handleBookFileDrop}
                         onClick={() => bookFileInputRef.current?.click()}
                         className={cn(
-                          "border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all",
+                          "border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-all",
                           isDraggingBook ? "border-primary bg-primary/5" : "border-border hover:border-primary/40 hover:bg-muted/30"
                         )}
                       >
-                        <Upload className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-                        <p className="text-sm font-medium text-foreground">Перетащите файл книги сюда</p>
-                        <p className="text-xs text-muted-foreground mt-1">или нажмите для выбора</p>
-                        <p className="text-[11px] text-muted-foreground/60 mt-2">PDF, EPUB, FB2, DOCX · до 100 МБ</p>
+                        <Upload className="h-6 w-6 text-muted-foreground mx-auto mb-2" />
+                        <p className="text-sm font-medium text-foreground">Перетащите файл или нажмите</p>
+                        <p className="text-[11px] text-muted-foreground/60 mt-1">PDF, EPUB, FB2, DOCX · до 100 МБ</p>
                       </div>
                     ) : (
                       <div className="space-y-3">
@@ -617,8 +637,32 @@ export function BookEditor({ editItem, onClose, onSaved }: BookEditorProps) {
                         key={ch.id}
                         initial={{ opacity: 0, y: 8 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className="flex items-center gap-3 p-3 rounded-lg border border-border bg-card group hover:border-primary/20 transition-colors"
+                        draggable
+                        onDragStart={(e: any) => { e.dataTransfer?.setData("chapterId", ch.id); setDragChapterId(ch.id); }}
+                        onDragEnd={() => setDragChapterId(null)}
+                        onDragOver={(e: React.DragEvent) => { e.preventDefault(); }}
+                        onDrop={(e: React.DragEvent) => {
+                          e.preventDefault();
+                          const fromId = e.dataTransfer.getData("chapterId");
+                          if (fromId && fromId !== ch.id) {
+                            setForm((p) => {
+                              const chs = [...p.chapters];
+                              const fromIdx = chs.findIndex((c) => c.id === fromId);
+                              const toIdx = chs.findIndex((c) => c.id === ch.id);
+                              if (fromIdx < 0 || toIdx < 0) return p;
+                              const [moved] = chs.splice(fromIdx, 1);
+                              chs.splice(toIdx, 0, moved);
+                              return { ...p, chapters: chs };
+                            });
+                          }
+                          setDragChapterId(null);
+                        }}
+                        className={cn(
+                          "flex items-center gap-3 p-3 rounded-lg border border-border bg-card group hover:border-primary/20 transition-colors",
+                          dragChapterId === ch.id && "opacity-50"
+                        )}
                       >
+                        <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab shrink-0" />
                         <div className="text-xs text-muted-foreground font-mono w-6 text-center shrink-0">{i + 1}</div>
                         <Input
                           value={ch.title}
