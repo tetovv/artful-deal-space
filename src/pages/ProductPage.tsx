@@ -71,7 +71,7 @@ const ProductPage = () => {
           {/* Left: Video + Info */}
           <div className="flex-1 min-w-0 space-y-4">
             {/* Video Player / Thumbnail */}
-            <div className="rounded-xl overflow-hidden bg-black relative" style={{ height: 'calc((100vh - 240px) / 1.15)', minHeight: '300px' }}>
+            <div className="rounded-xl overflow-hidden bg-black relative" style={{ height: 'calc((100vh - 240px) / 1.38)', minHeight: '280px' }}>
               {item.video_url ? (
                 <video
                   ref={videoRef}
@@ -185,7 +185,7 @@ const ProductPage = () => {
                   className="flex gap-3 cursor-pointer group"
                   onClick={() => navigate(`/product/${r.id}`)}
                 >
-                  <div className="w-[200px] shrink-0 rounded-lg overflow-hidden aspect-video bg-muted">
+                  <div className="w-[240px] shrink-0 rounded-lg overflow-hidden aspect-video bg-muted">
                     {r.thumbnail ? (
                       <img src={r.thumbnail} alt={r.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
                     ) : (
