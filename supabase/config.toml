@@ -4,4 +4,4 @@ project_id = "lcydidwtujaciqfagnyd"
 verify_jwt = false
 
 [functions.generate-course]
-verify_jwt = true
+verify_jwt = false
