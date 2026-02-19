@@ -999,21 +999,22 @@ const AIWorkspace = () => {
                   <div className="space-y-2">
                     <Label className="text-sm font-medium text-foreground">Что сгенерировать?</Label>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                      {OUTPUT_TYPE_OPTIONS.map((opt) => {
+                      {OUTPUT_TYPE_OPTIONS.map((opt, i) => {
                         const Icon = opt.icon;
                         const isSelected = selectedOutputTypes.includes(opt.value);
                         return (
                           <button
                             key={opt.value}
                             onClick={() => toggleOutputType(opt.value)}
+                            style={{ animationDelay: `${i * 75}ms`, animationFillMode: 'both' }}
                             className={cn(
-                              "flex flex-col items-center gap-1.5 p-3 rounded-lg border-2 transition-all text-center",
+                              "flex flex-col items-center gap-1.5 p-3 rounded-lg border-2 transition-all text-center animate-fade-in hover-scale",
                               isSelected
                                 ? "border-primary bg-primary/5 text-foreground"
                                 : "border-border bg-card hover:border-primary/30 text-muted-foreground"
                             )}
                           >
-                            <Icon className={cn("h-5 w-5", isSelected ? "text-primary" : "text-muted-foreground")} />
+                            <Icon className={cn("h-5 w-5 transition-transform", isSelected ? "text-primary scale-110" : "text-muted-foreground")} />
                             <span className="text-xs font-medium">{opt.label}</span>
                             <span className="text-[10px] text-muted-foreground leading-tight">{opt.description}</span>
                           </button>
@@ -1065,21 +1066,22 @@ const AIWorkspace = () => {
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-foreground">Что сгенерировать?</Label>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                  {OUTPUT_TYPE_OPTIONS.map((opt) => {
+                  {OUTPUT_TYPE_OPTIONS.map((opt, i) => {
                     const Icon = opt.icon;
                     const isSelected = selectedOutputTypes.includes(opt.value);
                     return (
                       <button
                         key={opt.value}
                         onClick={() => toggleOutputType(opt.value)}
+                        style={{ animationDelay: `${i * 75}ms`, animationFillMode: 'both' }}
                         className={cn(
-                          "flex flex-col items-center gap-1.5 p-3 rounded-lg border-2 transition-all text-center",
+                          "flex flex-col items-center gap-1.5 p-3 rounded-lg border-2 transition-all text-center animate-fade-in hover-scale",
                           isSelected
                             ? "border-primary bg-primary/5 text-foreground"
                             : "border-border bg-card hover:border-primary/30 text-muted-foreground"
                         )}
                       >
-                        <Icon className={cn("h-5 w-5", isSelected ? "text-primary" : "text-muted-foreground")} />
+                        <Icon className={cn("h-5 w-5 transition-transform", isSelected ? "text-primary scale-110" : "text-muted-foreground")} />
                         <span className="text-xs font-medium">{opt.label}</span>
                         <span className="text-[10px] text-muted-foreground leading-tight">{opt.description}</span>
                       </button>
