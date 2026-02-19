@@ -99,9 +99,23 @@ const CreatorStudio = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [detailItem, setDetailItem] = useState<string | null>(null);
   const [selectedDeal, setSelectedDeal] = useState<string | null>(null);
-  const [editorMode, setEditorMode] = useState<"none" | "create" | "edit">("none");
-  const [editorContentType, setEditorContentType] = useState<"video" | "book">("video");
-  const [editingItem, setEditingItem] = useState<any>(null);
+  const [editorMode, setEditorMode] = useState<"none" | "create" | "edit">(() => {
+    const saved = sessionStorage.getItem("studio-editor-mode");
+    return (saved === "create" || saved === "edit") ? saved : "none";
+  });
+  const [editorContentType, setEditorContentType] = useState<"video" | "book">(() => {
+    return (sessionStorage.getItem("studio-editor-type") === "book" ? "book" : "video");
+  });
+  const [editingItem, setEditingItem] = useState<any>(() => {
+    try { return JSON.parse(sessionStorage.getItem("studio-editing-item") || "null"); } catch { return null; }
+  });
+
+  // Persist editor state to sessionStorage
+  useEffect(() => {
+    sessionStorage.setItem("studio-editor-mode", editorMode);
+    sessionStorage.setItem("studio-editor-type", editorContentType);
+    sessionStorage.setItem("studio-editing-item", JSON.stringify(editingItem));
+  }, [editorMode, editorContentType, editingItem]);
   const [showOfferChat, setShowOfferChat] = useState(false);
   const [offerChatMsg, setOfferChatMsg] = useState("");
   const [viewsChartType, setViewsChartType] = useState<ChartType>("area");
