@@ -546,9 +546,9 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
         </aside>
 
         {/* Center: Video + tab content */}
-        <div className="flex-1 min-w-0 overflow-y-auto px-6 py-4 space-y-4 flex flex-col items-center">
+        <div className="flex-1 min-w-0 overflow-y-auto px-6 py-4 space-y-4">
           {/* Video upload/player */}
-          <div className="space-y-3 w-full max-w-4xl">
+          <div className="space-y-3 w-full">
             {!videoPreviewUrl ? (
               <div
                 onDragOver={(e) => { e.preventDefault(); setIsDraggingVideo(true); }}
@@ -566,7 +566,7 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
                 <p className="text-[11px] text-muted-foreground/60 mt-2">MP4, WebM, MOV · до 2 ГБ</p>
               </div>
             ) : (
-              <div className="space-y-3 max-w-3xl">
+              <div className="space-y-3 w-full">
                 <div className="relative rounded-xl overflow-hidden bg-black aspect-video max-h-[420px]">
                   <video
                     ref={videoRef}
