@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
+import { CommentsSection } from "@/components/comments/CommentsSection";
 
 const ProductPage = () => {
   const { id } = useParams();
@@ -157,6 +158,9 @@ const ProductPage = () => {
                 </div>
               )}
             </div>
+
+            {/* Comments */}
+            <CommentsSection contentId={item.id} />
 
             {/* Price / Buy section */}
             {!isFree && (
