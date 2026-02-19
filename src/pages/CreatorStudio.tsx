@@ -312,7 +312,7 @@ const CreatorStudio = () => {
           <div className="h-full">
             {editorMode === "create" && !editingItem && !editorContentType ? (
               /* ── Create Dashboard Panel ── */
-              <div className="p-6 lg:p-8 max-w-6xl space-y-6">
+              <div className="p-6 lg:p-8 max-w-6xl mx-auto space-y-6">
                 <div className="flex items-center justify-between">
                   <h1 className="text-xl font-bold text-foreground">Создание контента</h1>
                   <Button variant="ghost" size="sm" onClick={() => setEditorMode("none")}>
