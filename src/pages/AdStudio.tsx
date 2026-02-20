@@ -1,8 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
-import { deals, messages as allMessages } from "@/data/mockData";
 import { supabase } from "@/integrations/supabase/client";
-import { useRealtimeMessages } from "@/hooks/useRealtimeMessages";
 import { useAdvertiserScores } from "@/hooks/useAdvertiserScores";
+import { DealWorkspace } from "@/components/ad-studio/DealWorkspace";
 import { useAdvertiserVerification } from "@/components/ad-studio/AdvertiserSettings";
 import { AdvertiserSettings } from "@/components/ad-studio/AdvertiserSettings";
 import { BuiltInAds } from "@/components/ad-studio/BuiltInAds";
@@ -10,52 +9,15 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  Send, Paperclip, CheckCircle2, AlertTriangle, ShieldAlert, Palette,
-  Search, Star, MapPin, Users, Filter, MessageSquarePlus, Eye, Megaphone, MonitorPlay, Settings, Tag, Loader2,
+  CheckCircle2, AlertTriangle,
+  Search, MapPin, Users, Filter, MessageSquarePlus, Eye, Megaphone, MonitorPlay, Settings, Tag, Loader2,
 } from "lucide-react";
-import { Deal, DealStatus } from "@/types";
 import { cn } from "@/lib/utils";
 
-const statusColors: Record<DealStatus, string> = {
-  pending: "bg-warning/10 text-warning",
-  briefing: "bg-info/10 text-info",
-  in_progress: "bg-primary/10 text-primary",
-  review: "bg-accent/10 text-accent",
-  completed: "bg-success/10 text-success",
-  disputed: "bg-destructive/10 text-destructive",
-};
-
-const statusLabels: Record<DealStatus, string> = {
-  pending: "Ожидание",
-  briefing: "Бриф",
-  in_progress: "В работе",
-  review: "На проверке",
-  completed: "Завершено",
-  disputed: "Спор",
-};
-
-const MESSAGE_COLOR_PRESETS = [
-  { name: "Синий", outgoing: "210 100% 52%", incoming: "220 14% 20%" },
-  { name: "Бирюзовый", outgoing: "175 80% 40%", incoming: "180 10% 18%" },
-  { name: "Зелёный", outgoing: "142 70% 42%", incoming: "145 10% 18%" },
-  { name: "Фиолетовый", outgoing: "270 70% 55%", incoming: "275 12% 20%" },
-  { name: "Оранжевый", outgoing: "25 95% 53%", incoming: "20 10% 18%" },
-  { name: "Розовый", outgoing: "330 80% 55%", incoming: "335 10% 18%" },
-];
-
-const CHAT_BG_PRESETS = [
-  { name: "Стандарт", className: "bg-background" },
-  { name: "Тёмный", className: "bg-[hsl(220,15%,8%)]" },
-  { name: "Синий", className: "bg-gradient-to-b from-[hsl(220,30%,12%)] to-[hsl(220,20%,8%)]" },
-  { name: "Зелёный", className: "bg-gradient-to-b from-[hsl(160,20%,10%)] to-[hsl(160,15%,6%)]" },
-  { name: "Фиолетовый", className: "bg-gradient-to-b from-[hsl(270,20%,12%)] to-[hsl(270,15%,8%)]" },
-  { name: "Тёплый", className: "bg-gradient-to-b from-[hsl(30,15%,10%)] to-[hsl(20,12%,7%)]" },
-];
 
 const NICHES = ["Образование", "Технологии", "Дизайн", "Фото", "Музыка", "Подкасты", "Бизнес", "Видео", "Motion"];
 const GEOS = ["Россия", "Беларусь", "Казахстан", "Украина"];
@@ -322,223 +284,7 @@ function BirzhaTab({ isVerified, onGoToSettings }: { isVerified: boolean; onGoTo
   );
 }
 
-/* ── Deals Chat Tab ── */
-function DealsTab() {
-  const [selectedDeal, setSelectedDeal] = useState<Deal>(deals[0]);
-  useRealtimeMessages(selectedDeal?.id);
-  const dealMessages = allMessages.filter((m) => m.dealId === selectedDeal.id);
-  const [newMsg, setNewMsg] = useState("");
-  const { scores: advertiserScores } = useAdvertiserScores();
-  const [chatColorIdx, setChatColorIdx] = useState(0);
-  const [chatBgIdx, setChatBgIdx] = useState(0);
-
-  const sortedDeals = useMemo(() => {
-    return [...deals].sort((a, b) => {
-      const aLow = advertiserScores.get(a.advertiserId)?.isLowScore ? 1 : 0;
-      const bLow = advertiserScores.get(b.advertiserId)?.isLowScore ? 1 : 0;
-      return aLow - bLow;
-    });
-  }, [advertiserScores]);
-
-  const selectedAdvertiserScore = advertiserScores.get(selectedDeal.advertiserId);
-  const currentColors = MESSAGE_COLOR_PRESETS[chatColorIdx];
-  const currentBg = CHAT_BG_PRESETS[chatBgIdx];
-
-  return (
-    <div className="flex-1 flex">
-      {/* Deals list */}
-      <div className="w-72 border-r border-border bg-card overflow-y-auto shrink-0">
-        <div className="p-4 border-b border-border">
-          <h2 className="font-semibold text-foreground text-sm">Сделки</h2>
-        </div>
-        {sortedDeals.map((deal) => {
-          const advScore = advertiserScores.get(deal.advertiserId);
-          const isLow = advScore?.isLowScore;
-          return (
-            <div
-              key={deal.id}
-              onClick={() => setSelectedDeal(deal)}
-              className={`p-4 border-b border-border cursor-pointer hover:bg-muted/50 transition-colors ${
-                selectedDeal.id === deal.id ? "bg-muted/80" : ""
-              } ${isLow ? "opacity-60" : ""}`}
-            >
-              <div className="flex items-center gap-1.5">
-                <p className="text-sm font-medium text-card-foreground truncate flex-1">{deal.title}</p>
-                {isLow && (
-                  <Tooltip>
-                    <TooltipTrigger>
-                      <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0" />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="text-xs">Низкий Partner Score ({advScore!.partnerScore.toFixed(1)})</p>
-                    </TooltipContent>
-                  </Tooltip>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">{deal.advertiserName} → {deal.creatorName}</p>
-              <div className="flex items-center justify-between mt-2">
-                <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${statusColors[deal.status]}`}>
-                  {statusLabels[deal.status]}
-                </span>
-                <span className="text-[10px] text-muted-foreground">{deal.budget.toLocaleString()} ₽</span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Chat + Deal details */}
-      <div className="flex-1 flex flex-col">
-        {/* Deal header */}
-        <div className="p-4 border-b border-border bg-card">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="font-semibold text-foreground">{selectedDeal.title}</h3>
-              <p className="text-xs text-muted-foreground">{selectedDeal.description}</p>
-            </div>
-            <div className="flex items-center gap-2">
-              {selectedAdvertiserScore?.isLowScore && (
-                <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-destructive/10 text-destructive text-xs font-medium">
-                  <ShieldAlert className="h-3.5 w-3.5" />
-                  Partner Score: {selectedAdvertiserScore.partnerScore.toFixed(1)}
-                </div>
-              )}
-              <span className={`text-xs font-medium px-2 py-1 rounded ${statusColors[selectedDeal.status]}`}>
-                {statusLabels[selectedDeal.status]}
-              </span>
-              {selectedDeal.status === "in_progress" && (
-                <Button size="sm" variant="outline"><CheckCircle2 className="h-3 w-3 mr-1" />Подтвердить</Button>
-              )}
-            </div>
-          </div>
-
-          {/* Milestones */}
-          <div className="flex gap-2 mt-3">
-            {selectedDeal.milestones.map((m, i) => (
-              <div key={m.id} className="flex items-center gap-1.5">
-                <div className={`h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                  m.completed ? "bg-success text-success-foreground" : "bg-muted text-muted-foreground"
-                }`}>
-                  {m.completed ? "✓" : i + 1}
-                </div>
-                <span className="text-[11px] text-muted-foreground hidden lg:inline">{m.title}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Messages */}
-        <div className={cn("flex-1 overflow-y-auto p-4 space-y-4", currentBg.className)}>
-          {dealMessages.map((msg) => {
-            const isMe = msg.senderId === "u1";
-            return (
-              <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
-                <div
-                  className="max-w-[70%] rounded-xl p-3 text-sm"
-                  style={{
-                    backgroundColor: `hsl(${isMe ? currentColors.outgoing : currentColors.incoming})`,
-                    color: "white",
-                  }}
-                >
-                  <p className="text-[10px] font-medium mb-1 opacity-70">{msg.senderName}</p>
-                  <p>{msg.content}</p>
-                  {msg.attachment && (
-                    <div className="mt-2 flex items-center gap-1 text-[10px] opacity-70">
-                      <Paperclip className="h-3 w-3" /> {msg.attachment}
-                    </div>
-                  )}
-                  <p className="text-[10px] opacity-50 mt-1 text-right">
-                    {new Date(msg.timestamp).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}
-                  </p>
-                </div>
-              </div>
-            );
-          })}
-          {dealMessages.length === 0 && (
-            <div className="text-center text-sm text-muted-foreground py-12">Нет сообщений</div>
-          )}
-        </div>
-
-        {/* Input + Settings */}
-        <div className="p-3 border-t border-border bg-card flex gap-2 items-center">
-          <Button size="icon" variant="ghost"><Paperclip className="h-4 w-4" /></Button>
-          <Input
-            value={newMsg}
-            onChange={(e) => setNewMsg(e.target.value)}
-            placeholder="Написать сообщение..."
-            className="flex-1 bg-background"
-          />
-          <Button size="icon"><Send className="h-4 w-4" /></Button>
-
-          {/* Chat customization */}
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button size="icon" variant="ghost" className="shrink-0">
-                <Palette className="h-4 w-4" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-72 p-4 space-y-4">
-              <p className="text-sm font-semibold text-foreground">Оформление чата</p>
-              <div className="space-y-2">
-                <p className="text-xs font-medium text-muted-foreground">Цвет сообщений</p>
-                <div className="grid grid-cols-6 gap-2">
-                  {MESSAGE_COLOR_PRESETS.map((preset, i) => (
-                    <Tooltip key={preset.name}>
-                      <TooltipTrigger asChild>
-                        <button
-                          onClick={() => setChatColorIdx(i)}
-                          className={cn(
-                            "h-8 w-8 rounded-full border-2 transition-all",
-                            chatColorIdx === i ? "border-foreground scale-110" : "border-transparent hover:scale-105"
-                          )}
-                          style={{ backgroundColor: `hsl(${preset.outgoing})` }}
-                        />
-                      </TooltipTrigger>
-                      <TooltipContent><p className="text-xs">{preset.name}</p></TooltipContent>
-                    </Tooltip>
-                  ))}
-                </div>
-              </div>
-              <div className="space-y-2">
-                <p className="text-xs font-medium text-muted-foreground">Фон чата</p>
-                <div className="grid grid-cols-3 gap-2">
-                  {CHAT_BG_PRESETS.map((bg, i) => (
-                    <button
-                      key={bg.name}
-                      onClick={() => setChatBgIdx(i)}
-                      className={cn(
-                        "h-12 rounded-lg border-2 transition-all text-[10px] font-medium text-muted-foreground flex items-end justify-center pb-1",
-                        bg.className,
-                        chatBgIdx === i ? "border-foreground" : "border-border hover:border-primary/30"
-                      )}
-                    >
-                      {bg.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <p className="text-xs font-medium text-muted-foreground">Превью</p>
-                <div className={cn("rounded-lg p-3 space-y-2 border border-border", currentBg.className)}>
-                  <div className="flex justify-end">
-                    <div className="rounded-lg px-3 py-1.5 text-[11px] text-white" style={{ backgroundColor: `hsl(${currentColors.outgoing})` }}>
-                      Привет! 👋
-                    </div>
-                  </div>
-                  <div className="flex justify-start">
-                    <div className="rounded-lg px-3 py-1.5 text-[11px] text-white" style={{ backgroundColor: `hsl(${currentColors.incoming})` }}>
-                      Здравствуйте!
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </PopoverContent>
-          </Popover>
-        </div>
-      </div>
-    </div>
-  );
-}
+/* ── Deals Tab — now uses DealWorkspace ── */
 
 /* ── Main AdStudio Page ── */
 type AdStudioTab = "birzha" | "deals" | "builtin" | "settings";
@@ -580,7 +326,7 @@ const AdStudio = () => {
 
       {/* Tab content */}
       {activeTab === "birzha" && <BirzhaTab isVerified={isVerified} onGoToSettings={goToSettings} />}
-      {activeTab === "deals" && <DealsTab />}
+      {activeTab === "deals" && <DealWorkspace />}
       {activeTab === "builtin" && <BuiltInAds isVerified={isVerified} onGoToSettings={goToSettings} />}
       {activeTab === "settings" && <AdvertiserSettings />}
     </div>
