@@ -173,6 +173,9 @@ const INITIAL_GEN_STAGES: GenStage[] = [
 ];
 
 const STAGE_TIMEOUT_MS = 30_000;
+const LLM_STAGE_TIMEOUT_MS = 120_000; // LLM stages need more time
+const MIN_QUALITY_CHARS = 200; // Minimum total chars for quality check
+const MIN_QUALITY_CHUNKS = 1;
 
 /** Wrap a promise with a timeout */
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
@@ -185,6 +188,23 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
       (err) => { clearTimeout(timer); reject(err); },
     );
   });
+}
+
+/** Check extracted content quality — returns error message or null */
+function checkContentQuality(docs: { text: string; file_name: string }[]): string | null {
+  if (!docs.length) return "Не удалось извлечь текст ни из одного источника.";
+  const totalChars = docs.reduce((sum, d) => sum + d.text.trim().length, 0);
+  if (totalChars < MIN_QUALITY_CHARS) {
+    return `Слишком мало текста (${totalChars} символов). Минимум — ${MIN_QUALITY_CHARS}. Загрузите файл с большим количеством текстового контента.`;
+  }
+  // Check if content is mostly garbage (non-letter ratio)
+  const allText = docs.map(d => d.text).join("");
+  const letterCount = (allText.match(/[\p{L}\p{N}]/gu) || []).length;
+  const ratio = letterCount / allText.length;
+  if (ratio < 0.3) {
+    return `Контент содержит слишком мало читаемого текста (${Math.round(ratio * 100)}% букв/цифр). Возможно, файл повреждён или содержит только изображения.`;
+  }
+  return null;
 }
 
 /** Call edge function with detailed error reporting */
@@ -801,14 +821,14 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
   };
 
   const runStagePlan = async (projId: string): Promise<void> => {
-    await withTimeout(callEdge("project_plan", { project_id: projId }), STAGE_TIMEOUT_MS, "project_plan");
+    await withTimeout(callEdge("project_plan", { project_id: projId }), LLM_STAGE_TIMEOUT_MS, "project_plan");
   };
 
   const runStageGenerate = async (projId: string, format: OutputFormat): Promise<string | null> => {
     const actionType = formatToActionType(format);
     const actData = await withTimeout(
       callEdge("artifact_act", { project_id: projId, action_type: actionType, context: `Format: ${format}` }),
-      STAGE_TIMEOUT_MS, "artifact_act"
+      LLM_STAGE_TIMEOUT_MS, "artifact_act"
     );
     return actData?.artifact_id || null;
   };
@@ -925,8 +945,10 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
         extractedDocs.push({ text: intake.pastedText.trim(), file_name: "pasted_text.txt" });
       }
 
-      if (!extractedDocs.length) {
-        const err = { functionName: "extractText", status: 0, body: "Не удалось извлечь текст ни из одного источника" } as EdgeError;
+      // Quality check on extracted content
+      const qualityError = checkContentQuality(extractedDocs);
+      if (qualityError) {
+        const err = { functionName: "quality_check", status: 0, body: qualityError } as EdgeError;
         updateStage("uploading", "error", err);
         throw err;
       }
@@ -1205,7 +1227,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
             {GOAL_OPTIONS.map((opt) => (
               <button key={opt.value} onClick={() => {
                 setIntake((p) => ({ ...p, goal: opt.value }));
-                setTimeout(() => setIntakeStep(2), 200);
+                setTimeout(() => setIntakeStep(2), 300);
               }}
                 className={cn("w-full text-left p-4 rounded-lg border transition-all text-sm",
                   intake.goal === opt.value ? "border-primary bg-primary/10 text-foreground" : "border-border hover:border-primary/30 text-muted-foreground")}>
@@ -1221,7 +1243,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
             {KNOWLEDGE_LEVELS.map((opt) => (
               <button key={opt.value} onClick={() => {
                 setIntake((p) => ({ ...p, knowledgeLevel: opt.value }));
-                setTimeout(() => setIntakeStep(3), 200);
+                setTimeout(() => setIntakeStep(3), 300);
               }}
                 className={cn("w-full text-left p-4 rounded-lg border transition-all",
                   intake.knowledgeLevel === opt.value ? "border-primary bg-primary/10" : "border-border hover:border-primary/30")}>
@@ -1239,7 +1261,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
               {DEPTH_OPTIONS.map((opt) => (
                 <button key={opt.value} onClick={() => {
                   setIntake((p) => ({ ...p, depth: opt.value }));
-                  setTimeout(() => setIntakeStep(4), 200);
+                  setTimeout(() => setIntakeStep(4), 300);
                 }}
                   className={cn("flex-1 p-4 rounded-lg border text-center transition-all text-sm",
                     intake.depth === opt.value ? "border-primary bg-primary/10 text-foreground" : "border-border hover:border-primary/30 text-muted-foreground")}>
@@ -1290,9 +1312,24 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
           <Button variant="ghost" size="sm" onClick={() => intakeStep > 0 ? setIntakeStep((s) => (s - 1) as IntakeStep) : null} disabled={intakeStep === 0}>
             <ChevronLeft className="h-4 w-4 mr-1" /> Назад
           </Button>
-          {/* Steps 1-3 auto-advance on click; only show Далее for step 0 (sources) and step 4 (optional) */}
+          {/* Show Далее for all steps where it makes sense */}
           {intakeStep === 0 && (
             <Button size="sm" disabled={!canProceed} onClick={() => setIntakeStep(1)}>
+              Далее <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          )}
+          {intakeStep === 1 && (
+            <Button size="sm" disabled={!intake.goal} onClick={() => setIntakeStep(2)}>
+              Далее <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          )}
+          {intakeStep === 2 && (
+            <Button size="sm" disabled={!intake.knowledgeLevel} onClick={() => setIntakeStep(3)}>
+              Далее <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          )}
+          {intakeStep === 3 && (
+            <Button size="sm" disabled={!intake.depth} onClick={() => setIntakeStep(4)}>
               Далее <ChevronRight className="h-4 w-4 ml-1" />
             </Button>
           )}
