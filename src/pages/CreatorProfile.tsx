@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { creators, contentItems } from "@/data/mockData";
 import { ContentCard } from "@/components/content/ContentCard";
-import { ArrowLeft, MapPin, Users, CheckCircle, Eye, Package, Handshake, User, Crown, Trophy, Rss, Globe, Building2, ShieldCheck } from "lucide-react";
+import { ArrowLeft, MapPin, Users, CheckCircle, Eye, Package, Handshake, User, Crown, Trophy, Rss, Globe, Building2, ShieldCheck, Tag, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PageTransition } from "@/components/layout/PageTransition";
@@ -261,6 +261,26 @@ const CreatorProfile = () => {
               </div>
               <Badge variant="secondary" className="text-xs flex-shrink-0">Рекламодатель</Badge>
             </div>
+            {(brandData.business_category || brandData.contact_email) && (
+              <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                {brandData.business_category && (
+                  <span className="flex items-center gap-1">
+                    <Tag className="h-3.5 w-3.5" />
+                    {{
+                      ecommerce: "E-commerce", saas: "SaaS / IT", finance: "Финансы",
+                      education: "Образование", health: "Здоровье", food: "Еда и напитки",
+                      fashion: "Мода и красота", travel: "Путешествия", entertainment: "Развлечения",
+                      realestate: "Недвижимость", auto: "Авто", other: "Другое",
+                    }[brandData.business_category] || brandData.business_category}
+                  </span>
+                )}
+                {brandData.contact_email && (
+                  <a href={`mailto:${brandData.contact_email}`} className="flex items-center gap-1 text-primary hover:underline">
+                    <Mail className="h-3.5 w-3.5" /> {brandData.contact_email}
+                  </a>
+                )}
+              </div>
+            )}
             {brandData.brand_description && (
               <p className="text-sm text-muted-foreground">{brandData.brand_description}</p>
             )}

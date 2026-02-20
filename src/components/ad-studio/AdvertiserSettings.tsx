@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Save, Building2, Landmark, ShieldCheck, CheckCircle2, Clock, Palette, Globe, Upload, X, ImageIcon } from "lucide-react";
+import { Save, Building2, Landmark, ShieldCheck, CheckCircle2, Clock, Palette, Globe, Upload, X, ImageIcon, Mail, Tag } from "lucide-react";
 import { toast } from "sonner";
 
 interface AdvSettings {
@@ -30,6 +30,8 @@ interface AdvSettings {
   brand_website: string;
   brand_description: string;
   brand_logo_url: string;
+  business_category: string;
+  contact_email: string;
 }
 
 const defaults: AdvSettings = {
@@ -50,6 +52,8 @@ const defaults: AdvSettings = {
   brand_website: "",
   brand_description: "",
   brand_logo_url: "",
+  business_category: "",
+  contact_email: "",
 };
 
 function VerificationBadge({ verified }: { verified: boolean }) {
@@ -130,6 +134,8 @@ export function AdvertiserSettings() {
         brand_website: (settings as any).brand_website || "",
         brand_description: (settings as any).brand_description || "",
         brand_logo_url: (settings as any).brand_logo_url || "",
+        business_category: (settings as any).business_category || "",
+        contact_email: (settings as any).contact_email || "",
       });
     }
     setDirty(false);
@@ -219,6 +225,33 @@ export function AdvertiserSettings() {
                   <Label className="text-xs flex items-center gap-1"><Globe className="h-3 w-3" /> Сайт</Label>
                   <Input value={form.brand_website} onChange={(e) => update("brand_website", e.target.value)}
                     placeholder="https://example.com" className="text-sm h-9" maxLength={200} type="url" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs flex items-center gap-1"><Tag className="h-3 w-3" /> Категория бизнеса</Label>
+                  <Select value={form.business_category || ""} onValueChange={(v) => update("business_category", v)}>
+                    <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Выберите категорию" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ecommerce">E-commerce</SelectItem>
+                      <SelectItem value="saas">SaaS / IT</SelectItem>
+                      <SelectItem value="finance">Финансы</SelectItem>
+                      <SelectItem value="education">Образование</SelectItem>
+                      <SelectItem value="health">Здоровье</SelectItem>
+                      <SelectItem value="food">Еда и напитки</SelectItem>
+                      <SelectItem value="fashion">Мода и красота</SelectItem>
+                      <SelectItem value="travel">Путешествия</SelectItem>
+                      <SelectItem value="entertainment">Развлечения</SelectItem>
+                      <SelectItem value="realestate">Недвижимость</SelectItem>
+                      <SelectItem value="auto">Авто</SelectItem>
+                      <SelectItem value="other">Другое</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs flex items-center gap-1"><Mail className="h-3 w-3" /> Email для авторов</Label>
+                  <Input value={form.contact_email} onChange={(e) => update("contact_email", e.target.value)}
+                    placeholder="ads@company.com" className="text-sm h-9" maxLength={200} type="email" />
                 </div>
               </div>
               <div className="space-y-1">

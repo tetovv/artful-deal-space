@@ -1052,6 +1052,7 @@ export type Database = {
           brand_logo_url: string | null
           brand_name: string | null
           brand_website: string | null
+          business_category: string | null
           business_inn: string | null
           business_name: string | null
           business_ogrn: string | null
@@ -1059,6 +1060,7 @@ export type Database = {
           business_verified: boolean | null
           channel_description: string | null
           channel_name: string | null
+          contact_email: string | null
           created_at: string
           default_language: string | null
           default_monetization: string | null
@@ -1084,6 +1086,7 @@ export type Database = {
           brand_logo_url?: string | null
           brand_name?: string | null
           brand_website?: string | null
+          business_category?: string | null
           business_inn?: string | null
           business_name?: string | null
           business_ogrn?: string | null
@@ -1091,6 +1094,7 @@ export type Database = {
           business_verified?: boolean | null
           channel_description?: string | null
           channel_name?: string | null
+          contact_email?: string | null
           created_at?: string
           default_language?: string | null
           default_monetization?: string | null
@@ -1116,6 +1120,7 @@ export type Database = {
           brand_logo_url?: string | null
           brand_name?: string | null
           brand_website?: string | null
+          business_category?: string | null
           business_inn?: string | null
           business_name?: string | null
           business_ogrn?: string | null
@@ -1123,6 +1128,7 @@ export type Database = {
           business_verified?: boolean | null
           channel_description?: string | null
           channel_name?: string | null
+          contact_email?: string | null
           created_at?: string
           default_language?: string | null
           default_monetization?: string | null
@@ -1235,7 +1241,9 @@ export type Database = {
           brand_logo_url: string
           brand_name: string
           brand_website: string
+          business_category: string
           business_verified: boolean
+          contact_email: string
           ord_verified: boolean
           user_id: string
         }[]
