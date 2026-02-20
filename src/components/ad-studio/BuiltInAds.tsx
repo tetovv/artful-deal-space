@@ -38,6 +38,8 @@ const statusLabels: Record<CampaignStatus, string> = {
   draft: "Черновик",
   completed: "Завершена",
   error: "Ошибка",
+  finalizing: "Завершение…",
+  ord_error: "Ошибка ОРД",
 };
 
 const statusStyles: Record<CampaignStatus, string> = {
@@ -46,6 +48,8 @@ const statusStyles: Record<CampaignStatus, string> = {
   draft: "bg-muted text-muted-foreground border-muted-foreground/20",
   completed: "bg-primary/15 text-primary border-primary/30",
   error: "bg-destructive/15 text-destructive border-destructive/30",
+  finalizing: "bg-warning/15 text-warning border-warning/30",
+  ord_error: "bg-destructive/15 text-destructive border-destructive/30",
 };
 
 const dateRangeLabels: Record<DateRange, string> = {

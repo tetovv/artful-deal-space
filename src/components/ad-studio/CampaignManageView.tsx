@@ -8,18 +8,21 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose,
+} from "@/components/ui/dialog";
+import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
   ArrowLeft, Eye, MousePointerClick, TrendingUp, BarChart3, Pause, Play,
   MoreVertical, Copy, Archive, Ban, CalendarDays, AlertTriangle, CheckCircle2,
   ImagePlus, ExternalLink, RefreshCw, Send, Info, Globe, Link2, Save,
-  Lock, PlusCircle, XCircle, ShieldCheck, ClipboardCopy,
+  Lock, PlusCircle, XCircle, ShieldCheck, ClipboardCopy, Loader2, Download, StopCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 
 // ─── Types ───
-export type CampaignStatus = "active" | "paused" | "draft" | "completed" | "error";
+export type CampaignStatus = "active" | "paused" | "draft" | "completed" | "error" | "finalizing" | "ord_error";
 export type Placement = "banner" | "feed" | "recommendations";
 
 export interface Campaign {
@@ -53,6 +56,8 @@ const statusLabels: Record<CampaignStatus, string> = {
   draft: "Черновик",
   completed: "Завершена",
   error: "Ошибка",
+  finalizing: "Завершение…",
+  ord_error: "Ошибка ОРД",
 };
 
 const statusStyles: Record<CampaignStatus, string> = {
@@ -61,6 +66,8 @@ const statusStyles: Record<CampaignStatus, string> = {
   draft: "bg-muted text-muted-foreground border-muted-foreground/20",
   completed: "bg-primary/15 text-primary border-primary/30",
   error: "bg-destructive/15 text-destructive border-destructive/30",
+  finalizing: "bg-warning/15 text-warning border-warning/30",
+  ord_error: "bg-destructive/15 text-destructive border-destructive/30",
 };
 
 function formatNum(n: number): string {
@@ -74,7 +81,11 @@ const dateRangeLabels: Record<DateRange, string> = { today: "Сегодня", "7
 
 // ─── Helpers ───
 function isStarted(campaign: Campaign): boolean {
-  return campaign.status === "active" || campaign.status === "paused" || campaign.status === "completed";
+  return ["active", "paused", "completed", "finalizing", "ord_error"].includes(campaign.status);
+}
+
+function isTerminal(campaign: Campaign): boolean {
+  return ["completed", "finalizing", "ord_error"].includes(campaign.status);
 }
 
 function hasErid(campaign: Campaign): boolean {
@@ -83,6 +94,10 @@ function hasErid(campaign: Campaign): boolean {
 
 function isLocked(campaign: Campaign): boolean {
   return isStarted(campaign) || hasErid(campaign);
+}
+
+function isFullyLocked(campaign: Campaign): boolean {
+  return isTerminal(campaign);
 }
 
 // ─── ERID Badge ───
@@ -235,7 +250,7 @@ function OverviewTab({ campaign }: { campaign: Campaign }) {
   const dailyPace = daysElapsed > 0 ? Math.round(campaign.spent / daysElapsed) : 0;
   const daysRemaining = daysTotal > 0 ? Math.max(0, daysTotal - daysElapsed) : null;
 
-  const hasIssues = campaign.impressions === 0 || campaign.status === "error" || budgetPercent >= 100;
+  const hasIssues = campaign.impressions === 0 || campaign.status === "error" || campaign.status === "ord_error" || budgetPercent >= 100;
 
   return (
     <div className="space-y-4">
@@ -300,7 +315,7 @@ function OverviewTab({ campaign }: { campaign: Campaign }) {
         <CardContent className="p-5 space-y-3">
           <div className="flex items-center justify-between">
             <p className="text-sm font-semibold text-card-foreground">Бюджет и пейсинг</p>
-            {isStarted(campaign) && campaign.status !== "completed" && (
+            {isStarted(campaign) && !isTerminal(campaign) && (
               <Button size="sm" variant="outline" className="h-8 text-sm gap-1.5" onClick={() => setTopUpOpen(!topUpOpen)}>
                 <PlusCircle className="h-3.5 w-3.5" />
                 Пополнить бюджет
@@ -755,19 +770,100 @@ function OrdTab({ campaign }: { campaign: Campaign }) {
 // ─── Main CampaignManageView ───
 // ═══════════════════════════════════════════════════════
 export function CampaignManageView({ campaign: initialCampaign, onBack }: { campaign: Campaign; onBack: () => void }) {
+  const [terminateOpen, setTerminateOpen] = useState(false);
+  const [campaignStatus, setCampaignStatus] = useState<CampaignStatus>(initialCampaign.status);
+
   // Enrich campaign with mock ORD data for demo
   const campaign: Campaign = {
     ...initialCampaign,
-    erid: initialCampaign.erid || (isStarted(initialCampaign) ? "2VfnxxYzBs8" : undefined),
+    status: campaignStatus,
+    erid: initialCampaign.erid || (isStarted({ ...initialCampaign, status: campaignStatus }) ? "2VfnxxYzBs8" : undefined),
     ordProvider: initialCampaign.ordProvider || "ОРД Яндекс",
-    ordStatus: initialCampaign.ordStatus || (isStarted(initialCampaign) ? "connected" : "pending"),
-    ordLastSync: initialCampaign.ordLastSync || (isStarted(initialCampaign) ? "19.02.2026 14:33" : undefined),
-    creativeLocked: isStarted(initialCampaign) || !!initialCampaign.erid,
+    ordStatus: campaignStatus === "ord_error" ? "error" : initialCampaign.ordStatus || (isStarted({ ...initialCampaign, status: campaignStatus }) ? "connected" : "pending"),
+    ordLastSync: initialCampaign.ordLastSync || (isStarted({ ...initialCampaign, status: campaignStatus }) ? "19.02.2026 14:33" : undefined),
+    creativeLocked: isStarted({ ...initialCampaign, status: campaignStatus }) || !!initialCampaign.erid,
+  };
+
+  const canTerminate = campaignStatus === "active" || campaignStatus === "paused";
+  const isFinalizing = campaignStatus === "finalizing";
+  const isOrdError = campaignStatus === "ord_error";
+  const isCompleted = campaignStatus === "completed";
+  const fullyLocked = isTerminal(campaign);
+
+  const handleTerminate = () => {
+    setTerminateOpen(false);
+    setCampaignStatus("finalizing");
+    toast.info("Отправляем финальную статистику в ОРД…");
+    // Simulate async ORD sync
+    setTimeout(() => {
+      // Simulate success (80%) or failure (20%)
+      if (Math.random() > 0.2) {
+        setCampaignStatus("completed");
+        toast.success("Кампания завершена. Данные отправлены в ОРД.");
+      } else {
+        setCampaignStatus("ord_error");
+        toast.error("Ошибка отправки данных в ОРД. Повторите попытку.");
+      }
+    }, 3000);
+  };
+
+  const handleRetryOrd = () => {
+    setCampaignStatus("finalizing");
+    toast.info("Повторная отправка данных в ОРД…");
+    setTimeout(() => {
+      if (Math.random() > 0.3) {
+        setCampaignStatus("completed");
+        toast.success("Кампания завершена. Данные отправлены в ОРД.");
+      } else {
+        setCampaignStatus("ord_error");
+        toast.error("Ошибка отправки данных в ОРД. Повторите попытку.");
+      }
+    }, 3000);
   };
 
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="w-full max-w-[1120px] mx-auto px-6 py-6 space-y-5">
+
+        {/* Finalizing banner */}
+        {isFinalizing && (
+          <div className="flex items-center gap-3 rounded-lg border border-warning/30 bg-warning/10 p-4 animate-pulse">
+            <Loader2 className="h-5 w-5 text-warning animate-spin flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-card-foreground">Завершение кампании…</p>
+              <p className="text-xs text-muted-foreground">Отправляем финальную статистику в ОРД. Редактирование недоступно.</p>
+            </div>
+          </div>
+        )}
+
+        {/* ORD Error banner */}
+        {isOrdError && (
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/10 p-4">
+            <div className="flex items-center gap-3">
+              <XCircle className="h-5 w-5 text-destructive flex-shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-card-foreground">Ошибка отправки в ОРД</p>
+                <p className="text-xs text-muted-foreground">Финальная статистика не была доставлена. Повторите отправку.</p>
+              </div>
+            </div>
+            <Button size="sm" variant="outline" className="h-9 text-sm gap-1.5 border-destructive/30 text-destructive hover:bg-destructive/10" onClick={handleRetryOrd}>
+              <RefreshCw className="h-3.5 w-3.5" />
+              Повторить
+            </Button>
+          </div>
+        )}
+
+        {/* Completed banner */}
+        {isCompleted && (
+          <div className="flex items-center gap-3 rounded-lg border border-primary/30 bg-primary/10 p-4">
+            <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-card-foreground">Кампания завершена</p>
+              <p className="text-xs text-muted-foreground">Данные отправлены в ОРД. Доступны: просмотр, экспорт, архивация и дублирование.</p>
+            </div>
+          </div>
+        )}
+
         {/* Sticky header */}
         <div className="sticky top-0 z-20 bg-background/80 backdrop-blur-sm -mx-6 px-6 py-3 -mt-6 mb-1 border-b border-border/50">
           <div className="flex items-center justify-between gap-4">
@@ -782,6 +878,7 @@ export function CampaignManageView({ campaign: initialCampaign, onBack }: { camp
                 </div>
                 <div className="flex items-center gap-2 mt-0.5">
                   <Badge variant="outline" className={`text-[10px] ${statusStyles[campaign.status]}`}>
+                    {campaign.status === "finalizing" && <Loader2 className="h-2.5 w-2.5 mr-1 animate-spin" />}
                     {statusLabels[campaign.status]}
                   </Badge>
                   <span className="text-xs text-muted-foreground">{placementLabels[campaign.placement]}</span>
@@ -802,13 +899,13 @@ export function CampaignManageView({ campaign: initialCampaign, onBack }: { camp
             {/* Actions */}
             <div className="flex items-center gap-2 flex-shrink-0">
               {campaign.status === "active" && (
-                <Button size="sm" variant="outline" className="h-9 text-sm gap-1.5">
+                <Button size="sm" variant="outline" className="h-9 text-sm gap-1.5" disabled={isFinalizing}>
                   <Pause className="h-3.5 w-3.5" />
                   Приостановить
                 </Button>
               )}
               {campaign.status === "paused" && (
-                <Button size="sm" className="h-9 text-sm gap-1.5">
+                <Button size="sm" className="h-9 text-sm gap-1.5" disabled={isFinalizing}>
                   <Play className="h-3.5 w-3.5" />
                   Возобновить
                 </Button>
@@ -817,6 +914,22 @@ export function CampaignManageView({ campaign: initialCampaign, onBack }: { camp
                 <Button size="sm" className="h-9 text-sm gap-1.5">
                   <Play className="h-3.5 w-3.5" />
                   Запустить
+                </Button>
+              )}
+
+              {/* Terminate button — prominent danger action */}
+              {canTerminate && (
+                <Button size="sm" variant="outline" className="h-9 text-sm gap-1.5 border-destructive/40 text-destructive hover:bg-destructive/10" onClick={() => setTerminateOpen(true)}>
+                  <StopCircle className="h-3.5 w-3.5" />
+                  Завершить
+                </Button>
+              )}
+
+              {/* Retry ORD — for ord_error state */}
+              {isOrdError && (
+                <Button size="sm" variant="outline" className="h-9 text-sm gap-1.5 border-destructive/30 text-destructive hover:bg-destructive/10" onClick={handleRetryOrd}>
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  Повторить ОРД
                 </Button>
               )}
 
@@ -830,12 +943,17 @@ export function CampaignManageView({ campaign: initialCampaign, onBack }: { camp
                   <DropdownMenuItem className="text-sm gap-2">
                     <Copy className="h-3.5 w-3.5" /> Дублировать (новый ERID)
                   </DropdownMenuItem>
-                  {(campaign.status === "active" || campaign.status === "paused") && (
+                  {isCompleted && (
                     <DropdownMenuItem className="text-sm gap-2">
+                      <Download className="h-3.5 w-3.5" /> Экспорт отчёта
+                    </DropdownMenuItem>
+                  )}
+                  {canTerminate && (
+                    <DropdownMenuItem className="text-sm gap-2 text-destructive" onClick={() => setTerminateOpen(true)}>
                       <Ban className="h-3.5 w-3.5" /> Завершить досрочно
                     </DropdownMenuItem>
                   )}
-                  <DropdownMenuItem className="text-sm gap-2 text-destructive">
+                  <DropdownMenuItem className="text-sm gap-2 text-destructive" disabled={isFinalizing}>
                     <Archive className="h-3.5 w-3.5" /> Архивировать
                   </DropdownMenuItem>
                 </DropdownMenuContent>
@@ -854,11 +972,66 @@ export function CampaignManageView({ campaign: initialCampaign, onBack }: { camp
           </TabsList>
 
           <TabsContent value="overview"><OverviewTab campaign={campaign} /></TabsContent>
-          <TabsContent value="settings"><SettingsTab campaign={campaign} /></TabsContent>
+          <TabsContent value="settings">
+            {fullyLocked ? (
+              <div className="flex items-center gap-3 rounded-lg border border-muted-foreground/20 bg-muted/10 p-6">
+                <Lock className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-card-foreground">Настройки заблокированы</p>
+                  <p className="text-xs text-muted-foreground">Кампания {campaign.status === "completed" ? "завершена" : "в процессе завершения"}. Редактирование невозможно.</p>
+                </div>
+              </div>
+            ) : (
+              <SettingsTab campaign={campaign} />
+            )}
+          </TabsContent>
           <TabsContent value="creative"><CreativeTab campaign={campaign} /></TabsContent>
           <TabsContent value="ord"><OrdTab campaign={campaign} /></TabsContent>
         </Tabs>
       </div>
+
+      {/* ─── Termination Confirmation Modal ─── */}
+      <Dialog open={terminateOpen} onOpenChange={setTerminateOpen}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <StopCircle className="h-5 w-5" />
+              Завершить кампанию досрочно?
+            </DialogTitle>
+            <DialogDescription className="pt-2 space-y-3 text-sm">
+              <p>Это действие <strong className="text-card-foreground">необратимо</strong>. После подтверждения:</p>
+              <ul className="space-y-2 pl-1">
+                <li className="flex items-start gap-2">
+                  <Ban className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
+                  <span>Показ рекламы будет <strong className="text-card-foreground">немедленно остановлен</strong></span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <Lock className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                  <span><strong className="text-card-foreground">Возобновить кампанию будет невозможно</strong> — статус станет «Завершена»</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <Send className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                  <span>Финальная статистика будет <strong className="text-card-foreground">отправлена в ОРД</strong> для закрытия маркировки</span>
+                </li>
+              </ul>
+              <div className="rounded-lg border border-warning/30 bg-warning/10 p-3 mt-2">
+                <p className="text-xs text-muted-foreground">
+                  Чтобы запустить рекламу с другим креативом или настройками, используйте «Дублировать кампанию» — будет создана новая кампания с новым ERID.
+                </p>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <DialogClose asChild>
+              <Button variant="outline" className="text-sm">Отмена</Button>
+            </DialogClose>
+            <Button variant="destructive" className="text-sm gap-1.5" onClick={handleTerminate}>
+              <StopCircle className="h-3.5 w-3.5" />
+              Завершить кампанию
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
