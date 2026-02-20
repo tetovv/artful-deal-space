@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { creators, contentItems } from "@/data/mockData";
 import { ContentCard } from "@/components/content/ContentCard";
-import { ArrowLeft, MapPin, Users, CheckCircle, Eye, Package, Handshake, User, Crown, Trophy, Rss } from "lucide-react";
+import { ArrowLeft, MapPin, Users, CheckCircle, Eye, Package, Handshake, User, Crown, Trophy, Rss, Globe, Building2, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PageTransition } from "@/components/layout/PageTransition";
@@ -73,6 +73,28 @@ const CreatorProfile = () => {
       if (!profileUserId) return [];
       const { data } = await supabase.from("achievements").select("*").eq("user_id", profileUserId).order("earned_at", { ascending: false });
       return data || [];
+    },
+    enabled: !!profileUserId,
+  });
+
+  // Advertiser brand info (public via RPC)
+  const { data: brandData } = useQuery({
+    queryKey: ["advertiser-brand", profileUserId],
+    queryFn: async () => {
+      if (!profileUserId) return null;
+      const { data } = await supabase.rpc("get_advertiser_brand", { p_user_id: profileUserId });
+      return data && data.length > 0 ? data[0] : null;
+    },
+    enabled: !!profileUserId,
+  });
+
+  // Check if user is advertiser (using existing has_role function)
+  const { data: isAdvertiser } = useQuery({
+    queryKey: ["is-advertiser", profileUserId],
+    queryFn: async () => {
+      if (!profileUserId) return false;
+      const { data } = await supabase.rpc("has_role", { _user_id: profileUserId, _role: "advertiser" });
+      return !!data;
     },
     enabled: !!profileUserId,
   });
@@ -207,6 +229,43 @@ const CreatorProfile = () => {
             </div>
           ))}
         </div>
+
+        {/* Advertiser Brand Card */}
+        {brandData && isAdvertiser && (
+          <section className="rounded-xl border border-border bg-card p-5 space-y-3">
+            <div className="flex items-center gap-3">
+              {brandData.brand_logo_url ? (
+                <div className="h-12 w-12 rounded-lg border border-border overflow-hidden flex-shrink-0">
+                  <img src={brandData.brand_logo_url} alt={brandData.brand_name} className="h-full w-full object-cover" />
+                </div>
+              ) : (
+                <div className="h-12 w-12 rounded-lg border border-border bg-muted flex items-center justify-center flex-shrink-0">
+                  <Building2 className="h-5 w-5 text-muted-foreground" />
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-semibold text-card-foreground truncate">{brandData.brand_name}</h3>
+                  {brandData.business_verified && brandData.ord_verified && (
+                    <Badge variant="outline" className="text-[10px] gap-1 border-green-500/30 text-green-600 bg-green-500/10 flex-shrink-0">
+                      <ShieldCheck className="h-3 w-3" /> Верифицирован
+                    </Badge>
+                  )}
+                </div>
+                {brandData.brand_website && (
+                  <a href={brandData.brand_website} target="_blank" rel="noopener noreferrer"
+                    className="text-xs text-primary hover:underline flex items-center gap-1 mt-0.5">
+                    <Globe className="h-3 w-3" /> {brandData.brand_website.replace(/^https?:\/\//, "")}
+                  </a>
+                )}
+              </div>
+              <Badge variant="secondary" className="text-xs flex-shrink-0">Рекламодатель</Badge>
+            </div>
+            {brandData.brand_description && (
+              <p className="text-sm text-muted-foreground">{brandData.brand_description}</p>
+            )}
+          </section>
+        )}
 
         {/* Achievements */}
          <section className="space-y-3">
