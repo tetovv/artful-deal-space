@@ -93,12 +93,14 @@ export default function Subscriptions() {
   const { data: allCreators = [], isLoading: creatorsLoading } = useQuery({
     queryKey: ["all-creators"],
     queryFn: async () => {
-      const { data: roleData } = await supabase
-        .from("user_roles")
-        .select("user_id")
-        .eq("role", "creator");
-      if (!roleData?.length) return [];
-      const ids = roleData.map((r) => r.user_id);
+      // Authors = users who published at least 1 content item
+      const { data: contentData } = await supabase
+        .from("content_items")
+        .select("creator_id")
+        .eq("status", "published")
+        .not("creator_id", "is", null);
+      if (!contentData?.length) return [];
+      const ids = [...new Set(contentData.map((c) => c.creator_id!))];
       const { data: profiles } = await supabase
         .from("profiles")
         .select("*")
