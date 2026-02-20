@@ -3,6 +3,21 @@
  * Called by artifact_act edge function.
  */
 
+// Actions that should return kind="assistant_note" (NOT method_pack)
+const ASSISTANT_NOTE_ACTIONS = new Set([
+  "explain_term", "expand_selection", "give_example",
+  "explain_mistake", "explain_correct", "give_hint",
+]);
+
+const ASSISTANT_NOTE_INSTRUCTION = `Верни public_payload в формате:
+{
+  "kind": "assistant_note",
+  "title": "… (на русском)",
+  "content": "… (подробное объяснение на русском)",
+  "source_refs": ["chunk_id_1"]
+}
+НЕ используй kind="method_pack". Только "assistant_note".`;
+
 const ACTION_INSTRUCTIONS: Record<string, string> = {
   generate_lesson_blocks: `Создай урок из текстовых блоков. Формат public_payload:
 {
@@ -42,23 +57,12 @@ const ACTION_INSTRUCTIONS: Record<string, string> = {
   "blocks": [{"id":"b1","type":"concept","title":"...","content":"...","order":0}]
 }`,
 
-  explain_term: `Объясни указанный термин простым языком. public_payload:
-{
-  "kind": "method_pack",
-  "blocks": [{"id":"e1","type":"explanation","title":"Объяснение: [термин]","content":"...","order":0}]
-}`,
-
-  expand_selection: `Раскрой выбранный фрагмент подробнее. public_payload:
-{
-  "kind": "method_pack",
-  "blocks": [{"id":"x1","type":"expansion","title":"Подробнее: ...","content":"...","order":0}]
-}`,
-
-  give_example: `Приведи практический пример. public_payload:
-{
-  "kind": "method_pack",
-  "blocks": [{"id":"ex1","type":"example","title":"Пример: ...","content":"...","order":0}]
-}`,
+  explain_term: ASSISTANT_NOTE_INSTRUCTION,
+  expand_selection: ASSISTANT_NOTE_INSTRUCTION,
+  give_example: ASSISTANT_NOTE_INSTRUCTION,
+  explain_mistake: ASSISTANT_NOTE_INSTRUCTION,
+  explain_correct: ASSISTANT_NOTE_INSTRUCTION,
+  give_hint: ASSISTANT_NOTE_INSTRUCTION,
 
   remediate_topic: `Создай дополнительное объяснение для сложной темы. public_payload:
 {
@@ -68,8 +72,10 @@ const ACTION_INSTRUCTIONS: Record<string, string> = {
 
   grade_open: `Оцени открытый ответ ученика. public_payload:
 {
-  "kind": "method_pack",
-  "blocks": [{"id":"fb1","type":"feedback","title":"Обратная связь","content":"...","order":0}]
+  "kind": "assistant_note",
+  "title": "Обратная связь",
+  "content": "...",
+  "source_refs": []
 }
 private_payload:
 {
@@ -79,6 +85,10 @@ private_payload:
 }
 Также верни score (0-100) в ui_hints.`,
 };
+
+export function isAssistantNoteAction(actionType: string): boolean {
+  return ASSISTANT_NOTE_ACTIONS.has(actionType);
+}
 
 export function buildActSystemPrompt(actionType: string): string {
   const instruction = ACTION_INSTRUCTIONS[actionType] || ACTION_INSTRUCTIONS["explain_term"];
@@ -108,7 +118,8 @@ ${instruction}
 - source_refs содержит id чанков, которые были использованы
 - private_payload содержит ответы/ключи ТОЛЬКО для quiz и exercise — никогда не включай их в public_payload
 - Язык: русский (или язык материала)
-- Контент должен быть подробным и полезным`;
+- Контент должен быть подробным и полезным
+- Для explain_term/expand_selection/give_example/explain_mistake/explain_correct/give_hint ВСЕГДА используй kind="assistant_note", НИКОГДА kind="method_pack"`;
 }
 
 export function buildActUserPrompt(opts: {

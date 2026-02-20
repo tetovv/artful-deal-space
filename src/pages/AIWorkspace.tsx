@@ -24,6 +24,20 @@ const FORMAT_ICONS: Record<string, React.ElementType> = {
   QUIZ_ONLY: HelpCircle,
   FLASHCARDS: CreditCard,
   PRESENTATION: Presentation,
+  self_learn: BookOpen,
+  exam_prep: GraduationCap,
+  quiz_only: HelpCircle,
+  flashcards: CreditCard,
+  presentation: Presentation,
+};
+
+const STATUS_LABELS: Record<string, { label: string; color: string }> = {
+  draft: { label: "Черновик", color: "text-muted-foreground" },
+  ingesting: { label: "Извлечение…", color: "text-yellow-600" },
+  planning: { label: "Планирование…", color: "text-yellow-600" },
+  planned: { label: "Готов к генерации", color: "text-primary" },
+  ingested: { label: "Готов к плану", color: "text-primary" },
+  completed: { label: "Завершён", color: "text-accent" },
 };
 
 const AIWorkspace = () => {
@@ -114,6 +128,8 @@ const AIWorkspace = () => {
                   const artifactCount = proj.artifacts?.[0]?.count || 0;
                   const roadmapSteps = (proj.roadmap as any[])?.length || 0;
                   const completedSteps = (proj.roadmap as any[])?.filter((s: any) => s.status === "completed").length || 0;
+                  const statusInfo = STATUS_LABELS[proj.status] || { label: proj.status, color: "text-muted-foreground" };
+                  const isIncomplete = ["draft", "ingesting", "planning", "ingested", "planned"].includes(proj.status) && artifactCount === 0;
 
                   return (
                     <Card key={proj.id} className="p-4 space-y-3 hover:border-primary/30 transition-all group">
@@ -127,6 +143,7 @@ const AIWorkspace = () => {
                             <p className="text-[11px] text-muted-foreground flex items-center gap-1">
                               <Clock className="h-3 w-3" />
                               {new Date(proj.updated_at).toLocaleDateString("ru-RU", { day: "numeric", month: "short" })}
+                              <span className={cn("ml-1", statusInfo.color)}>• {statusInfo.label}</span>
                             </p>
                           </div>
                         </div>
@@ -166,8 +183,8 @@ const AIWorkspace = () => {
                         </div>
                       )}
 
-                      <Button variant="outline" size="sm" className="w-full text-xs" onClick={() => handleResume(proj.id)}>
-                        Продолжить <ChevronRight className="h-3 w-3 ml-1" />
+                      <Button variant={isIncomplete ? "default" : "outline"} size="sm" className="w-full text-xs" onClick={() => handleResume(proj.id)}>
+                        {isIncomplete ? "Повторить" : "Продолжить"} <ChevronRight className="h-3 w-3 ml-1" />
                       </Button>
                     </Card>
                   );

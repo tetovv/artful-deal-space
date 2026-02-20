@@ -2,12 +2,13 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { handleCors, jsonResponse, errorResponse } from "../_shared/cors.ts";
 import { callLovableJSON } from "../_shared/lovable_ai.ts";
-import { buildActSystemPrompt, buildActUserPrompt } from "../_shared/prompts/act.ts";
+import { buildActSystemPrompt, buildActUserPrompt, isAssistantNoteAction } from "../_shared/prompts/act.ts";
 
 const VALID_ACTIONS = [
   "generate_lesson_blocks", "generate_quiz", "generate_flashcards",
   "generate_slides", "generate_method_pack", "explain_term",
   "expand_selection", "give_example", "remediate_topic", "grade_open",
+  "explain_mistake", "explain_correct", "give_hint",
 ];
 
 serve(async (req) => {
@@ -96,9 +97,24 @@ serve(async (req) => {
       maxRetries: 2,
     });
 
-    // Save artifact (skip for grade_open — handled by submit)
+    // Validate: assistant_note actions must NOT return method_pack
+    if (isAssistantNoteAction(action_type) && actResult.public_payload?.kind === "method_pack") {
+      // Convert method_pack to assistant_note
+      const blocks = (actResult.public_payload as any).blocks || [];
+      const firstBlock = blocks[0];
+      actResult.public_payload = {
+        kind: "assistant_note",
+        title: firstBlock?.title || action_type,
+        content: blocks.map((b: any) => `${b.title ? `**${b.title}**\n` : ""}${b.content || ""}`).join("\n\n"),
+        source_refs: actResult.source_refs || [],
+      };
+    }
+
+    // Save artifact (skip for assistant_note actions and grade_open)
     let artifactId: string | null = null;
-    if (action_type !== "grade_open") {
+    const isInlineAction = isAssistantNoteAction(action_type) || action_type === "grade_open";
+
+    if (!isInlineAction) {
       const { data: artifact } = await supabase.from("artifacts").insert({
         project_id,
         user_id: user.id,
