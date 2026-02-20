@@ -785,34 +785,49 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
     if (!user) throw { functionName: "project_ingest", status: 0, body: "Не авторизован" } as EdgeError;
 
     const allChunks: { content: string; metadata: any; source_id: string }[] = [];
-    const failedFiles: string[] = [];
+    const failedFiles: { name: string; reason: string }[] = [];
 
     // Extract text from original File objects (stored in extractFilesRef) — no re-download needed
-    for (const src of sources) {
+    for (let si = 0; si < sources.length; si++) {
+      const src = sources[si];
+      // Update stage label with progress
+      setGenStages(prev => prev.map(s => s.key === "ingesting"
+        ? { ...s, label: `Извлечение файла ${si + 1} из ${sources.length}: ${src.file_name}` }
+        : s));
+
       try {
         const originalFile = extractFilesRef.current.get(src.file_name);
         let text = "";
 
         if (originalFile) {
           // Fast path: extract from the original File object in memory
+          console.log(`[ingest] Extracting from memory: ${src.file_name}`);
           text = await extractTextFromFile(originalFile);
         } else {
           // Fallback: download from storage (e.g. on retry)
+          console.log(`[ingest] Downloading from storage: ${src.storage_path}`);
           const { data: blob, error: dlErr } = await supabase.storage
             .from("ai_sources")
             .download(src.storage_path);
           if (dlErr || !blob) {
             console.warn(`Download failed for ${src.file_name}:`, dlErr);
-            failedFiles.push(src.file_name);
+            failedFiles.push({ name: src.file_name, reason: dlErr?.message || "Download failed" });
             continue;
           }
-          const file = new File([blob], src.file_name);
+          // Preserve file extension so extractTextFromFile routes correctly
+          const ext = src.file_name.split(".").pop() || "txt";
+          const mimeMap: Record<string, string> = { pdf: "application/pdf", docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", txt: "text/plain" };
+          const file = new File([blob], src.file_name, { type: mimeMap[ext] || "application/octet-stream" });
           text = await extractTextFromFile(file);
         }
 
-        if (!text.trim()) { failedFiles.push(src.file_name); continue; }
+        if (!text.trim()) {
+          failedFiles.push({ name: src.file_name, reason: "Пустой текст после извлечения" });
+          continue;
+        }
 
         const chunks = chunkText(text);
+        console.log(`[ingest] ${src.file_name}: ${text.length} chars → ${chunks.length} chunks`);
         for (const c of chunks) {
           allChunks.push({
             content: c.content,
@@ -824,10 +839,13 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
         await supabase.from("project_sources").update({ status: "processed", chunk_count: chunks.length }).eq("id", src.source_id);
         await yieldToUI();
       } catch (e: any) {
-        console.warn(`Client extraction failed for ${src.file_name}:`, e);
-        failedFiles.push(src.file_name);
+        console.error(`[ingest] Client extraction failed for ${src.file_name}:`, e);
+        failedFiles.push({ name: src.file_name, reason: e.message || String(e) });
       }
     }
+
+    // Reset stage label
+    setGenStages(prev => prev.map(s => s.key === "ingesting" ? { ...s, label: "Извлечение и индексация" } : s));
 
     // Add pasted text
     if (pastedText?.trim()) {
@@ -852,7 +870,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
 
     if (allChunks.length === 0) {
       const msg = failedFiles.length > 0
-        ? `Не удалось извлечь текст из: ${failedFiles.join(", ")}. Поддерживаемые форматы: PDF, DOCX, TXT, MD.`
+        ? `Не удалось извлечь текст из: ${failedFiles.map(f => `${f.name} (${f.reason})`).join("; ")}. Поддерживаемые форматы: PDF, DOCX, TXT, MD.`
         : "Не удалось извлечь текст. Убедитесь, что файлы содержат читаемый текст.";
       throw { functionName: "project_ingest", status: 0, body: msg } as EdgeError;
     }
@@ -883,7 +901,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
 
     await supabase.from("projects").update({ status: "ingested" }).eq("id", projId);
     if (failedFiles.length > 0) {
-      toast.warning(`Не удалось обработать: ${failedFiles.join(", ")}`);
+      toast.warning(`Не удалось обработать: ${failedFiles.map(f => f.name).join(", ")}`);
     }
   };
 

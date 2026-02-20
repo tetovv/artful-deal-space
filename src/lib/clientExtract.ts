@@ -5,34 +5,66 @@
 import * as pdfjsLib from "pdfjs-dist";
 import mammoth from "mammoth";
 
-// Configure PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+// Configure PDF.js worker — try CDN, log if it fails
+try {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+} catch (e) {
+  console.warn("[clientExtract] Failed to set PDF.js worker URL:", e);
+}
 
 const MAX_TEXT_CHARS = 500_000;
 const MAX_PDF_PAGES = 50;
 
+const SUPPORTED_EXTENSIONS = new Set(["pdf", "docx", "txt", "md", "csv", "json", "xml", "html", "htm", "rtf"]);
+
 /** Extract text from a PDF file */
 async function extractPdfText(buffer: ArrayBuffer): Promise<string> {
-  const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
-  const pages: string[] = [];
-  const numPages = Math.min(doc.numPages, MAX_PDF_PAGES);
-  for (let i = 1; i <= numPages; i++) {
-    const page = await doc.getPage(i);
-    const content = await page.getTextContent();
-    pages.push(content.items.map((item: any) => item.str).join(" "));
+  try {
+    const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
+    const pages: string[] = [];
+    const numPages = Math.min(doc.numPages, MAX_PDF_PAGES);
+    console.log(`[clientExtract] PDF: ${doc.numPages} pages total, processing ${numPages}`);
+    for (let i = 1; i <= numPages; i++) {
+      const page = await doc.getPage(i);
+      const content = await page.getTextContent();
+      pages.push(content.items.map((item: any) => item.str).join(" "));
+    }
+    const text = pages.join("\n\n");
+    console.log(`[clientExtract] PDF extracted: ${text.length} chars`);
+    return text;
+  } catch (e: any) {
+    console.error("[clientExtract] PDF extraction failed:", e);
+    throw new Error(`PDF extraction failed: ${e.message || e}. Убедитесь, что PDF содержит текстовый слой (не сканированное изображение).`);
   }
-  return pages.join("\n\n");
 }
 
 /** Extract text from a DOCX file */
 async function extractDocxText(buffer: ArrayBuffer): Promise<string> {
-  const result = await mammoth.extractRawText({ arrayBuffer: buffer });
-  return result.value;
+  try {
+    const result = await mammoth.extractRawText({ arrayBuffer: buffer });
+    console.log(`[clientExtract] DOCX extracted: ${result.value.length} chars`);
+    return result.value;
+  } catch (e: any) {
+    console.error("[clientExtract] DOCX extraction failed:", e);
+    throw new Error(`DOCX extraction failed: ${e.message || e}`);
+  }
+}
+
+/** Check if a file extension is supported */
+export function isSupportedExtension(fileName: string): boolean {
+  const ext = fileName.toLowerCase().split(".").pop() || "";
+  return SUPPORTED_EXTENSIONS.has(ext);
 }
 
 /** Extract text from any supported file */
 export async function extractTextFromFile(file: File): Promise<string> {
   const ext = file.name.toLowerCase().split(".").pop() || "";
+
+  if (!SUPPORTED_EXTENSIONS.has(ext)) {
+    throw new Error(`Неподдерживаемый формат файла: .${ext}. Поддерживаемые: ${[...SUPPORTED_EXTENSIONS].join(", ")}`);
+  }
+
+  console.log(`[clientExtract] Processing "${file.name}" (${(file.size / 1024).toFixed(1)} KB, ext: ${ext})`);
   const buffer = await file.arrayBuffer();
 
   let text = "";
@@ -41,8 +73,9 @@ export async function extractTextFromFile(file: File): Promise<string> {
   } else if (ext === "docx") {
     text = await extractDocxText(buffer);
   } else {
-    // txt, md, csv, etc.
+    // txt, md, csv, json, xml, html, etc.
     text = new TextDecoder().decode(new Uint8Array(buffer));
+    console.log(`[clientExtract] Text file extracted: ${text.length} chars`);
   }
 
   return text.slice(0, MAX_TEXT_CHARS);
