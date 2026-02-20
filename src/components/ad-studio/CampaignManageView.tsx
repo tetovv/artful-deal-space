@@ -13,8 +13,10 @@ import {
 import {
   ArrowLeft, Eye, MousePointerClick, TrendingUp, BarChart3, Pause, Play,
   MoreVertical, Copy, Archive, Ban, CalendarDays, AlertTriangle, CheckCircle2,
-  ImagePlus, ExternalLink, RefreshCw, Send, Info, Globe, Link2, Pencil, Save,
+  ImagePlus, ExternalLink, RefreshCw, Send, Info, Globe, Link2, Save,
+  Lock, PlusCircle, XCircle, ShieldCheck, ClipboardCopy,
 } from "lucide-react";
+import { toast } from "sonner";
 
 // ─── Types ───
 export type CampaignStatus = "active" | "paused" | "draft" | "completed" | "error";
@@ -32,6 +34,11 @@ export interface Campaign {
   spent: number;
   startDate: string;
   endDate: string;
+  erid?: string;
+  ordProvider?: string;
+  ordStatus?: "connected" | "error" | "pending";
+  ordLastSync?: string;
+  creativeLocked?: boolean;
 }
 
 const placementLabels: Record<Placement, string> = {
@@ -65,6 +72,82 @@ function formatNum(n: number): string {
 type DateRange = "today" | "7d" | "30d";
 const dateRangeLabels: Record<DateRange, string> = { today: "Сегодня", "7d": "7 дней", "30d": "30 дней" };
 
+// ─── Helpers ───
+function isStarted(campaign: Campaign): boolean {
+  return campaign.status === "active" || campaign.status === "paused" || campaign.status === "completed";
+}
+
+function hasErid(campaign: Campaign): boolean {
+  return !!campaign.erid;
+}
+
+function isLocked(campaign: Campaign): boolean {
+  return isStarted(campaign) || hasErid(campaign);
+}
+
+// ─── ERID Badge ───
+function EridBadge({ erid }: { erid?: string }) {
+  if (!erid) return null;
+  return (
+    <div className="flex items-center gap-2 rounded-lg bg-primary/10 border border-primary/20 px-3 py-1.5">
+      <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">ERID</span>
+      <span className="text-xs font-mono font-semibold text-primary">{erid}</span>
+      <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => {
+        navigator.clipboard.writeText(erid);
+        toast.success("ERID скопирован");
+      }}>
+        <ClipboardCopy className="h-3 w-3 text-primary" />
+      </Button>
+    </div>
+  );
+}
+
+// ─── ORD Status Indicator ───
+function OrdStatusIndicator({ campaign }: { campaign: Campaign }) {
+  const status = campaign.ordStatus || "pending";
+  const styles: Record<string, { bg: string; icon: any; label: string }> = {
+    connected: { bg: "bg-success/15 text-success", icon: CheckCircle2, label: "ОРД подключён" },
+    error: { bg: "bg-destructive/15 text-destructive", icon: XCircle, label: "Ошибка ОРД" },
+    pending: { bg: "bg-warning/15 text-warning", icon: Info, label: "ОРД ожидает" },
+  };
+  const s = styles[status];
+  const Icon = s.icon;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className={`flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium ${s.bg}`}>
+          <Icon className="h-3 w-3" />
+          <span>{s.label}</span>
+        </div>
+      </TooltipTrigger>
+      <TooltipContent>
+        <p className="text-xs">
+          {campaign.ordLastSync ? `Последняя синхронизация: ${campaign.ordLastSync}` : "Синхронизация не выполнялась"}
+        </p>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+// ─── Locked field wrapper ───
+function LockedField({ locked, reason, children }: { locked: boolean; reason: string; children: React.ReactNode }) {
+  if (!locked) return <>{children}</>;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className="relative">
+          {children}
+          <div className="absolute inset-0 bg-muted/5 rounded-md cursor-not-allowed" />
+          <Lock className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+        </div>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-[260px]">
+        <p className="text-xs">{reason}</p>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 // ─── Metric mini card ───
 function MetricCard({ label, value, icon: Icon, colorClass }: {
   label: string; value: string; icon: any; colorClass: string;
@@ -84,7 +167,7 @@ function MetricCard({ label, value, icon: Icon, colorClass }: {
   );
 }
 
-// ─── Mock chart data ───
+// ─── Mock chart ───
 function MiniChart({ metric }: { metric: string }) {
   const bars = useMemo(() => Array.from({ length: 14 }, () => 20 + Math.random() * 80), []);
   return (
@@ -97,7 +180,7 @@ function MiniChart({ metric }: { metric: string }) {
   );
 }
 
-// ─── Mock creatives ───
+// ─── Mock creative ───
 interface Creative {
   id: number;
   title: string;
@@ -106,11 +189,9 @@ interface Creative {
   reason?: string;
 }
 
-const mockCreatives: Creative[] = [
-  { id: 1, title: "Баннер весна 728×90", url: "https://example.com/promo", status: "approved" },
-  { id: 2, title: "Карточка подписка", url: "https://example.com/sub", status: "pending" },
-  { id: 3, title: "Баннер летний", url: "https://example.com/summer", status: "rejected", reason: "Текст перекрывает логотип, некорректная маркировка" },
-];
+const mockCreative: Creative = {
+  id: 1, title: "Баннер весна 728×90", url: "https://example.com/promo", status: "approved",
+};
 
 const creativeStatusLabels: Record<Creative["status"], string> = {
   approved: "Одобрен", pending: "На модерации", rejected: "Отклонён",
@@ -128,17 +209,21 @@ interface OrdEvent {
   status: "ok" | "error";
 }
 const mockOrdEvents: OrdEvent[] = [
-  { date: "2026-02-19 14:32", action: "Отправка креатива #1 в ОРД", status: "ok" },
-  { date: "2026-02-19 14:33", action: "Получен erid для креатива #1", status: "ok" },
+  { date: "2026-02-19 14:32", action: "Отправка креатива в ОРД", status: "ok" },
+  { date: "2026-02-19 14:33", action: "Получен ERID для кампании", status: "ok" },
   { date: "2026-02-18 09:10", action: "Отправка статистики за 17.02", status: "ok" },
   { date: "2026-02-17 09:11", action: "Отправка статистики за 16.02", status: "error" },
   { date: "2026-02-16 14:00", action: "Регистрация кампании в ОРД", status: "ok" },
 ];
 
+// ═══════════════════════════════════════════════════════
 // ─── Overview Tab ───
+// ═══════════════════════════════════════════════════════
 function OverviewTab({ campaign }: { campaign: Campaign }) {
   const [dateRange, setDateRange] = useState<DateRange>("30d");
   const [chartMetric, setChartMetric] = useState<string>("impressions");
+  const [topUpOpen, setTopUpOpen] = useState(false);
+  const [topUpAmount, setTopUpAmount] = useState("");
 
   const budgetPercent = campaign.budget > 0 ? Math.min((campaign.spent / campaign.budget) * 100, 100) : 0;
   const daysTotal = campaign.startDate && campaign.endDate
@@ -154,6 +239,14 @@ function OverviewTab({ campaign }: { campaign: Campaign }) {
 
   return (
     <div className="space-y-4">
+      {/* ERID + ORD status */}
+      {(campaign.erid || campaign.ordStatus) && (
+        <div className="flex items-center gap-3 flex-wrap">
+          <EridBadge erid={campaign.erid} />
+          <OrdStatusIndicator campaign={campaign} />
+        </div>
+      )}
+
       {/* Period selector + KPIs */}
       <div className="flex items-center justify-between">
         <p className="text-sm font-semibold text-card-foreground">Метрики за период</p>
@@ -205,7 +298,38 @@ function OverviewTab({ campaign }: { campaign: Campaign }) {
       {/* Budget & pacing */}
       <Card>
         <CardContent className="p-5 space-y-3">
-          <p className="text-sm font-semibold text-card-foreground">Бюджет и пейсинг</p>
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-card-foreground">Бюджет и пейсинг</p>
+            {isStarted(campaign) && campaign.status !== "completed" && (
+              <Button size="sm" variant="outline" className="h-8 text-sm gap-1.5" onClick={() => setTopUpOpen(!topUpOpen)}>
+                <PlusCircle className="h-3.5 w-3.5" />
+                Пополнить бюджет
+              </Button>
+            )}
+          </div>
+
+          {topUpOpen && (
+            <div className="flex items-center gap-3 p-3 rounded-lg border border-primary/20 bg-primary/5">
+              <Input
+                type="number"
+                placeholder="Сумма пополнения (₽)"
+                value={topUpAmount}
+                onChange={(e) => setTopUpAmount(e.target.value)}
+                className="h-9 flex-1 max-w-[200px]"
+              />
+              <Button size="sm" className="h-9 text-sm" onClick={() => {
+                toast.success(`Бюджет пополнен на ${topUpAmount} ₽`);
+                setTopUpOpen(false);
+                setTopUpAmount("");
+              }}>
+                Подтвердить
+              </Button>
+              <Button size="sm" variant="ghost" className="h-9 text-sm" onClick={() => setTopUpOpen(false)}>
+                Отмена
+              </Button>
+            </div>
+          )}
+
           <div className="space-y-2">
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground">Потрачено</span>
@@ -231,39 +355,46 @@ function OverviewTab({ campaign }: { campaign: Campaign }) {
               <p className="text-sm font-semibold text-card-foreground">Почему кампания не откручивается?</p>
             </div>
             <ul className="space-y-1.5 text-sm text-muted-foreground pl-6">
-              {budgetPercent >= 100 && <li className="flex items-center gap-2"><Ban className="h-3.5 w-3.5 text-destructive" /> Бюджет исчерпан</li>}
+              {budgetPercent >= 100 && <li className="flex items-center gap-2"><Ban className="h-3.5 w-3.5 text-destructive" /> Бюджет исчерпан — пополните бюджет для продолжения</li>}
               {campaign.impressions === 0 && campaign.status === "draft" && <li className="flex items-center gap-2"><Info className="h-3.5 w-3.5 text-warning" /> Кампания в черновике — запустите для показа</li>}
-              {campaign.impressions === 0 && campaign.status === "active" && <li className="flex items-center gap-2"><Info className="h-3.5 w-3.5 text-warning" /> Нет креативов или креатив не прошёл модерацию</li>}
-              {campaign.status === "error" && <li className="flex items-center gap-2"><AlertTriangle className="h-3.5 w-3.5 text-destructive" /> Ошибка верификации/ОРД — проверьте вкладку ОРД</li>}
+              {campaign.impressions === 0 && campaign.status === "active" && <li className="flex items-center gap-2"><Info className="h-3.5 w-3.5 text-warning" /> Креатив не прошёл модерацию или отсутствует ERID</li>}
+              {campaign.status === "error" && <li className="flex items-center gap-2"><AlertTriangle className="h-3.5 w-3.5 text-destructive" /> Ошибка ОРД — проверьте вкладку ОРД / Маркировка</li>}
             </ul>
           </CardContent>
         </Card>
       )}
-
-      {/* Placement preview */}
-      <Card>
-        <CardContent className="p-5 space-y-3">
-          <p className="text-sm font-semibold text-card-foreground">Предпросмотр размещения</p>
-          <div className="rounded-lg border border-border bg-muted/20 p-4 flex flex-col items-center justify-center gap-2 min-h-[120px]">
-            <div className="rounded-lg bg-primary/10 border border-primary/20 px-6 py-3 text-center max-w-xs">
-              <p className="text-xs font-semibold text-primary">{campaign.name}</p>
-              <p className="text-[10px] text-muted-foreground mt-0.5">Реклама · {placementLabels[campaign.placement]}</p>
-            </div>
-            <p className="text-[10px] text-muted-foreground">Примерный вид {placementLabels[campaign.placement].toLowerCase()}</p>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }
 
+// ═══════════════════════════════════════════════════════
 // ─── Settings Tab ───
+// ═══════════════════════════════════════════════════════
 function SettingsTab({ campaign }: { campaign: Campaign }) {
   const [hasChanges, setHasChanges] = useState(false);
   const [budgetValue, setBudgetValue] = useState(String(campaign.budget));
   const [startDate, setStartDate] = useState(campaign.startDate);
   const [endDate, setEndDate] = useState(campaign.endDate);
   const [utm, setUtm] = useState({ source: "", medium: "", campaign: "" });
+
+  const started = isStarted(campaign);
+  const budgetDecreaseBlocked = started;
+  const minBudget = campaign.spent; // Never allow below spent
+
+  const handleBudgetChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    const num = Number(val);
+    if (budgetDecreaseBlocked && num < campaign.budget) {
+      toast.error("Уменьшение бюджета запрещено после старта кампании. Используйте «Пополнить бюджет» на вкладке Обзор.");
+      return;
+    }
+    if (num < minBudget) {
+      toast.error(`Бюджет не может быть ниже уже потраченного (${formatNum(minBudget)} ₽)`);
+      return;
+    }
+    setBudgetValue(val);
+    setHasChanges(true);
+  };
 
   const handleChange = (setter: (v: string) => void) => (e: React.ChangeEvent<HTMLInputElement>) => {
     setter(e.target.value);
@@ -272,7 +403,6 @@ function SettingsTab({ campaign }: { campaign: Campaign }) {
 
   return (
     <div className="space-y-4 relative">
-      {/* Unsaved indicator */}
       {hasChanges && (
         <div className="sticky top-0 z-10 flex items-center justify-between bg-warning/10 border border-warning/30 rounded-lg px-4 py-2.5">
           <span className="text-sm text-warning font-medium">Есть несохранённые изменения</span>
@@ -289,16 +419,42 @@ function SettingsTab({ campaign }: { campaign: Campaign }) {
           <p className="text-sm font-semibold text-card-foreground">Бюджет и расписание</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className="text-xs text-muted-foreground">Общий бюджет (₽)</label>
-              <Input value={budgetValue} onChange={handleChange(setBudgetValue)} type="number" className="h-10" />
+              <div className="flex items-center gap-1.5">
+                <label className="text-xs text-muted-foreground">Общий бюджет (₽)</label>
+                {budgetDecreaseBlocked && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Lock className="h-3 w-3 text-muted-foreground" />
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-[240px]">
+                      <p className="text-xs">Уменьшение бюджета запрещено после старта кампании для обеспечения корректности учёта и маркировки в ОРД. Бюджет можно только увеличить.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+              </div>
+              <Input
+                value={budgetValue}
+                onChange={handleBudgetChange}
+                type="number"
+                min={budgetDecreaseBlocked ? campaign.budget : 0}
+                className="h-10"
+              />
+              {budgetDecreaseBlocked && (
+                <p className="text-[10px] text-muted-foreground">Мин. значение: {formatNum(campaign.budget)} ₽ (только увеличение)</p>
+              )}
             </div>
             <div className="space-y-1.5">
               <label className="text-xs text-muted-foreground">Дневной лимит (₽)</label>
               <Input placeholder="Без ограничений" className="h-10" onChange={() => setHasChanges(true)} />
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs text-muted-foreground">Дата начала</label>
-              <Input type="date" value={startDate} onChange={handleChange(setStartDate)} className="h-10" />
+              <div className="flex items-center gap-1.5">
+                <label className="text-xs text-muted-foreground">Дата начала</label>
+                {started && <Lock className="h-3 w-3 text-muted-foreground" />}
+              </div>
+              <LockedField locked={started} reason="Дата начала не может быть изменена после запуска кампании">
+                <Input type="date" value={startDate} onChange={handleChange(setStartDate)} className="h-10" readOnly={started} />
+              </LockedField>
             </div>
             <div className="space-y-1.5">
               <label className="text-xs text-muted-foreground">Дата окончания</label>
@@ -321,7 +477,7 @@ function SettingsTab({ campaign }: { campaign: Campaign }) {
         </CardContent>
       </Card>
 
-      {/* UTM tracking */}
+      {/* UTM */}
       <Card>
         <CardContent className="p-5 space-y-4">
           <p className="text-sm font-semibold text-card-foreground">Трекинг (UTM-параметры)</p>
@@ -348,11 +504,12 @@ function SettingsTab({ campaign }: { campaign: Campaign }) {
       {/* Policies */}
       <Card className="border-muted-foreground/10">
         <CardContent className="p-5 space-y-2">
-          <p className="text-sm font-semibold text-card-foreground">Требования и политики</p>
+          <p className="text-sm font-semibold text-card-foreground">Правила и ограничения</p>
           <ul className="space-y-1.5 text-xs text-muted-foreground leading-relaxed">
-            <li>• Все креативы должны содержать маркировку «Реклама» и erid</li>
-            <li>• Максимальный размер баннера: 2 МБ (PNG, JPG, GIF)</li>
-            <li>• Запрещён контент, нарушающий законодательство РФ о рекламе</li>
+            <li>• Одна кампания = один креатив = один ERID</li>
+            <li>• Креатив нельзя заменить после получения ERID — создайте новую версию кампании</li>
+            <li>• Бюджет нельзя уменьшить после старта (для корректного учёта в ОРД)</li>
+            <li>• Все креативы должны содержать маркировку «Реклама» и ERID</li>
             <li>• Статистика передаётся в ОРД автоматически ежедневно</li>
           </ul>
         </CardContent>
@@ -361,103 +518,121 @@ function SettingsTab({ campaign }: { campaign: Campaign }) {
   );
 }
 
-// ─── Creatives Tab ───
-function CreativesTab() {
-  const [showAddForm, setShowAddForm] = useState(false);
+// ═══════════════════════════════════════════════════════
+// ─── Creative Tab (read-only after ERID / start) ───
+// ═══════════════════════════════════════════════════════
+function CreativeTab({ campaign }: { campaign: Campaign }) {
+  const locked = isLocked(campaign);
+  const creative = mockCreative;
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold text-card-foreground">Креативы кампании</p>
-        <Button size="sm" variant="outline" className="h-8 text-sm gap-1.5" onClick={() => setShowAddForm(!showAddForm)}>
-          <ImagePlus className="h-3.5 w-3.5" />
-          Добавить креатив
-        </Button>
-      </div>
-
-      {/* Add creative form */}
-      {showAddForm && (
-        <Card className="border-primary/30">
-          <CardContent className="p-5 space-y-4">
-            <p className="text-sm font-semibold text-card-foreground">Новый креатив</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-xs text-muted-foreground">Название</label>
-                <Input placeholder="Баннер 728×90" className="h-10" />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs text-muted-foreground">Целевой URL</label>
-                <Input placeholder="https://example.com/landing" className="h-10" />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs text-muted-foreground">Изображение</label>
-              <div className="rounded-lg border border-dashed border-border bg-muted/20 h-28 flex items-center justify-center cursor-pointer hover:border-primary/40 transition-colors">
-                <div className="text-center">
-                  <ImagePlus className="h-5 w-5 text-muted-foreground mx-auto mb-1" />
-                  <p className="text-xs text-muted-foreground">Перетащите файл или нажмите для загрузки</p>
-                  <p className="text-[10px] text-muted-foreground/60">PNG, JPG, GIF · макс. 2 МБ</p>
-                </div>
-              </div>
-            </div>
-            {/* Live preview */}
-            <div className="rounded-lg border border-border bg-muted/10 p-3">
-              <p className="text-[10px] text-muted-foreground mb-2">Предпросмотр</p>
-              <div className="rounded bg-primary/10 border border-primary/20 px-4 py-2 text-center">
-                <p className="text-xs font-medium text-primary">Ваш баннер</p>
-                <p className="text-[10px] text-muted-foreground">Реклама</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 justify-end">
-              <Button size="sm" variant="ghost" className="h-8 text-sm" onClick={() => setShowAddForm(false)}>Отмена</Button>
-              <Button size="sm" className="h-8 text-sm">Добавить</Button>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Lock notice */}
+      {locked && (
+        <div className="flex items-start gap-3 rounded-lg border border-primary/20 bg-primary/5 p-4">
+          <Lock className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-card-foreground">Креатив заблокирован</p>
+            <p className="text-xs text-muted-foreground">
+              {hasErid(campaign)
+                ? "ERID уже выдан для этого креатива. По закону о маркировке рекламы изменение креатива после получения ERID невозможно."
+                : "Кампания запущена — изменение креатива невозможно."}
+              {" "}Чтобы использовать другой креатив, создайте новую версию кампании.
+            </p>
+          </div>
+        </div>
       )}
 
-      {/* Creative list */}
-      <div className="space-y-3">
-        {mockCreatives.map((cr) => (
-          <Card key={cr.id}>
-            <CardContent className="p-4">
-              <div className="flex items-start gap-4">
-                {/* Thumbnail placeholder */}
-                <div className="h-16 w-24 rounded-lg bg-muted/30 border border-border flex items-center justify-center flex-shrink-0">
-                  <ImagePlus className="h-5 w-5 text-muted-foreground/40" />
-                </div>
-                <div className="flex-1 min-w-0 space-y-1.5">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-semibold text-card-foreground">{cr.title}</span>
-                    <Badge variant="outline" className={`text-[10px] ${creativeStatusStyles[cr.status]}`}>
-                      {creativeStatusLabels[cr.status]}
-                    </Badge>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <Link2 className="h-3 w-3" />
-                    <span className="truncate">{cr.url}</span>
-                    <ExternalLink className="h-3 w-3 flex-shrink-0" />
-                  </div>
-                  {cr.status === "rejected" && cr.reason && (
-                    <p className="text-xs text-destructive bg-destructive/10 border border-destructive/20 rounded px-2 py-1">
-                      Причина: {cr.reason}
-                    </p>
-                  )}
-                </div>
-                <Button size="sm" variant="ghost" className="h-8 w-8 p-0 flex-shrink-0">
-                  <Pencil className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+      {/* ERID display */}
+      {campaign.erid && (
+        <EridBadge erid={campaign.erid} />
+      )}
+
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-semibold text-card-foreground">Креатив кампании</p>
+        <span className="text-[10px] text-muted-foreground bg-muted/30 rounded px-2 py-1">1 кампания = 1 креатив = 1 ERID</span>
       </div>
+
+      {/* Creative card — read-only */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex items-start gap-4">
+            <div className="h-20 w-28 rounded-lg bg-muted/30 border border-border flex items-center justify-center flex-shrink-0">
+              <ImagePlus className="h-5 w-5 text-muted-foreground/40" />
+            </div>
+            <div className="flex-1 min-w-0 space-y-1.5">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm font-semibold text-card-foreground">{creative.title}</span>
+                <Badge variant="outline" className={`text-[10px] ${creativeStatusStyles[creative.status]}`}>
+                  {creativeStatusLabels[creative.status]}
+                </Badge>
+                {locked && (
+                  <Badge variant="outline" className="text-[10px] border-primary/30 text-primary bg-primary/10">
+                    <Lock className="h-2.5 w-2.5 mr-1" />
+                    Заблокирован
+                  </Badge>
+                )}
+              </div>
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Link2 className="h-3 w-3" />
+                <span className="truncate">{creative.url}</span>
+                <ExternalLink className="h-3 w-3 flex-shrink-0" />
+              </div>
+              {campaign.erid && (
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <ShieldCheck className="h-3 w-3" />
+                  <span>ERID: <span className="font-mono font-medium text-card-foreground">{campaign.erid}</span></span>
+                </div>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Preview */}
+      <Card>
+        <CardContent className="p-5 space-y-3">
+          <p className="text-sm font-semibold text-card-foreground">Предпросмотр размещения</p>
+          <div className="rounded-lg border border-border bg-muted/20 p-4 flex flex-col items-center justify-center gap-2 min-h-[120px]">
+            <div className="rounded-lg bg-primary/10 border border-primary/20 px-6 py-3 text-center max-w-xs">
+              <p className="text-xs font-semibold text-primary">{creative.title}</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Реклама · {placementLabels[campaign.placement]}</p>
+              {campaign.erid && (
+                <p className="text-[9px] text-muted-foreground/60 mt-0.5">erid: {campaign.erid}</p>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Duplicate CTA */}
+      <Card className="border-primary/20 bg-primary/5">
+        <CardContent className="p-5">
+          <div className="flex items-center justify-between gap-4">
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-card-foreground">Нужен другой креатив?</p>
+              <p className="text-xs text-muted-foreground">
+                Создайте новую версию кампании с новым креативом. Будет зарегистрирован новый ERID.
+              </p>
+            </div>
+            <Button size="sm" variant="outline" className="h-9 text-sm gap-1.5 flex-shrink-0 border-primary/30 text-primary hover:bg-primary/10">
+              <Copy className="h-3.5 w-3.5" />
+              Дублировать кампанию
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
 
-// ─── ORD Tab ───
-function OrdTab() {
+// ═══════════════════════════════════════════════════════
+// ─── ORD / Marking Tab ───
+// ═══════════════════════════════════════════════════════
+function OrdTab({ campaign }: { campaign: Campaign }) {
+  const ordStatus = campaign.ordStatus || "connected";
+  const ordProvider = campaign.ordProvider || "ОРД Яндекс";
+
   return (
     <div className="space-y-4">
       {/* Connection status */}
@@ -466,12 +641,20 @@ function OrdTab() {
           <p className="text-sm font-semibold text-card-foreground">Подключение к ОРД</p>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="h-9 w-9 rounded-lg bg-success/15 flex items-center justify-center">
-                <CheckCircle2 className="h-4 w-4 text-success" />
+              <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${
+                ordStatus === "connected" ? "bg-success/15" : ordStatus === "error" ? "bg-destructive/15" : "bg-warning/15"
+              }`}>
+                {ordStatus === "connected" ? <CheckCircle2 className="h-4 w-4 text-success" /> :
+                 ordStatus === "error" ? <XCircle className="h-4 w-4 text-destructive" /> :
+                 <Info className="h-4 w-4 text-warning" />}
               </div>
               <div>
-                <p className="text-sm font-medium text-card-foreground">ОРД Яндекс</p>
-                <p className="text-xs text-muted-foreground">Активно · последняя синхронизация 19.02.2026 14:33</p>
+                <p className="text-sm font-medium text-card-foreground">{ordProvider}</p>
+                <p className="text-xs text-muted-foreground">
+                  {ordStatus === "connected" && `Активно · последняя синхронизация ${campaign.ordLastSync || "—"}`}
+                  {ordStatus === "error" && "Ошибка соединения — повторите попытку"}
+                  {ordStatus === "pending" && "Ожидает подключения"}
+                </p>
               </div>
             </div>
             <Button size="sm" variant="outline" className="h-8 text-sm gap-1.5">
@@ -482,10 +665,43 @@ function OrdTab() {
         </CardContent>
       </Card>
 
-      {/* Marking identifiers */}
+      {/* ERID */}
       <Card>
         <CardContent className="p-5 space-y-3">
-          <p className="text-sm font-semibold text-card-foreground">Идентификаторы маркировки</p>
+          <p className="text-sm font-semibold text-card-foreground">Идентификатор маркировки (ERID)</p>
+          {campaign.erid ? (
+            <div className="space-y-3">
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/20 border border-border">
+                <ShieldCheck className="h-5 w-5 text-success flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-muted-foreground">ERID</p>
+                  <p className="text-base font-mono font-bold text-card-foreground tracking-wide">{campaign.erid}</p>
+                </div>
+                <Button size="sm" variant="outline" className="h-8 text-sm gap-1.5" onClick={() => {
+                  navigator.clipboard.writeText(campaign.erid!);
+                  toast.success("ERID скопирован в буфер обмена");
+                }}>
+                  <ClipboardCopy className="h-3.5 w-3.5" />
+                  Копировать
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                ERID привязан к креативу этой кампании. Для нового креатива потребуется новый ERID (через дублирование кампании).
+              </p>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-warning/10 border border-warning/20">
+              <Info className="h-4 w-4 text-warning flex-shrink-0" />
+              <p className="text-xs text-muted-foreground">ERID будет получен автоматически после отправки креатива в ОРД и его одобрения.</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Campaign ORD ID */}
+      <Card>
+        <CardContent className="p-5 space-y-3">
+          <p className="text-sm font-semibold text-card-foreground">Идентификаторы в ОРД</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
             <div className="space-y-1">
               <span className="text-xs text-muted-foreground">ID кампании в ОРД</span>
@@ -494,9 +710,9 @@ function OrdTab() {
               </p>
             </div>
             <div className="space-y-1">
-              <span className="text-xs text-muted-foreground">erid</span>
-              <p className="font-mono text-card-foreground text-xs bg-muted/30 rounded px-2 py-1.5 border border-border">
-                2VfnxxYzBs8
+              <span className="text-xs text-muted-foreground">Провайдер</span>
+              <p className="text-card-foreground text-xs bg-muted/30 rounded px-2 py-1.5 border border-border">
+                {ordProvider}
               </p>
             </div>
           </div>
@@ -521,6 +737,11 @@ function OrdTab() {
                   : <AlertTriangle className="h-3.5 w-3.5 text-destructive flex-shrink-0" />}
                 <span className="flex-1 text-card-foreground text-xs">{ev.action}</span>
                 <span className="text-[10px] text-muted-foreground flex-shrink-0">{ev.date}</span>
+                {ev.status === "error" && (
+                  <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] text-destructive">
+                    Повторить
+                  </Button>
+                )}
               </div>
             ))}
           </div>
@@ -530,8 +751,20 @@ function OrdTab() {
   );
 }
 
+// ═══════════════════════════════════════════════════════
 // ─── Main CampaignManageView ───
-export function CampaignManageView({ campaign, onBack }: { campaign: Campaign; onBack: () => void }) {
+// ═══════════════════════════════════════════════════════
+export function CampaignManageView({ campaign: initialCampaign, onBack }: { campaign: Campaign; onBack: () => void }) {
+  // Enrich campaign with mock ORD data for demo
+  const campaign: Campaign = {
+    ...initialCampaign,
+    erid: initialCampaign.erid || (isStarted(initialCampaign) ? "2VfnxxYzBs8" : undefined),
+    ordProvider: initialCampaign.ordProvider || "ОРД Яндекс",
+    ordStatus: initialCampaign.ordStatus || (isStarted(initialCampaign) ? "connected" : "pending"),
+    ordLastSync: initialCampaign.ordLastSync || (isStarted(initialCampaign) ? "19.02.2026 14:33" : undefined),
+    creativeLocked: isStarted(initialCampaign) || !!initialCampaign.erid,
+  };
+
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="w-full max-w-[1120px] mx-auto px-6 py-6 space-y-5">
@@ -543,12 +776,16 @@ export function CampaignManageView({ campaign, onBack }: { campaign: Campaign; o
                 <ArrowLeft className="h-4 w-4" />
               </Button>
               <div className="min-w-0">
-                <h2 className="text-base font-bold text-foreground tracking-tight truncate">{campaign.name}</h2>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-bold text-foreground tracking-tight truncate">{campaign.name}</h2>
+                  <EridBadge erid={campaign.erid} />
+                </div>
                 <div className="flex items-center gap-2 mt-0.5">
                   <Badge variant="outline" className={`text-[10px] ${statusStyles[campaign.status]}`}>
                     {statusLabels[campaign.status]}
                   </Badge>
                   <span className="text-xs text-muted-foreground">{placementLabels[campaign.placement]}</span>
+                  <OrdStatusIndicator campaign={campaign} />
                   {campaign.startDate && (
                     <>
                       <Separator orientation="vertical" className="h-3" />
@@ -590,9 +827,17 @@ export function CampaignManageView({ campaign, onBack }: { campaign: Campaign; o
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem className="text-sm gap-2"><Copy className="h-3.5 w-3.5" /> Дублировать</DropdownMenuItem>
-                  <DropdownMenuItem className="text-sm gap-2"><Ban className="h-3.5 w-3.5" /> Завершить</DropdownMenuItem>
-                  <DropdownMenuItem className="text-sm gap-2 text-destructive"><Archive className="h-3.5 w-3.5" /> Архивировать</DropdownMenuItem>
+                  <DropdownMenuItem className="text-sm gap-2">
+                    <Copy className="h-3.5 w-3.5" /> Дублировать (новый ERID)
+                  </DropdownMenuItem>
+                  {(campaign.status === "active" || campaign.status === "paused") && (
+                    <DropdownMenuItem className="text-sm gap-2">
+                      <Ban className="h-3.5 w-3.5" /> Завершить досрочно
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem className="text-sm gap-2 text-destructive">
+                    <Archive className="h-3.5 w-3.5" /> Архивировать
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
@@ -604,14 +849,14 @@ export function CampaignManageView({ campaign, onBack }: { campaign: Campaign; o
           <TabsList>
             <TabsTrigger value="overview" className="text-sm">Обзор</TabsTrigger>
             <TabsTrigger value="settings" className="text-sm">Настройки</TabsTrigger>
-            <TabsTrigger value="creatives" className="text-sm">Креативы</TabsTrigger>
+            <TabsTrigger value="creative" className="text-sm">Креатив</TabsTrigger>
             <TabsTrigger value="ord" className="text-sm">ОРД / Маркировка</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview"><OverviewTab campaign={campaign} /></TabsContent>
           <TabsContent value="settings"><SettingsTab campaign={campaign} /></TabsContent>
-          <TabsContent value="creatives"><CreativesTab /></TabsContent>
-          <TabsContent value="ord"><OrdTab /></TabsContent>
+          <TabsContent value="creative"><CreativeTab campaign={campaign} /></TabsContent>
+          <TabsContent value="ord"><OrdTab campaign={campaign} /></TabsContent>
         </Tabs>
       </div>
     </div>
