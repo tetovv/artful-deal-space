@@ -500,33 +500,82 @@ function UserCatalog({ allItems, navigate }: { allItems: any[]; navigate: (p: st
 }
 
 function SelectTabPrompt() {
+  const icons = [
+    { Icon: Video, label: "Видео", color: "text-destructive", bg: "bg-destructive/10" },
+    { Icon: Music, label: "Музыка", color: "text-primary", bg: "bg-primary/10" },
+    { Icon: FileText, label: "Посты", color: "text-accent-foreground", bg: "bg-accent/10" },
+    { Icon: Mic, label: "Подкасты", color: "text-primary", bg: "bg-primary/10" },
+    { Icon: BookOpen, label: "Книги", color: "text-foreground", bg: "bg-muted" },
+    { Icon: Image, label: "Фото", color: "text-primary", bg: "bg-primary/10" },
+    { Icon: Layout, label: "Шаблоны", color: "text-muted-foreground", bg: "bg-muted" },
+  ];
+
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.5, ease: "easeOut" }}
-      className="flex flex-col items-center justify-center py-20 space-y-5"
+      className="flex flex-col items-center justify-center py-16 space-y-8"
     >
-      <motion.div
-        animate={{ y: [0, -8, 0] }}
-        transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-        className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center"
-      >
-        <Sparkles className="h-8 w-8 text-primary" />
-      </motion.div>
-      <div className="text-center space-y-2 max-w-md">
-        <h3 className="text-xl font-bold text-foreground">Выберите категорию</h3>
-        <p className="text-sm text-muted-foreground">
-          Нажмите на одну из вкладок выше, чтобы увидеть контент — видео, посты, музыку и другое
-        </p>
+      {/* Animated icon ring */}
+      <div className="relative h-40 w-40">
+        {icons.map(({ Icon, bg, color, label }, i) => {
+          const angle = (360 / icons.length) * i - 90;
+          const rad = (angle * Math.PI) / 180;
+          const x = Math.cos(rad) * 64;
+          const y = Math.sin(rad) * 64;
+          return (
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, scale: 0 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.15 + i * 0.08, duration: 0.4, type: "spring", stiffness: 200 }}
+              className="absolute"
+              style={{ left: `calc(50% + ${x}px - 20px)`, top: `calc(50% + ${y}px - 20px)` }}
+            >
+              <motion.div
+                animate={{ y: [0, -4, 0] }}
+                transition={{ duration: 2.5, repeat: Infinity, delay: i * 0.3, ease: "easeInOut" }}
+                className={cn("h-10 w-10 rounded-xl flex items-center justify-center shadow-sm border border-border", bg)}
+                title={label}
+              >
+                <Icon className={cn("h-5 w-5", color)} />
+              </motion.div>
+            </motion.div>
+          );
+        })}
+        {/* Center sparkle */}
+        <div className="absolute inset-0 flex items-center justify-center">
+          <motion.div
+            animate={{ scale: [1, 1.15, 1] }}
+            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+            className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center"
+          >
+            <Sparkles className="h-7 w-7 text-primary" />
+          </motion.div>
+        </div>
       </div>
+
+      {/* Text */}
       <motion.div
-        animate={{ opacity: [0.4, 1, 0.4] }}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.8, duration: 0.4 }}
+        className="text-center space-y-2 max-w-md"
+      >
+        <h3 className="text-xl font-bold text-foreground">Выберите тип контента</h3>
+        <p className="text-sm text-muted-foreground">
+          Нажмите на категорию выше — видео, музыка, посты, подкасты и другое ждут вас
+        </p>
+      </motion.div>
+
+      <motion.div
+        animate={{ opacity: [0.3, 1, 0.3] }}
         transition={{ duration: 2, repeat: Infinity }}
         className="flex items-center gap-2 text-xs text-muted-foreground"
       >
         <ArrowRight className="h-3.5 w-3.5 rotate-[-90deg]" />
-        <span>Выберите тип контента</span>
+        <span>Нажмите на вкладку</span>
       </motion.div>
     </motion.div>
   );
