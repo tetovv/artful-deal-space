@@ -601,38 +601,85 @@ function TermsTab() {
   );
 }
 /* ═══════════════════════════════════════════════════════
-   FILES TAB
+   FILES TAB — dense table, strict actions
    ═══════════════════════════════════════════════════════ */
 function FilesTab() {
+  // Sort: pinned first, then by date descending
+  const sortedFiles = useMemo(() => {
+    return [...mockFiles].sort((a, b) => {
+      if (a.pinned && !b.pinned) return -1;
+      if (!a.pinned && b.pinned) return 1;
+      return 0;
+    });
+  }, []);
+
+  const fileSizeMock: Record<string, string> = {
+    "f1": "PDF · 1.2 MB", "f2": "MP4 · 84 MB", "f3": "MP4 · 112 MB", "f4": "PDF · 340 KB",
+  };
+
   return (
     <div className="p-4 space-y-3 max-w-[820px] mx-auto">
+      {/* Header with upload */}
+      <div className="flex items-center justify-between">
+        <p className="text-[14px] font-semibold text-card-foreground">Файлы сделки</p>
+        <Button variant="outline" size="sm" className="text-[13px] h-8">
+          <Upload className="h-3.5 w-3.5 mr-1.5" />
+          Загрузить
+        </Button>
+      </div>
+
+      {/* Table header */}
+      <div className="grid grid-cols-[100px_1fr_120px_80px_72px] gap-2 px-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+        <span>Категория</span>
+        <span>Файл</span>
+        <span>Автор</span>
+        <span>Дата</span>
+        <span className="text-right">Действия</span>
+      </div>
+
+      {/* Rows grouped by category, empty hidden */}
       {(["Brief", "Draft", "Final", "Legal"] as const).map((type) => {
-        const files = mockFiles.filter((f) => f.type === type);
+        const files = sortedFiles.filter((f) => f.type === type);
         if (files.length === 0) return null;
-        return (
-          <div key={type}>
-            <p className="text-[12px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-              {fileTypeLabels[type]}
-            </p>
-            <div className="space-y-0.5">
-              {files.map((file) => (
-                <div key={file.id} className="flex items-center gap-2.5 px-2.5 py-1.5 rounded bg-muted/30 hover:bg-muted/50 transition-colors">
-                  <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  <span className="text-[14px] font-medium text-card-foreground truncate flex-1">{file.name}</span>
-                  {file.pinned && <Pin className="h-3 w-3 text-primary shrink-0" />}
-                  <span className="text-[11px] text-muted-foreground shrink-0">{file.uploader} · {file.date}</span>
-                  <a href="#" className="text-muted-foreground hover:text-foreground"><ExternalLink className="h-3.5 w-3.5" /></a>
-                  <a href="#" className="text-muted-foreground hover:text-foreground"><Download className="h-3.5 w-3.5" /></a>
-                </div>
-              ))}
+        return files.map((file, fi) => (
+          <div
+            key={file.id}
+            className={cn(
+              "grid grid-cols-[100px_1fr_120px_80px_72px] gap-2 items-center px-2 py-1.5 rounded transition-colors hover:bg-muted/30",
+              file.pinned && "bg-primary/5 border border-primary/20"
+            )}
+          >
+            {/* Category: show label only on first row of group */}
+            <span className="text-[12px] text-muted-foreground">
+              {fi === 0 ? fileTypeLabels[type] : ""}
+            </span>
+
+            {/* File: clickable name + metadata */}
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                {file.pinned && <Pin className="h-3 w-3 text-primary shrink-0" />}
+                <a href="#" target="_blank" rel="noopener noreferrer" className="text-[14px] font-medium text-card-foreground hover:text-primary hover:underline truncate">
+                  {file.name}
+                </a>
+              </div>
+              <p className="text-[11px] text-muted-foreground/60">{fileSizeMock[file.id] || "—"}</p>
+            </div>
+
+            {/* Uploader */}
+            <span className="text-[13px] text-muted-foreground truncate">{file.uploader}</span>
+
+            {/* Date */}
+            <span className="text-[12px] text-muted-foreground">{file.date}</span>
+
+            {/* Actions: download only */}
+            <div className="flex items-center justify-end">
+              <a href="#" title="Скачать" className="text-muted-foreground hover:text-foreground transition-colors">
+                <Download className="h-4 w-4" />
+              </a>
             </div>
           </div>
-        );
+        ));
       })}
-      <Button variant="outline" size="sm" className="text-[13px] h-8">
-        <Upload className="h-3.5 w-3.5 mr-1.5" />
-        Загрузить файл
-      </Button>
     </div>
   );
 }
