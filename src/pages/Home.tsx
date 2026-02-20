@@ -499,7 +499,7 @@ function UserCatalog({ allItems, navigate }: { allItems: any[]; navigate: (p: st
   );
 }
 
-function SelectTabPrompt() {
+export function SelectTabPrompt() {
   const icons = [
     { Icon: Video, label: "Видео", color: "text-destructive", bg: "bg-destructive/10" },
     { Icon: Music, label: "Музыка", color: "text-primary", bg: "bg-primary/10" },
