@@ -193,34 +193,6 @@ export default function Subscriptions() {
           )}
         </div>
 
-        {/* Subscribed authors bar */}
-        {tab === "feed" && subscribedCreators.length > 0 && (
-          <div className="space-y-3">
-            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Мои авторы</h2>
-            <div className="flex gap-3 overflow-x-auto pb-2">
-              {subscribedCreators.map((creator: any) => (
-                <Card key={creator.id} className="shrink-0 w-48 hover:border-primary/20 transition-all">
-                  <CardContent className="p-3 flex items-center gap-3">
-                    <div
-                      onClick={() => navigate(`/creator/${creator.user_id}`)}
-                      className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-sm font-bold text-primary shrink-0 cursor-pointer overflow-hidden"
-                    >
-                      {creator.avatar_url ? (
-                        <img src={creator.avatar_url} alt="" className="h-full w-full object-cover" />
-                      ) : (
-                        creator.display_name?.charAt(0)?.toUpperCase() || "A"
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium truncate">{creator.display_name}</p>
-                      <button onClick={() => unsubscribe(creator.user_id)} className="text-[10px] text-destructive hover:underline">Отписаться</button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* Feed tab */}
         {tab === "feed" && (
