@@ -14,15 +14,15 @@ import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   CheckCircle2, AlertTriangle,
-  Search, MapPin, Users, Filter, MessageSquarePlus, Eye, Star, X, Loader2, RotateCcw, Globe, Clock,
-  Handshake, Zap, ExternalLink, ShieldCheck, Tag,
+  Search, MapPin, Users, Filter, MessageSquarePlus, Eye, X, Loader2, RotateCcw, Globe, Clock,
+  Handshake, Zap, ExternalLink, ShieldCheck, Tag, Lock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NICHES = ["Образование", "Технологии", "Дизайн", "Фото", "Музыка", "Подкасты", "Бизнес", "Видео", "Motion"];
 const GEOS = ["Россия", "Беларусь", "Казахстан", "Украина"];
 const PLATFORMS = ["Telegram", "YouTube", "Instagram", "VK", "TikTok"];
-const FORMATS = ["Пост", "Сторис", "Интеграция", "Баннер", "Обзор", "Подкаст"];
+const OFFER_TYPES = ["Видео-интеграция", "Пост", "Подкаст"] as const;
 const BUSINESS_CATEGORIES: Record<string, string> = {
   ecommerce: "E-commerce", saas: "SaaS / IT", finance: "Финансы", education: "Образование",
   health: "Здоровье", food: "Еда / FMCG", fashion: "Мода / Красота", travel: "Путешествия",
@@ -32,10 +32,9 @@ const BUSINESS_CATEGORIES: Record<string, string> = {
 const SORT_OPTIONS = [
   { value: "recommended", label: "Рекомендовано" },
   { value: "cheapest", label: "По цене (↑)" },
-  { value: "followers", label: "По охвату" },
-  { value: "rating", label: "По рейтингу" },
-  { value: "deals", label: "По сделкам" },
   { value: "response", label: "По скорости ответа" },
+  { value: "deals", label: "По сделкам" },
+  { value: "audience", label: "По аудитории" },
 ];
 
 interface ProfileRow {
@@ -48,7 +47,6 @@ interface ProfileRow {
   reach: number | null;
   geo: string | null;
   verified: boolean | null;
-  rating: number | null;
   content_count: number | null;
 }
 
@@ -56,19 +54,18 @@ interface FilterState {
   niches: string[];
   geos: string[];
   platforms: string[];
-  formats: string[];
   categories: string[];
   verifiedOnly: boolean;
   reachRange: [number, number];
 }
 
 const defaultFilters: FilterState = {
-  niches: [], geos: [], platforms: [], formats: [], categories: [],
+  niches: [], geos: [], platforms: [], categories: [],
   verifiedOnly: false, reachRange: [0, 1000000],
 };
 
 function hasActiveFilters(f: FilterState): boolean {
-  return f.niches.length > 0 || f.geos.length > 0 || f.platforms.length > 0 || f.formats.length > 0 ||
+  return f.niches.length > 0 || f.geos.length > 0 || f.platforms.length > 0 ||
     f.categories.length > 0 || f.verifiedOnly || f.reachRange[0] > 0 || f.reachRange[1] < 1000000;
 }
 
@@ -77,7 +74,6 @@ function getActiveChips(f: FilterState): { key: string; label: string }[] {
   f.niches.forEach((n) => chips.push({ key: `niche-${n}`, label: n }));
   f.geos.forEach((g) => chips.push({ key: `geo-${g}`, label: g }));
   f.platforms.forEach((p) => chips.push({ key: `platform-${p}`, label: p }));
-  f.formats.forEach((fm) => chips.push({ key: `format-${fm}`, label: fm }));
   f.categories.forEach((c) => chips.push({ key: `cat-${c}`, label: BUSINESS_CATEGORIES[c] || c }));
   if (f.verifiedOnly) chips.push({ key: "verified", label: "Верифицированные" });
   if (f.reachRange[0] > 0 || f.reachRange[1] < 1000000)
@@ -97,14 +93,23 @@ function getCreatorMeta(userId: string) {
   const hash = userId.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
   const responseHours = [2, 4, 6, 8, 12, 24][(hash) % 6];
   const dealsCount = (hash % 20);
-  const offersCount = (hash % 5);
-  const minPrice = offersCount > 0 ? [5000, 10000, 15000, 25000, 50000][(hash) % 5] : null;
+  const safeDeal = hash % 3 !== 0;
+
+  // Only 3 offer types: Video integration, Post, Podcast
+  const offers: { type: string; price: number }[] = [];
+  const priceBase = [5000, 10000, 15000, 25000, 50000][(hash) % 5];
+  if (hash % 3 !== 0) offers.push({ type: "Видео-интеграция", price: priceBase });
+  if (hash % 4 !== 0) offers.push({ type: "Пост", price: Math.round(priceBase * 0.4) });
+  if (hash % 5 === 0) offers.push({ type: "Подкаст", price: Math.round(priceBase * 0.7) });
+
+  const minPrice = offers.length > 0 ? Math.min(...offers.map((o) => o.price)) : null;
+
   const platforms: { name: string; metric: string }[] = [];
   if (hash % 3 !== 0) platforms.push({ name: "TG", metric: fmt(((hash * 137) % 50000) + 1000) || "1K" });
   if (hash % 4 !== 0) platforms.push({ name: "YT", metric: fmt(((hash * 89) % 100000) + 500) || "500" });
-  if (hash % 5 === 0) platforms.push({ name: "IG", metric: fmt(((hash * 53) % 30000) + 2000) || "2K" });
-  const formats = ["Видео-интеграция", "Пост", "Stories", "Обзор", "Баннер"].filter((_, i) => (hash + i) % 3 === 0).slice(0, 3);
-  return { responseHours, dealsCount, offersCount, minPrice, platforms: platforms.slice(0, 3), formats };
+  if (hash % 5 === 0) platforms.push({ name: "Подкаст", metric: fmt(((hash * 53) % 30000) + 2000) || "2K" });
+
+  return { responseHours, dealsCount, safeDeal, offers, minPrice, platforms: platforms.slice(0, 3) };
 }
 
 /* ── Verification Banner ── */
@@ -159,10 +164,6 @@ function FilterDrawerContent({ filters, setFilters, onApply, onReset }: {
             {PLATFORMS.map((p) => <CheckItem key={p} label={p} checked={filters.platforms.includes(p)} onChange={() => toggle("platforms", p)} />)}
           </Section>
           <Separator />
-          <Section title="Форматы">
-            {FORMATS.map((f) => <CheckItem key={f} label={f} checked={filters.formats.includes(f)} onChange={() => toggle("formats", f)} />)}
-          </Section>
-          <Separator />
           <Section title="Категория бизнеса">
             {Object.entries(BUSINESS_CATEGORIES).map(([key, label]) => (
               <CheckItem key={key} label={label} checked={filters.categories.includes(key)} onChange={() => toggle("categories", key)} />
@@ -214,22 +215,30 @@ function QuickViewModal({ creator, open, onClose, isVerified, categoryLabel }: {
                 <span className="text-base font-semibold">{creator.display_name}</span>
                 {creator.verified && <CheckCircle2 className="h-4 w-4 text-primary" />}
               </div>
-              <p className="text-xs text-muted-foreground font-normal">{creator.bio || "Автор на платформе"}</p>
+              {creator.bio && <p className="text-xs text-muted-foreground font-normal">{creator.bio}</p>}
             </div>
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 mt-2">
-          {/* Tags */}
+          {/* Badges */}
           <div className="flex flex-wrap gap-1.5">
-            {(creator.niche || []).slice(0, 4).map((n) => (
+            <Badge variant="outline" className="text-[11px] gap-1 border-primary/40 text-primary">
+              <Lock className="h-3 w-3" />Platform-only
+            </Badge>
+            {meta.safeDeal && (
+              <Badge variant="outline" className="text-[11px] gap-1 border-green-500/40 text-green-400">
+                <ShieldCheck className="h-3 w-3" />Safe deal
+              </Badge>
+            )}
+            {(creator.niche || []).slice(0, 3).map((n) => (
               <Badge key={n} variant="secondary" className="text-xs">{n}</Badge>
             ))}
             {categoryLabel && <Badge variant="outline" className="text-xs">{categoryLabel}</Badge>}
           </div>
 
           {/* Platforms */}
-          {meta.platforms.length > 0 && (
+          {meta.platforms.length > 0 ? (
             <div className="space-y-1.5">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Платформы</p>
               <div className="flex gap-3">
@@ -241,35 +250,33 @@ function QuickViewModal({ creator, open, onClose, isVerified, categoryLabel }: {
                 ))}
               </div>
             </div>
+          ) : (
+            <p className="text-xs text-muted-foreground italic">Аналитика не подключена</p>
           )}
 
-          {/* Metrics grid */}
+          {/* Metrics grid (no rating) */}
           <div className="grid grid-cols-2 gap-2">
             <MetricCell icon={<Eye className="h-3.5 w-3.5" />} label="Охват" value={reachStr} />
             <MetricCell icon={<Users className="h-3.5 w-3.5" />} label="Подписчики" value={followersStr} />
             <MetricCell icon={<Clock className="h-3.5 w-3.5" />} label="Ответ" value={meta.responseHours ? `~${meta.responseHours} ч` : null} />
             <MetricCell icon={<Handshake className="h-3.5 w-3.5" />} label="Сделки" value={meta.dealsCount > 0 ? String(meta.dealsCount) : null} />
-            <MetricCell icon={<Star className="h-3.5 w-3.5 fill-warning text-warning" />} label="Рейтинг"
-              value={creator.rating && Number(creator.rating) > 0 ? Number(creator.rating).toFixed(1) : null} />
-            <MetricCell icon={<Tag className="h-3.5 w-3.5" />} label="Офферов"
-              value={meta.offersCount > 0 ? String(meta.offersCount) : null} />
           </div>
 
-          {/* Top offers preview */}
-          {meta.offersCount > 0 && (
+          {/* Offers preview (only 3 types) */}
+          {meta.offers.length > 0 ? (
             <div className="space-y-1.5">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Предложения</p>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Размещения</p>
               <div className="space-y-1">
-                {meta.formats.slice(0, 3).map((f, i) => (
-                  <div key={i} className="flex items-center justify-between bg-muted/30 rounded px-3 py-1.5 text-sm">
-                    <span className="text-foreground">{f}</span>
-                    <span className="text-muted-foreground font-medium">
-                      {meta.minPrice ? `от ${((meta.minPrice + i * 5000)).toLocaleString("ru-RU")} ₽` : "по запросу"}
-                    </span>
+                {meta.offers.map((o) => (
+                  <div key={o.type} className="flex items-center justify-between bg-muted/30 rounded px-3 py-1.5 text-sm">
+                    <span className="text-foreground">{o.type}</span>
+                    <span className="text-muted-foreground font-medium">от {o.price.toLocaleString("ru-RU")} ₽</span>
                   </div>
                 ))}
               </div>
             </div>
+          ) : (
+            <div className="bg-muted/30 rounded px-3 py-2 text-sm text-muted-foreground">Цена по запросу</div>
           )}
 
           {/* Actions */}
@@ -307,9 +314,6 @@ function CreatorCard({ creator, isVerified, categoryLabel }: {
 }) {
   const [quickView, setQuickView] = useState(false);
   const meta = getCreatorMeta(creator.user_id);
-  const reachStr = fmt(creator.reach);
-  const followersStr = fmt(creator.followers);
-  const hasMetrics = reachStr || followersStr;
   const hasNiche = (creator.niche || []).length > 0;
 
   return (
@@ -328,30 +332,35 @@ function CreatorCard({ creator, isVerified, categoryLabel }: {
                 <p className="text-[16px] font-semibold text-foreground truncate leading-tight">{creator.display_name}</p>
                 {creator.verified && <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />}
               </div>
-              <p className="text-[13px] text-muted-foreground line-clamp-1">{creator.bio || "Автор на платформе"}</p>
+              {creator.bio && (
+                <p className="text-[13px] text-muted-foreground line-clamp-1">{creator.bio}</p>
+              )}
             </div>
-            <div className="flex items-center gap-1.5 shrink-0">
-              <button className="p-1 rounded-md hover:bg-muted transition-colors opacity-0 group-hover:opacity-100" title="В избранное">
-                <Star className="h-3.5 w-3.5 text-muted-foreground hover:text-warning" />
-              </button>
-              <span className="text-[11px] text-muted-foreground whitespace-nowrap flex items-center gap-1">
+            {meta.responseHours > 0 && (
+              <span className="text-[11px] text-muted-foreground whitespace-nowrap flex items-center gap-1 shrink-0">
                 <Clock className="h-3 w-3" />~{meta.responseHours}ч
               </span>
-            </div>
+            )}
           </div>
 
-          {/* Niche tags */}
-          {hasNiche && (
-            <div className="flex flex-wrap gap-1">
-              {(creator.niche || []).slice(0, 3).map((n) => (
-                <Badge key={n} variant="secondary" className="text-[11px] px-1.5 py-0 h-5">{n}</Badge>
-              ))}
-              {categoryLabel && <Badge variant="outline" className="text-[11px] px-1.5 py-0 h-5">{categoryLabel}</Badge>}
-            </div>
-          )}
+          {/* Badges: Safe deal + Platform-only + niche tags */}
+          <div className="flex flex-wrap gap-1">
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 gap-0.5 border-primary/40 text-primary">
+              <Lock className="h-2.5 w-2.5" />Platform-only
+            </Badge>
+            {meta.safeDeal && (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 gap-0.5 border-green-500/40 text-green-400">
+                <ShieldCheck className="h-2.5 w-2.5" />Safe deal
+              </Badge>
+            )}
+            {hasNiche && (creator.niche || []).slice(0, 3).map((n) => (
+              <Badge key={n} variant="secondary" className="text-[11px] px-1.5 py-0 h-5">{n}</Badge>
+            ))}
+            {categoryLabel && <Badge variant="outline" className="text-[11px] px-1.5 py-0 h-5">{categoryLabel}</Badge>}
+          </div>
 
           {/* Platforms mini-row */}
-          {meta.platforms.length > 0 && (
+          {meta.platforms.length > 0 ? (
             <div className="flex gap-2">
               {meta.platforms.map((p) => (
                 <span key={p.name} className="inline-flex items-center gap-1 text-[12px] bg-muted/50 rounded px-1.5 py-0.5">
@@ -360,47 +369,32 @@ function CreatorCard({ creator, isVerified, categoryLabel }: {
                 </span>
               ))}
             </div>
+          ) : (
+            <p className="text-[12px] text-muted-foreground/60 italic">Аналитика не подключена</p>
           )}
 
-          {/* Commercial row: price + offers */}
-          <div className="flex items-center gap-3 text-[13px]">
-            {meta.minPrice ? (
-              <span className="font-medium text-foreground">от {meta.minPrice.toLocaleString("ru-RU")} ₽</span>
-            ) : (
-              <span className="text-muted-foreground">Цена по запросу</span>
-            )}
-            {meta.offersCount > 0 && (
-              <span className="text-muted-foreground">Офферов: {meta.offersCount}</span>
-            )}
-          </div>
-
-          {/* Formats row */}
-          {meta.formats.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {meta.formats.map((f) => (
-                <span key={f} className="text-[11px] text-muted-foreground bg-muted/30 rounded px-1.5 py-0.5">{f}</span>
+          {/* Offers row (only Video / Post / Podcast) */}
+          {meta.offers.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
+              {meta.offers.map((o) => (
+                <span key={o.type} className="text-foreground">
+                  <span className="text-muted-foreground">{o.type}:</span>{" "}
+                  <span className="font-medium">от {o.price.toLocaleString("ru-RU")} ₽</span>
+                </span>
               ))}
             </div>
+          ) : (
+            <p className="text-[13px] text-muted-foreground">Цена по запросу</p>
           )}
 
-          {/* Trust row */}
-          <div className="flex items-center gap-3 text-[12px] text-muted-foreground">
-            {hasMetrics && (
-              <>
-                {followersStr && <span className="flex items-center gap-1"><Users className="h-3 w-3" />{followersStr}</span>}
-                {reachStr && <span className="flex items-center gap-1"><Eye className="h-3 w-3" />{reachStr}</span>}
-              </>
-            )}
-            {meta.dealsCount > 0 ? (
-              <span className="flex items-center gap-1"><Handshake className="h-3 w-3" />Сделки: {meta.dealsCount}</span>
-            ) : null}
-            {creator.rating && Number(creator.rating) > 0 ? (
-              <span className="flex items-center gap-1"><Star className="h-3 w-3 fill-warning text-warning" />{Number(creator.rating).toFixed(1)}</span>
-            ) : null}
-            {!hasMetrics && meta.dealsCount === 0 && (
-              <span className="italic text-muted-foreground/60">Надёжность: нет данных</span>
-            )}
-          </div>
+          {/* Reliability signals (no rating) */}
+          {(meta.dealsCount > 0 || meta.responseHours > 0) && (
+            <div className="flex items-center gap-3 text-[12px] text-muted-foreground">
+              {meta.dealsCount > 0 && (
+                <span className="flex items-center gap-1"><Handshake className="h-3 w-3" />Сделки: {meta.dealsCount}</span>
+              )}
+            </div>
+          )}
 
           {/* Footer actions */}
           <div className="flex items-center justify-between pt-1.5 border-t border-border/50">
@@ -448,7 +442,7 @@ export function BirzhaTab({ isVerified, onGoToSettings }: { isVerified: boolean;
       setLoading(true);
       const { data, error } = await supabase
         .from("profiles")
-        .select("user_id, display_name, bio, avatar_url, niche, followers, reach, geo, verified, rating, content_count");
+        .select("user_id, display_name, bio, avatar_url, niche, followers, reach, geo, verified, content_count");
       if (!error && data) setProfiles(data as ProfileRow[]);
       setLoading(false);
     };
@@ -479,7 +473,6 @@ export function BirzhaTab({ isVerified, onGoToSettings }: { isVerified: boolean;
       if (key.startsWith("niche-")) next.niches = prev.niches.filter((n) => `niche-${n}` !== key);
       else if (key.startsWith("geo-")) next.geos = prev.geos.filter((g) => `geo-${g}` !== key);
       else if (key.startsWith("platform-")) next.platforms = prev.platforms.filter((p) => `platform-${p}` !== key);
-      else if (key.startsWith("format-")) next.formats = prev.formats.filter((f) => `format-${f}` !== key);
       else if (key.startsWith("cat-")) next.categories = prev.categories.filter((c) => `cat-${c}` !== key);
       else if (key === "verified") next.verifiedOnly = false;
       else if (key === "reach") next.reachRange = [0, 1000000];
@@ -507,8 +500,6 @@ export function BirzhaTab({ isVerified, onGoToSettings }: { isVerified: boolean;
     if (f.reachRange[1] < 1000000) result = result.filter((c) => (c.reach || 0) <= f.reachRange[1]);
 
     result.sort((a, b) => {
-      if (sortBy === "followers") return (b.followers || 0) - (a.followers || 0);
-      if (sortBy === "rating") return (Number(b.rating) || 0) - (Number(a.rating) || 0);
       if (sortBy === "cheapest") {
         const pa = getCreatorMeta(a.user_id).minPrice || Infinity;
         const pb = getCreatorMeta(b.user_id).minPrice || Infinity;
@@ -519,6 +510,9 @@ export function BirzhaTab({ isVerified, onGoToSettings }: { isVerified: boolean;
       }
       if (sortBy === "deals") {
         return getCreatorMeta(b.user_id).dealsCount - getCreatorMeta(a.user_id).dealsCount;
+      }
+      if (sortBy === "audience") {
+        return (b.followers || 0) - (a.followers || 0);
       }
       return (b.reach || 0) - (a.reach || 0);
     });
