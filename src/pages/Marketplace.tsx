@@ -12,6 +12,7 @@ import {
   ChevronDown, ChevronUp, ChevronRight, Send, RefreshCw, FileText, MessageSquare, Handshake, Filter,
   CalendarDays,
 } from "lucide-react";
+import { IncomingProposalDetail } from "@/components/ad-studio/IncomingProposalDetail";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -339,6 +340,7 @@ function CreatorOffers() {
   const [minBudget, setMinBudget] = useState(0);
   const [minPartnerScore, setMinPartnerScore] = useState(0);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [selectedDeal, setSelectedDeal] = useState<typeof deals[0] | null>(null);
 
   const { data: deals = [], isLoading } = useQuery({
     queryKey: ["creator-incoming-deals", user?.id],
@@ -517,7 +519,8 @@ function CreatorOffers() {
                   return (
                     <Card
                       key={deal.id}
-                      className={`overflow-hidden transition-all hover:shadow-md ${isLow ? "opacity-60 border-destructive/20" : "hover:border-primary/30"}`}
+                      className={`overflow-hidden transition-all hover:shadow-md cursor-pointer ${isLow ? "opacity-60 border-destructive/20" : "hover:border-primary/30"}`}
+                      onClick={() => setSelectedDeal(deal)}
                     >
                       <CardContent className="p-4">
                         {/* Row 1: Advertiser + status pill */}
@@ -591,32 +594,19 @@ function CreatorOffers() {
                           </span>
 
                           {pStatus === "new" ? (
-                            <div className="flex items-center gap-2">
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-7 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
-                                disabled={isActioning}
-                                onClick={(e) => handleReject(deal.id, e)}
-                              >
-                                <X className="h-3 w-3 mr-1" />
-                                Отклонить
-                              </Button>
-                              <Button
-                                size="sm"
-                                className="h-7 text-xs"
-                                disabled={isActioning}
-                                onClick={(e) => handleAccept(deal.id, e)}
-                              >
-                                Открыть предложение
-                              </Button>
-                            </div>
+                            <Button
+                              size="sm"
+                              className="h-7 text-xs"
+                              onClick={(e) => { e.stopPropagation(); setSelectedDeal(deal); }}
+                            >
+                              Открыть предложение
+                            </Button>
                           ) : pStatus === "active" ? (
                             <Button
                               size="sm"
                               variant="outline"
                               className="h-7 text-xs"
-                              onClick={() => navigate("/ad-studio")}
+                              onClick={(e) => { e.stopPropagation(); setSelectedDeal(deal); }}
                             >
                               Продолжить
                               <ChevronRight className="h-3 w-3 ml-1" />
@@ -628,6 +618,17 @@ function CreatorOffers() {
                   );
                 })}
               </div>
+            )}
+
+            {/* Detail view modal */}
+            {selectedDeal && (
+              <IncomingProposalDetail
+                open={!!selectedDeal}
+                onClose={() => setSelectedDeal(null)}
+                deal={selectedDeal}
+                advertiserProfile={offerProfileMap.get(selectedDeal.advertiser_id || "") || null}
+                brand={brandMap.get(selectedDeal.advertiser_id || "") || null}
+              />
             )}
           </TabsContent>
 
