@@ -128,14 +128,14 @@ function isFullyLocked(campaign: Campaign): boolean {
   return isTerminal(campaign);
 }
 
-// ─── ERID Badge ───
+// ─── ERID Badge (single instance in header) ───
 function EridBadge({ erid }: { erid?: string }) {
   if (!erid) return null;
   return (
-    <div className="flex items-center gap-2 rounded-lg bg-primary/10 border border-primary/20 px-3 py-1.5">
-      <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">ERID</span>
-      <span className="text-xs font-mono font-semibold text-primary">{erid}</span>
-      <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => {
+    <div className="flex items-center gap-1.5 rounded-md bg-primary/10 border border-primary/20 px-2 py-1">
+      <span className="text-[11px] text-muted-foreground font-medium uppercase tracking-wider">ERID</span>
+      <span className="text-[13px] font-mono font-semibold text-primary">{erid}</span>
+      <Button size="sm" variant="ghost" className="h-5 w-5 p-0" onClick={() => {
         navigator.clipboard.writeText(erid);
         toast.success("ERID скопирован");
       }}>
@@ -197,13 +197,13 @@ function MetricCard({ label, value, icon: Icon, colorClass }: {
 }) {
   return (
     <Card className="flex-1 min-w-0">
-      <CardContent className="p-4 flex items-center gap-3">
-        <div className={`h-9 w-9 rounded-lg flex items-center justify-center flex-shrink-0 ${colorClass}`}>
+      <CardContent className="p-3 flex items-center gap-2.5">
+        <div className={`h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0 ${colorClass}`}>
           <Icon className="h-4 w-4" />
         </div>
         <div className="min-w-0">
-          <p className="text-lg font-bold text-card-foreground leading-tight">{value}</p>
-          <p className="text-xs text-muted-foreground">{label}</p>
+          <p className="text-base font-bold text-card-foreground leading-tight">{value}</p>
+          <p className="text-[13px] text-muted-foreground">{label}</p>
         </div>
       </CardContent>
     </Card>
@@ -281,18 +281,10 @@ function OverviewTab({ campaign }: { campaign: Campaign }) {
   const hasIssues = campaign.impressions === 0 || campaign.status === "error" || campaign.status === "ord_error" || budgetPercent >= 100;
 
   return (
-    <div className="space-y-4">
-      {/* ERID + ORD status */}
-      {(campaign.erid || campaign.ordStatus) && (
-        <div className="flex items-center gap-3 flex-wrap">
-          <EridBadge erid={campaign.erid} />
-          <OrdStatusIndicator campaign={campaign} />
-        </div>
-      )}
-
+    <div className="space-y-3">
       {/* Period selector + KPIs */}
       <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold text-card-foreground">Метрики за период</p>
+        <p className="text-[15px] font-semibold text-card-foreground">Метрики за период</p>
         <div className="flex items-center rounded-lg border border-border bg-card overflow-hidden">
           {(["today", "7d", "30d"] as DateRange[]).map((r) => (
             <button key={r} type="button" onClick={() => setDateRange(r)}
@@ -306,7 +298,7 @@ function OverviewTab({ campaign }: { campaign: Campaign }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
         <MetricCard label="Показы" value={formatNum(campaign.impressions)} icon={Eye} colorClass="bg-info/15 text-info" />
         <MetricCard label="Клики" value={formatNum(campaign.clicks)} icon={MousePointerClick} colorClass="bg-success/15 text-success" />
         <MetricCard label="CTR" value={`${campaign.ctr}%`} icon={TrendingUp} colorClass="bg-accent/15 text-accent" />
@@ -315,9 +307,9 @@ function OverviewTab({ campaign }: { campaign: Campaign }) {
 
       {/* Chart */}
       <Card>
-        <CardContent className="p-5 space-y-3">
+        <CardContent className="p-4 space-y-2.5">
           <div className="flex items-center justify-between">
-            <p className="text-sm font-semibold text-card-foreground">Динамика</p>
+            <p className="text-[15px] font-semibold text-card-foreground">Динамика</p>
             <div className="flex items-center rounded-lg border border-border bg-card overflow-hidden">
               {[
                 { key: "impressions", label: "Показы" },
@@ -340,11 +332,11 @@ function OverviewTab({ campaign }: { campaign: Campaign }) {
 
       {/* Budget & pacing */}
       <Card>
-        <CardContent className="p-5 space-y-3">
+        <CardContent className="p-4 space-y-2.5">
           <div className="flex items-center justify-between">
-            <p className="text-sm font-semibold text-card-foreground">Бюджет и пейсинг</p>
+            <p className="text-[15px] font-semibold text-card-foreground">Бюджет и пейсинг</p>
             {isStarted(campaign) && !isTerminal(campaign) && (
-              <Button size="sm" variant="outline" className="h-8 text-sm gap-1.5" onClick={() => setTopUpOpen(!topUpOpen)}>
+              <Button size="sm" variant="outline" className="h-7 text-[13px] gap-1.5" onClick={() => setTopUpOpen(!topUpOpen)}>
                 <PlusCircle className="h-3.5 w-3.5" />
                 Пополнить бюджет
               </Button>
@@ -373,13 +365,13 @@ function OverviewTab({ campaign }: { campaign: Campaign }) {
             </div>
           )}
 
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-sm">
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-[14px]">
               <span className="text-muted-foreground">Потрачено</span>
               <span className="font-medium text-card-foreground">{formatNum(campaign.spent)} / {formatNum(campaign.budget)} ₽</span>
             </div>
             <Progress value={budgetPercent} className="h-2" />
-            <div className="flex items-center gap-6 text-xs text-muted-foreground pt-1">
+            <div className="flex items-center gap-6 text-[13px] text-muted-foreground pt-0.5">
               <span>Дневной темп: <span className="font-medium text-card-foreground">{formatNum(dailyPace)} ₽/день</span></span>
               {daysRemaining !== null && (
                 <span>Осталось: <span className="font-medium text-card-foreground">{daysRemaining} дн.</span></span>
@@ -392,13 +384,13 @@ function OverviewTab({ campaign }: { campaign: Campaign }) {
       {/* Diagnostics */}
       {hasIssues && (
         <Card className="border-warning/30">
-          <CardContent className="p-5 space-y-2">
+          <CardContent className="p-3.5 space-y-1.5">
             <div className="flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-warning flex-shrink-0" />
-              <p className="text-sm font-semibold text-card-foreground">Почему кампания не откручивается?</p>
+              <p className="text-[14px] font-semibold text-card-foreground">Почему кампания не откручивается?</p>
             </div>
-            <ul className="space-y-1.5 text-sm text-muted-foreground pl-6">
-              {budgetPercent >= 100 && <li className="flex items-center gap-2"><Ban className="h-3.5 w-3.5 text-destructive" /> Бюджет исчерпан — пополните бюджет для продолжения</li>}
+            <ul className="space-y-1 text-[13px] text-muted-foreground pl-6">
+              {budgetPercent >= 100 && <li className="flex items-center gap-2"><Ban className="h-3.5 w-3.5 text-destructive" /> Бюджет исчерпан — пополните для продолжения</li>}
               {campaign.impressions === 0 && campaign.status === "draft" && <li className="flex items-center gap-2"><Info className="h-3.5 w-3.5 text-warning" /> Кампания в черновике — запустите для показа</li>}
               {campaign.impressions === 0 && campaign.status === "active" && <li className="flex items-center gap-2"><Info className="h-3.5 w-3.5 text-warning" /> Креатив не прошёл модерацию или отсутствует ERID</li>}
               {campaign.status === "error" && <li className="flex items-center gap-2"><AlertTriangle className="h-3.5 w-3.5 text-destructive" /> Ошибка ОРД — проверьте вкладку ОРД / Маркировка</li>}
@@ -445,25 +437,25 @@ function SettingsTab({ campaign }: { campaign: Campaign }) {
   };
 
   return (
-    <div className="space-y-4 relative">
+    <div className="space-y-3 relative">
       {hasChanges && (
-        <div className="sticky top-0 z-10 flex items-center justify-between bg-warning/10 border border-warning/30 rounded-lg px-4 py-2.5">
-          <span className="text-sm text-warning font-medium">Есть несохранённые изменения</span>
-          <Button size="sm" className="h-8 text-sm gap-1.5" onClick={() => setHasChanges(false)}>
+        <div className="sticky top-0 z-10 flex items-center justify-between bg-warning/10 border border-warning/30 rounded-lg px-3 py-2">
+          <span className="text-[14px] text-warning font-medium">Есть несохранённые изменения</span>
+          <Button size="sm" className="h-7 text-[13px] gap-1.5" onClick={() => setHasChanges(false)}>
             <Save className="h-3.5 w-3.5" />
-            Сохранить изменения
+            Сохранить
           </Button>
         </div>
       )}
 
       {/* Budget & schedule */}
       <Card>
-        <CardContent className="p-5 space-y-4">
-          <p className="text-sm font-semibold text-card-foreground">Бюджет и расписание</p>
+        <CardContent className="p-4 space-y-3">
+          <p className="text-[15px] font-semibold text-card-foreground">Бюджет и расписание</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <div className="flex items-center gap-1.5">
-                <label className="text-xs text-muted-foreground">Общий бюджет (₽)</label>
+                <label className="text-[13px] text-muted-foreground">Общий бюджет (₽)</label>
                 {budgetDecreaseBlocked && (
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -487,12 +479,12 @@ function SettingsTab({ campaign }: { campaign: Campaign }) {
               )}
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs text-muted-foreground">Дневной лимит (₽)</label>
-              <Input placeholder="Без ограничений" className="h-10" onChange={() => setHasChanges(true)} />
+              <label className="text-[13px] text-muted-foreground">Дневной лимит (₽)</label>
+              <Input placeholder="Без ограничений" className="h-9" onChange={() => setHasChanges(true)} />
             </div>
             <div className="space-y-1.5">
               <div className="flex items-center gap-1.5">
-                <label className="text-xs text-muted-foreground">Дата начала</label>
+                <label className="text-[13px] text-muted-foreground">Дата начала</label>
                 {started && <Lock className="h-3 w-3 text-muted-foreground" />}
               </div>
               <LockedField locked={started} reason="Дата начала не может быть изменена после запуска кампании">
@@ -500,7 +492,7 @@ function SettingsTab({ campaign }: { campaign: Campaign }) {
               </LockedField>
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs text-muted-foreground">Дата окончания</label>
+              <label className="text-[13px] text-muted-foreground">Дата окончания</label>
               <Input type="date" value={endDate} onChange={handleChange(setEndDate)} className="h-10" />
             </div>
           </div>
@@ -509,34 +501,34 @@ function SettingsTab({ campaign }: { campaign: Campaign }) {
 
       {/* Targeting */}
       <Card>
-        <CardContent className="p-5 space-y-3">
-          <p className="text-sm font-semibold text-card-foreground">Таргетинг</p>
-          <div className="flex items-center gap-2 text-sm">
+        <CardContent className="p-4 space-y-2">
+          <p className="text-[15px] font-semibold text-card-foreground">Таргетинг</p>
+          <div className="flex items-center gap-2 text-[14px]">
             <Globe className="h-4 w-4 text-muted-foreground" />
             <span className="text-card-foreground font-medium">Все пользователи</span>
-            <Badge variant="outline" className="text-[10px] border-muted-foreground/20 text-muted-foreground ml-1">По умолчанию</Badge>
+            <Badge variant="outline" className="text-[11px] border-muted-foreground/20 text-muted-foreground ml-1">По умолчанию</Badge>
           </div>
-          <p className="text-xs text-muted-foreground">Сегментация по аудиториям станет доступна в следующих обновлениях.</p>
+          <p className="text-[13px] text-muted-foreground">Сегментация по аудиториям станет доступна в следующих обновлениях.</p>
         </CardContent>
       </Card>
 
       {/* UTM */}
       <Card>
-        <CardContent className="p-5 space-y-4">
-          <p className="text-sm font-semibold text-card-foreground">Трекинг (UTM-параметры)</p>
+        <CardContent className="p-4 space-y-3">
+          <p className="text-[15px] font-semibold text-card-foreground">Трекинг (UTM-параметры)</p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="space-y-1.5">
-              <label className="text-xs text-muted-foreground">utm_source</label>
+              <label className="text-[13px] text-muted-foreground">utm_source</label>
               <Input placeholder="mediaos" value={utm.source}
                 onChange={(e) => { setUtm({ ...utm, source: e.target.value }); setHasChanges(true); }} className="h-10" />
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs text-muted-foreground">utm_medium</label>
+              <label className="text-[13px] text-muted-foreground">utm_medium</label>
               <Input placeholder="cpc" value={utm.medium}
                 onChange={(e) => { setUtm({ ...utm, medium: e.target.value }); setHasChanges(true); }} className="h-10" />
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs text-muted-foreground">utm_campaign</label>
+              <label className="text-[13px] text-muted-foreground">utm_campaign</label>
               <Input placeholder={campaign.name.toLowerCase().replace(/\s/g, "_")} value={utm.campaign}
                 onChange={(e) => { setUtm({ ...utm, campaign: e.target.value }); setHasChanges(true); }} className="h-10" />
             </div>
@@ -546,11 +538,11 @@ function SettingsTab({ campaign }: { campaign: Campaign }) {
 
       {/* Policies */}
       <Card className="border-muted-foreground/10">
-        <CardContent className="p-5 space-y-2">
-          <p className="text-sm font-semibold text-card-foreground">Правила и ограничения</p>
-          <ul className="space-y-1.5 text-xs text-muted-foreground leading-relaxed">
+        <CardContent className="p-4 space-y-1.5">
+          <p className="text-[15px] font-semibold text-card-foreground">Правила и ограничения</p>
+          <ul className="space-y-1 text-[13px] text-muted-foreground leading-relaxed">
             <li>• Одна кампания = один креатив = один ERID</li>
-            <li>• Креатив нельзя заменить после получения ERID — создайте новую версию кампании</li>
+            <li>• Креатив нельзя заменить после получения ERID — создайте новую версию</li>
             <li>• Бюджет нельзя уменьшить после старта (для корректного учёта в ОРД)</li>
             <li>• Все креативы должны содержать маркировку «Реклама» и ERID</li>
             <li>• Статистика передаётся в ОРД автоматически ежедневно</li>
@@ -569,64 +561,53 @@ function CreativeTab({ campaign }: { campaign: Campaign }) {
   const creative = mockCreative;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Lock notice */}
       {locked && (
-        <div className="flex items-start gap-3 rounded-lg border border-primary/20 bg-primary/5 p-4">
+        <div className="flex items-start gap-2.5 rounded-lg border border-primary/20 bg-primary/5 p-3">
           <Lock className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
-          <div className="space-y-1">
-            <p className="text-sm font-medium text-card-foreground">Креатив заблокирован</p>
-            <p className="text-xs text-muted-foreground">
+          <div>
+            <p className="text-[14px] font-medium text-card-foreground">Креатив заблокирован</p>
+            <p className="text-[13px] text-muted-foreground">
               {hasErid(campaign)
-                ? "ERID уже выдан для этого креатива. По закону о маркировке рекламы изменение креатива после получения ERID невозможно."
+                ? "ERID выдан — изменение креатива после получения ERID невозможно по закону."
                 : "Кампания запущена — изменение креатива невозможно."}
-              {" "}Чтобы использовать другой креатив, создайте новую версию кампании.
+              {" "}Для нового креатива дублируйте кампанию.
             </p>
           </div>
         </div>
       )}
 
-      {/* ERID display */}
-      {campaign.erid && (
-        <EridBadge erid={campaign.erid} />
-      )}
-
       <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold text-card-foreground">Креатив кампании</p>
-        <span className="text-[10px] text-muted-foreground bg-muted/30 rounded px-2 py-1">1 кампания = 1 креатив = 1 ERID</span>
+        <p className="text-[15px] font-semibold text-card-foreground">Креатив кампании</p>
+        <span className="text-[11px] text-muted-foreground bg-muted/30 rounded px-2 py-0.5">1 кампания = 1 креатив = 1 ERID</span>
       </div>
 
-      {/* Creative card — read-only */}
+      {/* Creative card */}
       <Card>
-        <CardContent className="p-4">
-          <div className="flex items-start gap-4">
-            <div className="h-20 w-28 rounded-lg bg-muted/30 border border-border flex items-center justify-center flex-shrink-0">
+        <CardContent className="p-3.5">
+          <div className="flex items-start gap-3">
+            <div className="h-16 w-24 rounded-lg bg-muted/30 border border-border flex items-center justify-center flex-shrink-0">
               <ImagePlus className="h-5 w-5 text-muted-foreground/40" />
             </div>
-            <div className="flex-1 min-w-0 space-y-1.5">
+            <div className="flex-1 min-w-0 space-y-1">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-sm font-semibold text-card-foreground">{creative.title}</span>
-                <Badge variant="outline" className={`text-[10px] ${creativeStatusStyles[creative.status]}`}>
+                <span className="text-[14px] font-semibold text-card-foreground">{creative.title}</span>
+                <Badge variant="outline" className={`text-[11px] ${creativeStatusStyles[creative.status]}`}>
                   {creativeStatusLabels[creative.status]}
                 </Badge>
                 {locked && (
-                  <Badge variant="outline" className="text-[10px] border-primary/30 text-primary bg-primary/10">
+                  <Badge variant="outline" className="text-[11px] border-primary/30 text-primary bg-primary/10">
                     <Lock className="h-2.5 w-2.5 mr-1" />
                     Заблокирован
                   </Badge>
                 )}
               </div>
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <div className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
                 <Link2 className="h-3 w-3" />
                 <span className="truncate">{creative.url}</span>
                 <ExternalLink className="h-3 w-3 flex-shrink-0" />
               </div>
-              {campaign.erid && (
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <ShieldCheck className="h-3 w-3" />
-                  <span>ERID: <span className="font-mono font-medium text-card-foreground">{campaign.erid}</span></span>
-                </div>
-              )}
             </div>
           </div>
         </CardContent>
@@ -634,14 +615,14 @@ function CreativeTab({ campaign }: { campaign: Campaign }) {
 
       {/* Preview */}
       <Card>
-        <CardContent className="p-5 space-y-3">
-          <p className="text-sm font-semibold text-card-foreground">Предпросмотр размещения</p>
-          <div className="rounded-lg border border-border bg-muted/20 p-4 flex flex-col items-center justify-center gap-2 min-h-[120px]">
-            <div className="rounded-lg bg-primary/10 border border-primary/20 px-6 py-3 text-center max-w-xs">
-              <p className="text-xs font-semibold text-primary">{creative.title}</p>
-              <p className="text-[10px] text-muted-foreground mt-0.5">Реклама · {placementLabels[campaign.placement]}</p>
+        <CardContent className="p-4 space-y-2.5">
+          <p className="text-[15px] font-semibold text-card-foreground">Предпросмотр размещения</p>
+          <div className="rounded-lg border border-border bg-muted/20 p-3 flex flex-col items-center justify-center gap-2 min-h-[100px]">
+            <div className="rounded-lg bg-primary/10 border border-primary/20 px-5 py-2.5 text-center max-w-xs">
+              <p className="text-[13px] font-semibold text-primary">{creative.title}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Реклама · {placementLabels[campaign.placement]}</p>
               {campaign.erid && (
-                <p className="text-[9px] text-muted-foreground/60 mt-0.5">erid: {campaign.erid}</p>
+                <p className="text-[10px] text-muted-foreground/60 mt-0.5">erid: {campaign.erid}</p>
               )}
             </div>
           </div>
@@ -650,17 +631,17 @@ function CreativeTab({ campaign }: { campaign: Campaign }) {
 
       {/* Duplicate CTA */}
       <Card className="border-primary/20 bg-primary/5">
-        <CardContent className="p-5">
-          <div className="flex items-center justify-between gap-4">
-            <div className="space-y-1">
-              <p className="text-sm font-semibold text-card-foreground">Нужен другой креатив?</p>
-              <p className="text-xs text-muted-foreground">
-                Создайте новую версию кампании с новым креативом. Будет зарегистрирован новый ERID.
+        <CardContent className="p-3.5">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[14px] font-semibold text-card-foreground">Нужен другой креатив?</p>
+              <p className="text-[13px] text-muted-foreground">
+                Дублируйте кампанию — будет зарегистрирован новый ERID.
               </p>
             </div>
-            <Button size="sm" variant="outline" className="h-9 text-sm gap-1.5 flex-shrink-0 border-primary/30 text-primary hover:bg-primary/10">
+            <Button size="sm" variant="outline" className="h-8 text-[13px] gap-1.5 flex-shrink-0 border-primary/30 text-primary hover:bg-primary/10">
               <Copy className="h-3.5 w-3.5" />
-              Дублировать кампанию
+              Дублировать
             </Button>
           </div>
         </CardContent>
@@ -677,14 +658,14 @@ function OrdTab({ campaign }: { campaign: Campaign }) {
   const ordProvider = campaign.ordProvider || "ОРД Яндекс";
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Connection status */}
       <Card>
-        <CardContent className="p-5 space-y-3">
-          <p className="text-sm font-semibold text-card-foreground">Подключение к ОРД</p>
+        <CardContent className="p-4 space-y-2.5">
+          <p className="text-[15px] font-semibold text-card-foreground">Подключение к ОРД</p>
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${
+            <div className="flex items-center gap-2.5">
+              <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${
                 ordStatus === "connected" ? "bg-success/15" : ordStatus === "error" ? "bg-destructive/15" : "bg-warning/15"
               }`}>
                 {ordStatus === "connected" ? <CheckCircle2 className="h-4 w-4 text-success" /> :
@@ -692,15 +673,15 @@ function OrdTab({ campaign }: { campaign: Campaign }) {
                  <Info className="h-4 w-4 text-warning" />}
               </div>
               <div>
-                <p className="text-sm font-medium text-card-foreground">{ordProvider}</p>
-                <p className="text-xs text-muted-foreground">
-                  {ordStatus === "connected" && `Активно · последняя синхронизация ${campaign.ordLastSync || "—"}`}
+                <p className="text-[14px] font-medium text-card-foreground">{ordProvider}</p>
+                <p className="text-[13px] text-muted-foreground">
+                  {ordStatus === "connected" && `Активно · синхр. ${campaign.ordLastSync || "—"}`}
                   {ordStatus === "error" && "Ошибка соединения — повторите попытку"}
                   {ordStatus === "pending" && "Ожидает подключения"}
                 </p>
               </div>
             </div>
-            <Button size="sm" variant="outline" className="h-8 text-sm gap-1.5">
+            <Button size="sm" variant="outline" className="h-7 text-[13px] gap-1.5">
               <RefreshCw className="h-3.5 w-3.5" />
               Переподключить
             </Button>
@@ -708,60 +689,44 @@ function OrdTab({ campaign }: { campaign: Campaign }) {
         </CardContent>
       </Card>
 
-      {/* ERID */}
+      {/* ERID status (compact, no duplicate copy button) */}
       <Card>
-        <CardContent className="p-5 space-y-3">
-          <p className="text-sm font-semibold text-card-foreground">Идентификатор маркировки (ERID)</p>
+        <CardContent className="p-4 space-y-2">
+          <p className="text-[15px] font-semibold text-card-foreground">Маркировка (ERID)</p>
           {campaign.erid ? (
-            <div className="space-y-3">
-              <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/20 border border-border">
-                <ShieldCheck className="h-5 w-5 text-success flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs text-muted-foreground">ERID</p>
-                  <p className="text-base font-mono font-bold text-card-foreground tracking-wide">{campaign.erid}</p>
-                </div>
-                <Button size="sm" variant="outline" className="h-8 text-sm gap-1.5" onClick={() => {
-                  navigator.clipboard.writeText(campaign.erid!);
-                  toast.success("ERID скопирован в буфер обмена");
-                }}>
-                  <ClipboardCopy className="h-3.5 w-3.5" />
-                  Копировать
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                ERID привязан к креативу этой кампании. Для нового креатива потребуется новый ERID (через дублирование кампании).
-              </p>
+            <div className="flex items-center gap-2.5 text-[13px] text-muted-foreground">
+              <ShieldCheck className="h-4 w-4 text-success flex-shrink-0" />
+              <span>ERID <span className="font-mono font-semibold text-card-foreground">{campaign.erid}</span> присвоен креативу. Для нового креатива дублируйте кампанию.</span>
             </div>
           ) : (
-            <div className="flex items-center gap-3 p-3 rounded-lg bg-warning/10 border border-warning/20">
+            <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
               <Info className="h-4 w-4 text-warning flex-shrink-0" />
-              <p className="text-xs text-muted-foreground">ERID будет получен автоматически после отправки креатива в ОРД и его одобрения.</p>
+              <span>ERID будет получен после отправки креатива в ОРД.</span>
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Campaign ORD ID */}
+      {/* Campaign ORD IDs */}
       <Card>
-        <CardContent className="p-5 space-y-3">
-          <p className="text-sm font-semibold text-card-foreground">Идентификаторы в ОРД</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+        <CardContent className="p-4 space-y-2">
+          <p className="text-[15px] font-semibold text-card-foreground">Идентификаторы в ОРД</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             <div className="space-y-1">
-              <span className="text-xs text-muted-foreground">ID кампании в ОРД</span>
-              <p className="font-mono text-card-foreground text-xs bg-muted/30 rounded px-2 py-1.5 border border-border">
+              <span className="text-[13px] text-muted-foreground">ID кампании в ОРД</span>
+              <p className="font-mono text-card-foreground text-[13px] bg-muted/30 rounded px-2 py-1 border border-border">
                 ord-camp-2026-0219-a1b2
               </p>
             </div>
             <div className="space-y-1">
-              <span className="text-xs text-muted-foreground">Провайдер</span>
-              <p className="text-card-foreground text-xs bg-muted/30 rounded px-2 py-1.5 border border-border">
+              <span className="text-[13px] text-muted-foreground">Провайдер</span>
+              <p className="text-card-foreground text-[13px] bg-muted/30 rounded px-2 py-1 border border-border">
                 {ordProvider}
               </p>
             </div>
           </div>
         </CardContent>
       </Card>
-
     </div>
   );
 }
@@ -1102,37 +1067,37 @@ function AuditLogTab({ campaign }: { campaign: Campaign }) {
   ];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <Card>
-        <CardContent className="p-5 space-y-3">
+        <CardContent className="p-4 space-y-1.5">
           <div className="flex items-center gap-2">
             <History className="h-4 w-4 text-muted-foreground" />
-            <p className="text-sm font-semibold text-card-foreground">Журнал действий</p>
+            <p className="text-[15px] font-semibold text-card-foreground">Журнал действий</p>
           </div>
-          <p className="text-xs text-muted-foreground">Все действия с кампанией, включая импорт договора, изменения и отправки в ОРД.</p>
+          <p className="text-[13px] text-muted-foreground">Все действия с кампанией, включая импорт договора, изменения и отправки в ОРД.</p>
         </CardContent>
       </Card>
 
       <Card>
-        <CardContent className="p-5">
+        <CardContent className="p-4">
           <div className="space-y-0">
             {mockAudit.map((entry, i) => (
-              <div key={i} className="flex items-start gap-3 py-2.5 border-b border-border/50 last:border-0">
-                <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <div key={i} className="flex items-start gap-2.5 py-2 border-b border-border/50 last:border-0">
+                <div className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
                   <CheckCircle2 className="h-3 w-3 text-primary" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm text-card-foreground">{entry.action}</p>
+                  <p className="text-[14px] text-card-foreground">{entry.action}</p>
                   {entry.details && (
-                    <p className="text-[10px] text-muted-foreground mt-0.5">{entry.details}</p>
+                    <p className="text-[12px] text-muted-foreground mt-0.5">{entry.details}</p>
                   )}
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0 text-right">
-                  <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                  <span className="text-[12px] text-muted-foreground flex items-center gap-1">
                     <User className="h-2.5 w-2.5" />
                     {entry.user}
                   </span>
-                  <span className="text-[10px] text-muted-foreground">{entry.timestamp}</span>
+                  <span className="text-[12px] text-muted-foreground">{entry.timestamp}</span>
                 </div>
               </div>
             ))}
@@ -1281,71 +1246,59 @@ export function CampaignManageView({ campaign: initialCampaign, onBack }: { camp
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="w-full max-w-[1120px] mx-auto px-6 py-6 space-y-5">
+      <div className="w-full max-w-[1160px] mx-auto px-6 py-4 space-y-3">
 
-        {/* Finalizing banner */}
+        {/* Compact status banners */}
         {isFinalizing && (
-          <div className="flex items-center gap-3 rounded-lg border border-warning/30 bg-warning/10 p-4 animate-pulse">
-            <Loader2 className="h-5 w-5 text-warning animate-spin flex-shrink-0" />
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-card-foreground">Завершение кампании…</p>
-              <p className="text-xs text-muted-foreground">Отправляем финальную статистику в ОРД. Редактирование недоступно.</p>
-            </div>
+          <div className="flex items-center gap-2.5 rounded-md border border-warning/30 bg-warning/10 px-3 py-2">
+            <Loader2 className="h-4 w-4 text-warning animate-spin flex-shrink-0" />
+            <p className="text-[14px] text-card-foreground"><span className="font-semibold">Завершение кампании…</span> <span className="text-muted-foreground">Отправляем статистику в ОРД, редактирование недоступно.</span></p>
           </div>
         )}
 
-        {/* ORD Error banner */}
         {isOrdError && (
-          <div className="flex items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/10 p-4">
-            <div className="flex items-center gap-3">
-              <XCircle className="h-5 w-5 text-destructive flex-shrink-0" />
-              <div>
-                <p className="text-sm font-semibold text-card-foreground">Ошибка отправки в ОРД</p>
-                <p className="text-xs text-muted-foreground">Финальная статистика не была доставлена. Повторите отправку.</p>
-              </div>
+          <div className="flex items-center justify-between gap-2.5 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2">
+            <div className="flex items-center gap-2">
+              <XCircle className="h-4 w-4 text-destructive flex-shrink-0" />
+              <p className="text-[14px] text-card-foreground"><span className="font-semibold">Ошибка ОРД</span> <span className="text-muted-foreground">— финальная статистика не доставлена.</span></p>
             </div>
-            <Button size="sm" variant="outline" className="h-9 text-sm gap-1.5 border-destructive/30 text-destructive hover:bg-destructive/10" onClick={handleRetryOrd}>
-              <RefreshCw className="h-3.5 w-3.5" />
+            <Button size="sm" variant="outline" className="h-7 text-[13px] gap-1 border-destructive/30 text-destructive hover:bg-destructive/10" onClick={handleRetryOrd}>
+              <RefreshCw className="h-3 w-3" />
               Повторить
             </Button>
           </div>
         )}
 
-        {/* Completed banner */}
         {isCompleted && (
-          <div className="flex items-center gap-3 rounded-lg border border-primary/30 bg-primary/10 p-4">
-            <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0" />
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-card-foreground">Кампания завершена</p>
-              <p className="text-xs text-muted-foreground">Данные отправлены в ОРД. Доступны: просмотр, экспорт, архивация и дублирование.</p>
-            </div>
+          <div className="flex items-center gap-2.5 rounded-md border border-primary/30 bg-primary/10 px-3 py-2">
+            <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0" />
+            <p className="text-[14px] text-card-foreground"><span className="font-semibold">Кампания завершена.</span> <span className="text-muted-foreground">Доступны просмотр, экспорт, архивация и дублирование.</span></p>
           </div>
         )}
 
-        {/* Sticky header */}
-        <div className="sticky top-0 z-20 bg-background/80 backdrop-blur-sm -mx-6 px-6 py-3 -mt-6 mb-1 border-b border-border/50">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3 min-w-0">
-              <Button size="sm" variant="ghost" onClick={onBack} className="h-9 w-9 p-0 flex-shrink-0">
+        {/* Sticky header — Back + title + kebab only */}
+        <div className="sticky top-0 z-20 bg-background/80 backdrop-blur-sm -mx-6 px-6 py-2.5 -mt-4 mb-0.5 border-b border-border/50">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <Button size="sm" variant="ghost" onClick={onBack} className="h-8 w-8 p-0 flex-shrink-0">
                 <ArrowLeft className="h-4 w-4" />
               </Button>
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h2 className="text-base font-bold text-foreground tracking-tight truncate">{campaign.name}</h2>
+                  <h2 className="text-[17px] font-bold text-foreground tracking-tight truncate">{campaign.name}</h2>
                   <EridBadge erid={campaign.erid} />
                   <ContractBadge campaign={campaign} />
                 </div>
                 <div className="flex items-center gap-2 mt-0.5">
-                  <Badge variant="outline" className={`text-[10px] ${statusStyles[campaign.status]}`}>
+                  <Badge variant="outline" className={`text-[11px] ${statusStyles[campaign.status]}`}>
                     {campaign.status === "finalizing" && <Loader2 className="h-2.5 w-2.5 mr-1 animate-spin" />}
                     {statusLabels[campaign.status]}
                   </Badge>
-                  <span className="text-xs text-muted-foreground">{placementLabels[campaign.placement]}</span>
-                  <OrdStatusIndicator campaign={campaign} />
+                  <span className="text-[13px] text-muted-foreground">{placementLabels[campaign.placement]}</span>
                   {campaign.startDate && (
                     <>
                       <Separator orientation="vertical" className="h-3" />
-                      <span className="text-xs text-muted-foreground flex items-center gap-1">
+                      <span className="text-[13px] text-muted-foreground flex items-center gap-1">
                         <CalendarDays className="h-3 w-3" />
                         {campaign.startDate} — {campaign.endDate || "∞"}
                       </span>
@@ -1355,96 +1308,79 @@ export function CampaignManageView({ campaign: initialCampaign, onBack }: { camp
               </div>
             </div>
 
-            {/* Actions */}
-            <div className="flex items-center gap-2 flex-shrink-0">
-              {campaign.status === "active" && (
-                <Button size="sm" variant="outline" className="h-9 text-sm gap-1.5" disabled={isFinalizing}>
-                  <Pause className="h-3.5 w-3.5" />
-                  Приостановить
+            {/* Kebab menu — all actions consolidated */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="ghost" className="h-8 w-8 p-0 flex-shrink-0">
+                  <MoreVertical className="h-4 w-4" />
                 </Button>
-              )}
-              {campaign.status === "paused" && (
-                <Button size="sm" className="h-9 text-sm gap-1.5" disabled={isFinalizing}>
-                  <Play className="h-3.5 w-3.5" />
-                  Возобновить
-                </Button>
-              )}
-              {campaign.status === "draft" && (
-                <Button size="sm" className="h-9 text-sm gap-1.5">
-                  <Play className="h-3.5 w-3.5" />
-                  Запустить
-                </Button>
-              )}
-
-              {/* Terminate button — prominent danger action */}
-              {canTerminate && (
-                <Button size="sm" variant="outline" className="h-9 text-sm gap-1.5 border-destructive/40 text-destructive hover:bg-destructive/10" onClick={() => setTerminateOpen(true)}>
-                  <StopCircle className="h-3.5 w-3.5" />
-                  Завершить
-                </Button>
-              )}
-
-              {/* Retry ORD — for ord_error state */}
-              {isOrdError && (
-                <Button size="sm" variant="outline" className="h-9 text-sm gap-1.5 border-destructive/30 text-destructive hover:bg-destructive/10" onClick={handleRetryOrd}>
-                  <RefreshCw className="h-3.5 w-3.5" />
-                  Повторить ОРД
-                </Button>
-              )}
-
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button size="sm" variant="ghost" className="h-9 w-9 p-0">
-                    <MoreVertical className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem className="text-sm gap-2">
-                    <Copy className="h-3.5 w-3.5" /> Дублировать (новый ERID)
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {campaign.status === "active" && (
+                  <DropdownMenuItem className="text-[14px] gap-2" disabled={isFinalizing}>
+                    <Pause className="h-3.5 w-3.5" /> Приостановить
                   </DropdownMenuItem>
-                  {isCompleted && (
-                    <DropdownMenuItem className="text-sm gap-2">
-                      <Download className="h-3.5 w-3.5" /> Экспорт отчёта
-                    </DropdownMenuItem>
-                  )}
-                  {campaign.contractLinked && !fullyLocked && (
-                    <DropdownMenuItem className="text-sm gap-2" onClick={() => setChangeRequestOpen(true)}>
-                      <ArrowUpRight className="h-3.5 w-3.5" /> Запросить изменение
-                    </DropdownMenuItem>
-                  )}
-                  {canTerminate && (
-                    <DropdownMenuItem className="text-sm gap-2 text-destructive" onClick={() => setTerminateOpen(true)}>
-                      <Ban className="h-3.5 w-3.5" /> Завершить досрочно
-                    </DropdownMenuItem>
-                  )}
-                  <DropdownMenuItem className="text-sm gap-2 text-destructive" disabled={isFinalizing}>
-                    <Archive className="h-3.5 w-3.5" /> Архивировать
+                )}
+                {campaign.status === "paused" && (
+                  <DropdownMenuItem className="text-[14px] gap-2" disabled={isFinalizing}>
+                    <Play className="h-3.5 w-3.5" /> Возобновить
                   </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+                )}
+                {campaign.status === "draft" && (
+                  <DropdownMenuItem className="text-[14px] gap-2">
+                    <Play className="h-3.5 w-3.5" /> Запустить
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem className="text-[14px] gap-2">
+                  <Copy className="h-3.5 w-3.5" /> Дублировать (новый ERID)
+                </DropdownMenuItem>
+                {isCompleted && (
+                  <DropdownMenuItem className="text-[14px] gap-2">
+                    <Download className="h-3.5 w-3.5" /> Экспорт отчёта
+                  </DropdownMenuItem>
+                )}
+                {campaign.contractLinked && !fullyLocked && (
+                  <DropdownMenuItem className="text-[14px] gap-2" onClick={() => setChangeRequestOpen(true)}>
+                    <ArrowUpRight className="h-3.5 w-3.5" /> Запросить изменение
+                  </DropdownMenuItem>
+                )}
+                {isOrdError && (
+                  <DropdownMenuItem className="text-[14px] gap-2 text-destructive" onClick={handleRetryOrd}>
+                    <RefreshCw className="h-3.5 w-3.5" /> Повторить ОРД
+                  </DropdownMenuItem>
+                )}
+                {canTerminate && (
+                  <DropdownMenuItem className="text-[14px] gap-2 text-destructive" onClick={() => setTerminateOpen(true)}>
+                    <StopCircle className="h-3.5 w-3.5" /> Завершить досрочно
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem className="text-[14px] gap-2 text-destructive" disabled={isFinalizing}>
+                  <Archive className="h-3.5 w-3.5" /> Архивировать
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
         {/* Tabs */}
-        <Tabs defaultValue="overview" className="space-y-5">
+        <Tabs defaultValue="overview" className="space-y-3">
           <TabsList>
-            <TabsTrigger value="overview" className="text-sm">Обзор</TabsTrigger>
-            <TabsTrigger value="settings" className="text-sm">Настройки</TabsTrigger>
-            <TabsTrigger value="creative" className="text-sm">Креатив</TabsTrigger>
-            <TabsTrigger value="ord" className="text-sm">ОРД / Маркировка</TabsTrigger>
-            {campaign.contractLinked && <TabsTrigger value="contract" className="text-sm">Договор</TabsTrigger>}
-            <TabsTrigger value="audit" className="text-sm">Аудит</TabsTrigger>
+            <TabsTrigger value="overview" className="text-[14px]">Обзор</TabsTrigger>
+            <TabsTrigger value="settings" className="text-[14px]">Настройки</TabsTrigger>
+            <TabsTrigger value="creative" className="text-[14px]">Креатив</TabsTrigger>
+            <TabsTrigger value="ord" className="text-[14px]">ОРД / Маркировка</TabsTrigger>
+            {campaign.contractLinked && <TabsTrigger value="contract" className="text-[14px]">Договор</TabsTrigger>}
+            <TabsTrigger value="audit" className="text-[14px]">Аудит</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview"><OverviewTab campaign={campaign} /></TabsContent>
           <TabsContent value="settings">
             {fullyLocked ? (
-              <div className="flex items-center gap-3 rounded-lg border border-muted-foreground/20 bg-muted/10 p-6">
-                <Lock className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+              <div className="flex items-center gap-2.5 rounded-lg border border-muted-foreground/20 bg-muted/10 p-4">
+                <Lock className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                 <div>
-                  <p className="text-sm font-semibold text-card-foreground">Настройки заблокированы</p>
-                  <p className="text-xs text-muted-foreground">Кампания {campaign.status === "completed" ? "завершена" : "в процессе завершения"}. Редактирование невозможно.</p>
+                  <p className="text-[14px] font-semibold text-card-foreground">Настройки заблокированы</p>
+                  <p className="text-[13px] text-muted-foreground">Кампания {campaign.status === "completed" ? "завершена" : "в процессе завершения"}. Редактирование невозможно.</p>
                 </div>
               </div>
             ) : (
