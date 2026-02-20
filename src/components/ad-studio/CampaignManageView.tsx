@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
+import { useSaveContract, useConfirmContract, useContractsByCampaign } from "@/hooks/useContracts";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -887,6 +888,13 @@ function AddendumSection({ campaign }: { campaign: Campaign }) {
   const [uploading, setUploading] = useState(false);
   const [extractingAddendum, setExtractingAddendum] = useState(false);
   const [diffData, setDiffData] = useState<DiffField[] | null>(null);
+  const [pendingAddendumFields, setPendingAddendumFields] = useState<Record<string, any> | null>(null);
+  const [pendingFileName, setPendingFileName] = useState<string>("");
+  const [pendingFileSize, setPendingFileSize] = useState<number>(0);
+  const saveContract = useSaveContract();
+  const confirmContract = useConfirmContract();
+  const campaignId = campaign.contractLinked ? String(campaign.id) : undefined;
+  const { data: contractVersions } = useContractsByCampaign(campaignId);
   const addenda = campaign.addenda || [
     { id: 1, title: "Доп. соглашение №1", fileName: "addendum_01.pdf", date: "2026-02-18", budgetDelta: 50000, status: "confirmed" as const },
   ];
@@ -940,8 +948,9 @@ function AddendumSection({ campaign }: { campaign: Campaign }) {
       }
 
       const newFields = data.fields;
-
-      // Build diff between original campaign and addendum
+      setPendingAddendumFields(newFields);
+      setPendingFileName(file.name);
+      setPendingFileSize(file.size);
       const diffItems: DiffField[] = [
         {
           label: "Бюджет",
@@ -1014,11 +1023,32 @@ function AddendumSection({ campaign }: { campaign: Campaign }) {
       {diffData && (
         <DiffView
           diffs={diffData}
-          onConfirm={() => {
-            toast.success("Изменения из доп. соглашения применены");
+          onConfirm={async () => {
+            if (pendingAddendumFields && campaignId) {
+              try {
+                const nextVersion = (contractVersions?.length || 0) + 1;
+                const saved = await saveContract.mutateAsync({
+                  campaignId,
+                  version: nextVersion,
+                  documentType: "addendum",
+                  fileName: pendingFileName,
+                  fileSize: pendingFileSize,
+                  extractedFields: pendingAddendumFields,
+                  status: "extracted",
+                });
+                await confirmContract.mutateAsync(saved.id);
+                toast.success("Доп. соглашение сохранено в базу данных");
+              } catch (err: any) {
+                console.error("Save addendum error:", err);
+                toast.error("Ошибка сохранения: " + (err.message || ""));
+              }
+            } else {
+              toast.success("Изменения из доп. соглашения применены");
+            }
             setDiffData(null);
+            setPendingAddendumFields(null);
           }}
-          onCancel={() => setDiffData(null)}
+          onCancel={() => { setDiffData(null); setPendingAddendumFields(null); }}
         />
       )}
 
@@ -1085,6 +1115,9 @@ function AddendumSection({ campaign }: { campaign: Campaign }) {
 
 // ─── Audit Log Tab ───
 function AuditLogTab({ campaign }: { campaign: Campaign }) {
+  const campaignId = campaign.contractLinked ? String(campaign.id) : undefined;
+  const { data: contractVersions, isLoading: loadingVersions } = useContractsByCampaign(campaignId);
+
   const mockAudit: AuditLogEntry[] = campaign.auditLog || [
     { timestamp: "20.02.2026 10:15", action: "Договор загружен", user: "Иванов А.С.", details: "contract_v1.pdf" },
     { timestamp: "20.02.2026 10:16", action: "AI-извлечение данных", user: "Система" },
@@ -1135,37 +1168,75 @@ function AuditLogTab({ campaign }: { campaign: Campaign }) {
         </CardContent>
       </Card>
 
-      {/* Version history */}
+      {/* Version history from DB */}
       {campaign.contractLinked && (
         <Card>
           <CardContent className="p-5 space-y-3">
             <div className="flex items-center gap-2">
               <FileText className="h-4 w-4 text-muted-foreground" />
               <p className="text-sm font-semibold text-card-foreground">Версии документов</p>
+              {loadingVersions && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
             </div>
             <div className="space-y-2">
-              <div className="flex items-center justify-between gap-3 text-sm py-2 px-3 rounded-lg border border-border bg-muted/10">
-                <div className="flex items-center gap-3">
-                  <FileText className="h-4 w-4 text-primary flex-shrink-0" />
-                  <div>
-                    <p className="text-xs font-medium text-card-foreground">Основной договор</p>
-                    <p className="text-[10px] text-muted-foreground">{campaign.contractNumber} · {campaign.contractDate}</p>
-                  </div>
-                </div>
-                <Badge variant="outline" className="text-[10px] border-primary/30 text-primary">Оригинал</Badge>
-              </div>
-              {(campaign.addenda || []).map((a, i) => (
-                <div key={i} className="flex items-center justify-between gap-3 text-sm py-2 px-3 rounded-lg border border-border bg-muted/10">
-                  <div className="flex items-center gap-3">
-                    <FilePlus className="h-4 w-4 text-accent flex-shrink-0" />
-                    <div>
-                      <p className="text-xs font-medium text-card-foreground">{a.title}</p>
-                      <p className="text-[10px] text-muted-foreground">{a.fileName} · {a.date}</p>
+              {contractVersions && contractVersions.length > 0 ? (
+                contractVersions.map((cv) => (
+                  <div key={cv.id} className="flex items-center justify-between gap-3 text-sm py-2 px-3 rounded-lg border border-border bg-muted/10">
+                    <div className="flex items-center gap-3">
+                      {cv.document_type === "original" ? (
+                        <FileText className="h-4 w-4 text-primary flex-shrink-0" />
+                      ) : (
+                        <FilePlus className="h-4 w-4 text-accent flex-shrink-0" />
+                      )}
+                      <div>
+                        <p className="text-xs font-medium text-card-foreground">
+                          {cv.document_type === "original" ? "Основной договор" : `Доп. соглашение №${cv.version - 1}`}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {cv.file_name || "—"} · {new Date(cv.created_at).toLocaleDateString("ru-RU")}
+                          {cv.confirmed_at && ` · Подтверждён ${new Date(cv.confirmed_at).toLocaleDateString("ru-RU")}`}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className={`text-[10px] ${
+                        cv.status === "confirmed" ? "border-success/30 text-success" : "border-warning/30 text-warning"
+                      }`}>
+                        {cv.status === "confirmed" ? "Подтверждён" : "Извлечён"}
+                      </Badge>
+                      <Badge variant="outline" className={`text-[10px] ${
+                        cv.document_type === "original" ? "border-primary/30 text-primary" : "border-accent/30 text-accent"
+                      }`}>
+                        {cv.document_type === "original" ? "Оригинал" : "Доп. соглашение"}
+                      </Badge>
                     </div>
                   </div>
-                  <Badge variant="outline" className="text-[10px] border-accent/30 text-accent">Доп. соглашение</Badge>
-                </div>
-              ))}
+                ))
+              ) : !loadingVersions ? (
+                <>
+                  <div className="flex items-center justify-between gap-3 text-sm py-2 px-3 rounded-lg border border-border bg-muted/10">
+                    <div className="flex items-center gap-3">
+                      <FileText className="h-4 w-4 text-primary flex-shrink-0" />
+                      <div>
+                        <p className="text-xs font-medium text-card-foreground">Основной договор</p>
+                        <p className="text-[10px] text-muted-foreground">{campaign.contractNumber} · {campaign.contractDate}</p>
+                      </div>
+                    </div>
+                    <Badge variant="outline" className="text-[10px] border-primary/30 text-primary">Оригинал</Badge>
+                  </div>
+                  {(campaign.addenda || []).map((a, i) => (
+                    <div key={i} className="flex items-center justify-between gap-3 text-sm py-2 px-3 rounded-lg border border-border bg-muted/10">
+                      <div className="flex items-center gap-3">
+                        <FilePlus className="h-4 w-4 text-accent flex-shrink-0" />
+                        <div>
+                          <p className="text-xs font-medium text-card-foreground">{a.title}</p>
+                          <p className="text-[10px] text-muted-foreground">{a.fileName} · {a.date}</p>
+                        </div>
+                      </div>
+                      <Badge variant="outline" className="text-[10px] border-accent/30 text-accent">Доп. соглашение</Badge>
+                    </div>
+                  ))}
+                </>
+              ) : null}
             </div>
           </CardContent>
         </Card>

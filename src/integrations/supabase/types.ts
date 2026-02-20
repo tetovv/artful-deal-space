@@ -411,6 +411,63 @@ export type Database = {
           },
         ]
       }
+      contracts: {
+        Row: {
+          campaign_id: string | null
+          confidence_map: Json | null
+          confirmed_at: string | null
+          confirmed_by: string | null
+          created_at: string
+          document_type: string
+          extracted_fields: Json
+          file_name: string | null
+          file_size: number | null
+          id: string
+          source_snippets: Json | null
+          status: string
+          stored_text: string | null
+          updated_at: string
+          user_id: string
+          version: number
+        }
+        Insert: {
+          campaign_id?: string | null
+          confidence_map?: Json | null
+          confirmed_at?: string | null
+          confirmed_by?: string | null
+          created_at?: string
+          document_type?: string
+          extracted_fields?: Json
+          file_name?: string | null
+          file_size?: number | null
+          id?: string
+          source_snippets?: Json | null
+          status?: string
+          stored_text?: string | null
+          updated_at?: string
+          user_id: string
+          version?: number
+        }
+        Update: {
+          campaign_id?: string | null
+          confidence_map?: Json | null
+          confirmed_at?: string | null
+          confirmed_by?: string | null
+          created_at?: string
+          document_type?: string
+          extracted_fields?: Json
+          file_name?: string | null
+          file_size?: number | null
+          id?: string
+          source_snippets?: Json | null
+          status?: string
+          stored_text?: string | null
+          updated_at?: string
+          user_id?: string
+          version?: number
+        }
+        Relationships: []
+      }
       deals: {
         Row: {
           advertiser_id: string | null
