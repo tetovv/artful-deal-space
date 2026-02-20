@@ -8,3 +8,18 @@ verify_jwt = false
 
 [functions.generate-presentation]
 verify_jwt = false
+
+[functions.project_ingest]
+verify_jwt = false
+
+[functions.project_plan]
+verify_jwt = false
+
+[functions.artifact_act]
+verify_jwt = false
+
+[functions.artifact_submit]
+verify_jwt = false
+
+[functions.project_checkin]
+verify_jwt = false
