@@ -7,8 +7,8 @@ import {
   FileText, AlertCircle, ChevronRight, ChevronLeft, Send,
   Lightbulb, RotateCcw, X, FileSearch, Sparkles,
   GraduationCap, CreditCard, Presentation, Clock,
-  ArrowRight, ChevronDown,
-  RefreshCw, Award, Bug, Copy, AlertTriangle
+  ArrowRight, ChevronDown, Plus, Trash2, MapPin,
+  RefreshCw, Award, Bug, Copy, AlertTriangle, PanelRight
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -455,48 +455,100 @@ const SlidesPlayer = ({ slides }: { slides: any[] }) => {
   );
 };
 
-/* ═══════════════ AI Actions menu (localized + context-dependent) ═══════════════ */
-function getAssistantActions(format: OutputFormat, artifactKind: string | null, submitted: boolean, hasSelection: boolean): { id: string; label: string; action: string }[] {
+/* ═══════════════ Selection classifier ═══════════════ */
+type SelectionType = "none" | "term" | "fragment";
+function classifySelection(text: string | null | undefined): SelectionType {
+  if (!text || text.length < 2) return "none";
+  const words = text.trim().split(/\s+/).length;
+  return words <= 3 ? "term" : "fragment";
+}
+
+/* ═══════════════ AI Actions menu — context-dependent, honest quiz ═══════════════ */
+function getAssistantActions(
+  format: OutputFormat,
+  artifactKind: string | null,
+  quizState: "answering" | "submitted",
+  selectionType: SelectionType,
+  isCorrect: boolean | null,
+): { id: string; label: string; action: string }[] {
   const items: { id: string; label: string; action: string }[] = [];
 
-  // Sources always available
-  items.push({ id: "sources", label: "📄 Показать источники", action: "show_sources" });
-
-  if (format === "COURSE_LEARN" || artifactKind === "course" || artifactKind === "lesson_blocks") {
-    if (hasSelection) {
-      items.unshift({ id: "explain", label: "💡 Объяснить термин", action: "explain_term" });
-      items.unshift({ id: "expand", label: "📖 Расширить выделенное", action: "expand_selection" });
-      items.unshift({ id: "example", label: "📝 Пример", action: "give_example" });
+  // ── Quiz context ──
+  if (artifactKind === "quiz") {
+    if (quizState === "answering") {
+      // HONEST: no answers, no explanations
+      if (selectionType === "term") {
+        items.push({ id: "explain_term", label: "💡 Объяснить термин", action: "explain_term" });
+      }
+      items.push({ id: "hint", label: "🔎 Подсказка", action: "give_hint" });
+      items.push({ id: "similar_q", label: "🔄 Похожий вопрос", action: "generate_quiz" });
+      items.push({ id: "sources", label: "📄 Источники", action: "show_sources" });
     } else {
-      items.unshift({ id: "flashcards", label: "🃏 Сделать карточки", action: "generate_flashcards" });
-      items.unshift({ id: "quiz", label: "✅ Мини-квиз", action: "generate_quiz" });
+      // SUBMITTED: full review
+      items.push({ id: "why_correct", label: "✅ Почему правильно", action: "explain_correct" });
+      if (isCorrect === false) {
+        items.push({ id: "explain_err", label: "🔍 Разобрать ошибку", action: "explain_mistake" });
+      }
+      items.push({ id: "extra_practice", label: "📚 Доп. практика", action: "remediate_topic" });
+      items.push({ id: "remediate_lesson", label: "📖 Ремедиация в урок", action: "generate_lesson_blocks" });
+      items.push({ id: "sources", label: "📄 Источники", action: "show_sources" });
     }
+    return items;
   }
 
-  if (format === "EXAM_PREP" || format === "QUIZ_ONLY" || artifactKind === "quiz") {
-    if (!submitted) {
-      items.unshift({ id: "hint", label: "💡 Подсказка", action: "give_hint" });
-    } else {
-      items.unshift({ id: "remediate", label: "📚 Доп. практика", action: "remediate_topic" });
-      items.unshift({ id: "explain_err", label: "🔍 Разобрать ошибку", action: "explain_mistake" });
+  // ── Course context ──
+  if (artifactKind === "course" || artifactKind === "lesson_blocks") {
+    if (selectionType === "term") {
+      items.push({ id: "explain_term", label: "💡 Объяснить термин", action: "explain_term" });
+      items.push({ id: "example", label: "📝 Пример", action: "give_example" });
+    } else if (selectionType === "fragment") {
+      items.push({ id: "expand", label: "📖 Расширить фрагмент", action: "expand_selection" });
+      items.push({ id: "example", label: "📝 Пример", action: "give_example" });
     }
+    items.push({ id: "quiz", label: "✅ Мини-квиз", action: "generate_quiz" });
+    items.push({ id: "flashcards", label: "🃏 Сделать карточки", action: "generate_flashcards" });
+    items.push({ id: "sources", label: "📄 Источники", action: "show_sources" });
+    return items;
   }
 
-  if (format === "FLASHCARDS" || artifactKind === "flashcards") {
-    items.unshift({ id: "quiz_me", label: "✅ Мини-квиз", action: "generate_quiz" });
-    items.unshift({ id: "add_cards", label: "➕ Добавить карточек", action: "generate_flashcards" });
-    if (hasSelection) {
-      items.unshift({ id: "explain_fc", label: "💡 Объяснить термин", action: "explain_term" });
+  // ── Flashcards context ──
+  if (artifactKind === "flashcards") {
+    if (selectionType === "term") {
+      items.push({ id: "explain_fc", label: "💡 Объяснить термин", action: "explain_term" });
     }
+    items.push({ id: "quiz_me", label: "✅ Мини-квиз", action: "generate_quiz" });
+    items.push({ id: "add_cards", label: "➕ Добавить карточек", action: "generate_flashcards" });
+    items.push({ id: "sources", label: "📄 Источники", action: "show_sources" });
+    return items;
   }
 
-  if (format === "PRESENTATION" || artifactKind === "slides") {
-    items.unshift({ id: "qa", label: "🎤 Q&A репетиция", action: "generate_quiz" });
-    items.unshift({ id: "improve_notes", label: "📝 Улучшить заметки", action: "expand_selection" });
-    items.unshift({ id: "strengthen", label: "💪 Усилить структуру", action: "generate_slides" });
+  // ── Slides context ──
+  if (artifactKind === "slides") {
+    items.push({ id: "qa", label: "🎤 Q&A репетиция", action: "generate_quiz" });
+    items.push({ id: "improve_notes", label: "📝 Улучшить заметки", action: "expand_selection" });
+    items.push({ id: "sources", label: "📄 Источники", action: "show_sources" });
+    return items;
   }
 
+  // Fallback
+  items.push({ id: "sources", label: "📄 Источники", action: "show_sources" });
   return items;
+}
+
+/* ═══════════════ Preset→ArtifactKind mapping ═══════════════ */
+function presetToArtifactKind(format: OutputFormat): string {
+  switch (format) {
+    case "COURSE_LEARN": return "course";
+    case "QUIZ_ONLY": return "quiz";
+    case "EXAM_PREP": return "quiz";
+    case "INTERVIEW": return "quiz";
+    case "FLASHCARDS": return "flashcards";
+    case "PRESENTATION": return "slides";
+  }
+}
+
+function presetLabel(format: OutputFormat): string {
+  return OUTPUT_FORMATS.find(f => f.value === format)?.label || format;
 }
 
 /* ═══════════════ MAIN COMPONENT ═══════════════ */
@@ -509,6 +561,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const sourceInputRef = useRef<HTMLInputElement>(null);
 
   // State machine
   const [phase, setPhase] = useState<GuidedPhase>("intake");
@@ -527,14 +580,18 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
   const [projectId, setProjectId] = useState<string | null>(null);
   const [pipelineError, setPipelineError] = useState<EdgeError | null>(null);
 
-  // Work
+  // Player
   const [activeArtifact, setActiveArtifact] = useState<Artifact | null>(null);
   const [sidePanel, setSidePanel] = useState<any>(null);
+  const [showSidePanel, setShowSidePanel] = useState(true);
   const [quizSubmitted, setQuizSubmitted] = useState(false);
   const [submitFeedback, setSubmitFeedback] = useState<any>(null);
   const [submitScore, setSubmitScore] = useState<number | null>(null);
-  const [hasSelection, setHasSelection] = useState(false);
+  const [selectedText, setSelectedText] = useState<string | null>(null);
   const [completedSteps, setCompletedSteps] = useState(0);
+  const [showCheckinInPlayer, setShowCheckinInPlayer] = useState(false);
+  const [showSourceManager, setShowSourceManager] = useState(false);
+  const [isReplanning, setIsReplanning] = useState(false);
 
   // Checkin
   const [checkinAnswers, setCheckinAnswers] = useState({ hardTopics: "", pace: "normal", addMore: "" });
@@ -572,6 +629,16 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
     enabled: !!projectId,
   });
 
+  const { data: projectSources = [] } = useQuery({
+    queryKey: ["project-sources", projectId],
+    queryFn: async () => {
+      if (!projectId) return [];
+      const { data } = await supabase.from("project_sources").select("*").eq("project_id", projectId).order("created_at", { ascending: false });
+      return data || [];
+    },
+    enabled: !!projectId,
+  });
+
   // Auto-set active artifact when resuming
   useEffect(() => {
     if (artifacts.length > 0 && !activeArtifact && (phase === "player" || (phase === "generate" && genStatus === "done"))) {
@@ -580,6 +647,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
   }, [artifacts, activeArtifact, phase, genStatus]);
 
   const roadmap = (project?.roadmap as any[]) || [];
+  const nextStep = roadmap.find((s: any) => s.status === "available");
 
   /* ─── Mutations ─── */
   const actMutation = useMutation({
@@ -599,14 +667,15 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
         });
       }
       if (data.public_payload && !data.artifact_id) {
-        // This is an inline action result (assistant_note)
         setSidePanel({ type: "result", payload: data.public_payload, source_refs: data.source_refs });
+        setShowSidePanel(true);
       }
       toast.success("Готово");
     },
     onError: (e: any) => {
       if (e.functionName) {
         setSidePanel({ type: "error", error: e as EdgeError });
+        setShowSidePanel(true);
       } else {
         toast.error(`Ошибка: ${e.message || e}`);
       }
@@ -622,10 +691,13 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
       setSubmitFeedback(data.feedback);
       setSubmitScore(data.score);
       toast.success("Проверено!");
+      // Trigger check-in after quiz submit
+      setShowCheckinInPlayer(true);
     },
     onError: (e: any) => {
       if (e.functionName) {
         setSidePanel({ type: "error", error: e as EdgeError });
+        setShowSidePanel(true);
       } else {
         toast.error(`Ошибка: ${e.message || e}`);
       }
@@ -634,8 +706,8 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
 
   /* ─── Text selection tracking ─── */
   const handleMouseUp = useCallback(() => {
-    const sel = window.getSelection()?.toString().trim();
-    setHasSelection(!!(sel && sel.length > 2 && sel.length < 100));
+    const sel = window.getSelection()?.toString().trim() || null;
+    setSelectedText(sel && sel.length > 1 && sel.length < 200 ? sel : null);
   }, []);
 
   /* ─── Generate pipeline helpers ─── */
@@ -649,7 +721,6 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
     updateStage("uploading", "done");
 
     try {
-      // Ingest
       updateStage("ingesting", "running");
       setGenStatus("ingesting");
       const maxChars = 1200;
@@ -693,13 +764,11 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
       await supabase.from("projects").update({ status: "ingested" }).eq("id", projId);
       updateStage("ingesting", "done");
 
-      // Plan
       updateStage("planning", "running");
       setGenStatus("planning");
       await callEdge("project_plan", { project_id: projId });
       updateStage("planning", "done");
 
-      // Generate first artifact
       updateStage("generating", "running");
       setGenStatus("generating");
       const actionType = formatToActionType(format);
@@ -740,7 +809,6 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
     updateStage("uploading", "running");
 
     try {
-      // Create project
       const projectTitle = intake.files[0]?.name?.replace(/\.\w+$/, "") ||
         (intake.pastedText.trim().slice(0, 40) || `Проект ${new Date().toLocaleDateString("ru-RU")}`);
       const { data: proj, error: projErr } = await supabase.from("projects").insert({
@@ -758,9 +826,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
       }
       setProjectId(proj.id);
 
-      // Extract text on client
       const extractedDocs: { text: string; file_name: string }[] = [];
-
       for (const file of intake.files) {
         try {
           const text = await extractText(file);
@@ -773,7 +839,6 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
         }
       }
 
-      // Add pasted text as a source
       if (intake.pastedText.trim()) {
         extractedDocs.push({ text: intake.pastedText.trim(), file_name: "pasted_text.txt" });
       }
@@ -800,11 +865,8 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
   /* ─── Retry pipeline from last failed step ─── */
   const handleRetryPipeline = () => {
     if (!projectId) return;
-    // Re-run from the step that failed
     setPipelineError(null);
     setGenStatus("idle");
-    // Simple: restart from ingest with empty documents triggers re-plan
-    // In practice we'd need to know which step failed. For now re-do plan+generate.
     setPhase("generate");
     (async () => {
       try {
@@ -861,6 +923,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
   const handleAssistantAction = (action: string) => {
     if (action === "show_sources") {
       setSidePanel({ type: "sources", refs: activeArtifact?.public_json?.source_refs || [] });
+      setShowSidePanel(true);
       return;
     }
     const selection = window.getSelection()?.toString().trim();
@@ -873,6 +936,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
 
   const handleTermClick = (term: string) => {
     setSidePanel({ type: "loading", term });
+    setShowSidePanel(true);
     actMutation.mutate(
       { action_type: "explain_term", target: { term }, context: activeArtifact?.title },
       {
@@ -887,7 +951,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
   const handleCheckin = async () => {
     if (!projectId) return;
     try {
-      await callEdge("project_checkin", {
+      const result = await callEdge("project_checkin", {
         project_id: projectId,
         answers: {
           hard_topics: checkinAnswers.hardTopics.split(",").map((s) => s.trim()).filter(Boolean),
@@ -895,21 +959,21 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
         },
       });
       queryClient.invalidateQueries({ queryKey: ["guided-project", projectId] });
-      setPhase("player");
       setCompletedSteps((c) => c + 1);
+      setShowCheckinInPlayer(false);
+      setCheckinAnswers({ hardTopics: "", pace: "normal", addMore: "" });
       toast.success("Roadmap обновлён");
-    } catch (e: any) {
-      if (e.functionName) {
-        toast.error(`Ошибка ${e.functionName}: ${e.body}`);
-      } else {
-        toast.error(e.message || "Ошибка");
+      // If roadmap was updated, highlight suggested next step
+      if (result?.roadmap_updated) {
+        toast.info("Следующий шаг обновлён на основе ваших ответов");
       }
+    } catch (e: any) {
+      toast.error(e.functionName ? `Ошибка ${e.functionName}: ${e.body}` : (e.message || "Ошибка"));
     }
   };
 
   /* ─── Next step from roadmap ─── */
   const handleNextStep = () => {
-    const nextStep = roadmap.find((s: any) => s.status === "available");
     if (nextStep) {
       const actionMap: Record<string, string> = {
         course: "generate_lesson_blocks", quiz: "generate_quiz",
@@ -923,6 +987,63 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
       });
     } else {
       setPhase("finish");
+    }
+  };
+
+  /* ─── Add sources to existing project ─── */
+  const handleAddSources = async (files: File[]) => {
+    if (!projectId || !user) return;
+    try {
+      for (const file of files) {
+        const text = await extractText(file);
+        if (!text.trim()) continue;
+
+        // Chunk and insert
+        const maxChars = 1200;
+        const overlap = 150;
+        let start = 0;
+        let chunkIndex = 0;
+        while (start < text.length) {
+          const end = Math.min(start + maxChars, text.length);
+          await supabase.from("project_chunks").insert({
+            project_id: projectId, user_id: user.id,
+            content: text.slice(start, end),
+            metadata: { file_name: file.name, chunk_index: chunkIndex },
+            source_id: projectId,
+          });
+          start = end - overlap;
+          if (start >= text.length) break;
+          chunkIndex++;
+        }
+      }
+      queryClient.invalidateQueries({ queryKey: ["project-sources", projectId] });
+      toast.success(`${files.length} источник(ов) добавлено`);
+    } catch (e: any) {
+      toast.error("Ошибка добавления источников");
+    }
+  };
+
+  /* ─── Remove source ─── */
+  const handleRemoveSource = async (sourceId: string) => {
+    await supabase.from("project_chunks").delete().eq("source_id", sourceId);
+    await supabase.from("project_sources").delete().eq("id", sourceId);
+    queryClient.invalidateQueries({ queryKey: ["project-sources", projectId] });
+    toast.success("Источник удалён");
+  };
+
+  /* ─── Replan (partial re-generation) ─── */
+  const handleReplan = async () => {
+    if (!projectId) return;
+    setIsReplanning(true);
+    try {
+      await callEdge("project_plan", { project_id: projectId });
+      queryClient.invalidateQueries({ queryKey: ["guided-project", projectId] });
+      toast.success("План обновлён — выберите следующий шаг");
+    } catch (e: any) {
+      toast.error("Ошибка реплана");
+    } finally {
+      setIsReplanning(false);
+      setShowSourceManager(false);
     }
   };
 
@@ -948,7 +1069,6 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
           <Button variant="ghost" size="sm" onClick={handleDemo}><Bug className="h-4 w-4 mr-1" /> Demo</Button>
         </div>
 
-        {/* Progress */}
         <div className="space-y-2">
           <div className="flex justify-between text-xs text-muted-foreground">
             <span>{stepTitles[intakeStep]}</span>
@@ -957,7 +1077,6 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
           <Progress value={((intakeStep + 1) / 6) * 100} className="h-1.5" />
         </div>
 
-        {/* Step 0: Upload */}
         {intakeStep === 0 && (
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">Загрузите файлы и/или вставьте текст. Нужен хотя бы один источник.</p>
@@ -1003,7 +1122,6 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
           </div>
         )}
 
-        {/* Step 1: Goal */}
         {intakeStep === 1 && (
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">Зачем вам этот материал?</p>
@@ -1017,7 +1135,6 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
           </div>
         )}
 
-        {/* Step 2: Knowledge level */}
         {intakeStep === 2 && (
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">Ваш текущий уровень знаний по теме?</p>
@@ -1032,7 +1149,6 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
           </div>
         )}
 
-        {/* Step 3: Depth */}
         {intakeStep === 3 && (
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">Насколько глубоко изучать?</p>
@@ -1048,7 +1164,6 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
           </div>
         )}
 
-        {/* Step 4: Constraints */}
         {intakeStep === 4 && (
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">Ограничения (необязательно)</p>
@@ -1064,7 +1179,6 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
           </div>
         )}
 
-        {/* Step 5: Preferences */}
         {intakeStep === 5 && (
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">Предпочтения (можно выбрать несколько)</p>
@@ -1086,7 +1200,6 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
           </div>
         )}
 
-        {/* Navigation */}
         <div className="flex justify-between pt-2">
           <Button variant="ghost" size="sm" onClick={() => intakeStep > 0 ? setIntakeStep((s) => (s - 1) as IntakeStep) : null} disabled={intakeStep === 0}>
             <ChevronLeft className="h-4 w-4 mr-1" /> Назад
@@ -1167,15 +1280,11 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
     );
   }
 
-  /* ─── GENERATE + PLAYER (unified) ─── */
-  if (phase === "generate" || phase === "player") {
-    const isGenerating = phase === "generate" && genStatus !== "done" && genStatus !== "error";
+  /* ─── GENERATE (progress / error screens) ─── */
+  if (phase === "generate" && genStatus !== "done") {
     const isError = genStatus === "error";
-    const doneCount = genStages.filter(s => s.status === "done").length;
-    const genProgressVal = genStatus === "done" ? 100 : (doneCount / genStages.length) * 100;
 
-    // Error screen: show per-stage status with retry
-    if (isError && phase === "generate") {
+    if (isError) {
       return (
         <div className="space-y-6 max-w-xl mx-auto py-8">
           <h2 className="text-lg font-bold text-foreground">Генерация</h2>
@@ -1209,11 +1318,46 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
       );
     }
 
+    // Progress screen
+    const doneCount = genStages.filter(s => s.status === "done").length;
+    const genProgressVal = (doneCount / genStages.length) * 100;
+
+    return (
+      <div className="space-y-6 max-w-xl mx-auto py-8">
+        <h2 className="text-lg font-bold text-foreground">Создаём ваш гайд…</h2>
+        <Progress value={genProgressVal} className="h-2" />
+        <div className="space-y-2">
+          {genStages.map((stage) => {
+            const Icon = stage.icon;
+            return (
+              <div key={stage.key} className={cn("flex items-center gap-3 p-3 rounded-lg border",
+                stage.status === "done" ? "border-accent/30 bg-accent/5" :
+                stage.status === "running" ? "border-primary/30 bg-primary/5" : "border-border")}>
+                {stage.status === "done" ? <CheckCircle2 className="h-4 w-4 text-accent shrink-0" /> :
+                 stage.status === "running" ? <Loader2 className="h-4 w-4 text-primary animate-spin shrink-0" /> :
+                 <Icon className="h-4 w-4 text-muted-foreground/40 shrink-0" />}
+                <span className={cn("text-sm", stage.status === "done" ? "text-foreground" :
+                  stage.status === "running" ? "text-foreground font-medium" : "text-muted-foreground/50")}>{stage.label}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  /* ═══════════════ PLAYER (70/30 layout) ═══════════════ */
+  if (phase === "player" || (phase === "generate" && genStatus === "done")) {
     const pub = activeArtifact?.public_json as any;
     const artifactKind = pub?.kind || activeArtifact?.type || null;
-    const menuItems = getAssistantActions(selectedFormat, artifactKind, quizSubmitted, hasSelection);
+    const selType = classifySelection(selectedText);
+    const quizState: "answering" | "submitted" = quizSubmitted ? "submitted" : "answering";
+    const isCorrect = submitFeedback?.passed ?? null;
+    const menuItems = getAssistantActions(selectedFormat, artifactKind, quizState, selType, isCorrect);
+    const expectedKind = presetToArtifactKind(selectedFormat);
 
-    const renderPlayer = () => {
+    /* ─── Content renderer ─── */
+    const renderContent = () => {
       if (!activeArtifact || !pub) {
         return (
           <div className="text-center py-16">
@@ -1260,12 +1404,12 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
         );
       }
 
-      // Assistant note (from inline actions)
+      // Assistant note (inline action result rendered in main — shouldn't happen normally)
       if (artifactKind === "assistant_note") {
         return <AssistantNoteCard payload={pub} />;
       }
 
-      // Method pack (legacy — render blocks)
+      // Method pack (legacy)
       if (artifactKind === "method_pack" && pub.blocks) {
         return (
           <div className="space-y-3">
@@ -1276,188 +1420,346 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
         );
       }
 
-      // Unknown payload — NO raw JSON, show error card
-      return <UnknownPayloadCard kind={artifactKind || "unknown"} payload={pub} />;
-    };
-
-    /* ─── Side panel renderer ─── */
-    const renderSidePanel = () => {
-      if (!sidePanel) return null;
-
+      // ── ErrorCard: unknown / unsupported payload ──
       return (
-        <div className="space-y-3 p-4 rounded-lg border border-border bg-card animate-fade-in">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-foreground">
-              {sidePanel.type === "loading" ? "Загрузка..." :
-               sidePanel.type === "sources" ? "Источники" :
-               sidePanel.type === "error" ? "Ошибка" : "Результат"}
-            </h3>
-            <button onClick={() => setSidePanel(null)} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
-          </div>
-
-          {sidePanel.type === "loading" && <Loader2 className="h-5 w-5 text-primary animate-spin" />}
-
-          {sidePanel.type === "error" && sidePanel.error && (
-            <EdgeErrorCard error={sidePanel.error} onRetry={() => setSidePanel(null)} />
-          )}
-
-          {sidePanel.type === "sources" && (
-            <div className="space-y-1">
-              {(sidePanel.refs || []).length > 0 ? sidePanel.refs.map((r: string, i: number) => (
-                <p key={i} className="text-xs text-muted-foreground flex items-center gap-1"><FileSearch className="h-3 w-3" />{r}</p>
-              )) : <p className="text-xs text-muted-foreground">Нет привязанных источников</p>}
+        <Card className="border-destructive/30 bg-destructive/5">
+          <CardContent className="pt-5 space-y-3">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive shrink-0" />
+              <p className="text-sm font-medium text-foreground">
+                Ожидался «{expectedKind}», получен «{artifactKind || "unknown"}»
+              </p>
             </div>
-          )}
-
-          {sidePanel.type === "result" && sidePanel.payload && (() => {
-            const p = sidePanel.payload;
-            // assistant_note
-            if (p.kind === "assistant_note") {
-              return <AssistantNoteCard payload={p} sourceRefs={sidePanel.source_refs} />;
-            }
-            // method_pack blocks (legacy conversion)
-            if (p.kind === "method_pack" && p.blocks) {
-              return (
-                <div className="space-y-2">
-                  {p.blocks.map((b: any) => <BlockRenderer key={b.id} block={b} />)}
-                </div>
-              );
-            }
-            // Quiz inline
-            if (p.kind === "quiz" && p.questions) {
-              return <p className="text-sm text-muted-foreground">Квиз создан — переключено на основной контент</p>;
-            }
-            // Flashcards inline
-            if (p.kind === "flashcards" && p.cards) {
-              return <p className="text-sm text-muted-foreground">Карточки созданы — переключено на основной контент</p>;
-            }
-            // Fallback: no raw JSON, use error card
-            return <UnknownPayloadCard kind={p.kind || "unknown"} payload={p} />;
-          })()}
-
-          {sidePanel.source_refs?.length > 0 && sidePanel.payload?.kind !== "assistant_note" && (
-            <div className="pt-2 border-t border-border">
-              <p className="text-[10px] text-muted-foreground flex items-center gap-1"><FileSearch className="h-3 w-3" /> {sidePanel.source_refs.length} источников</p>
+            <Collapsible>
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="sm" className="text-xs">
+                  Детали <ChevronDown className="h-3 w-3 ml-1" />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <pre className="text-[11px] text-muted-foreground bg-muted/30 p-3 rounded-lg mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-all">
+                  {JSON.stringify(pub, null, 2).slice(0, 2000)}
+                </pre>
+              </CollapsibleContent>
+            </Collapsible>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => {
+                navigator.clipboard.writeText(JSON.stringify({ expected: expectedKind, received: artifactKind, payload: pub }, null, 2));
+                toast.success("Скопировано");
+              }}>
+                <Copy className="h-3 w-3 mr-1" /> Копировать отчёт
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => {
+                actMutation.mutate({
+                  action_type: formatToActionType(selectedFormat),
+                  context: `Retry: expected ${expectedKind}`,
+                });
+              }}>
+                <RotateCcw className="h-3 w-3 mr-1" /> Повторить
+              </Button>
             </div>
-          )}
-        </div>
+          </CardContent>
+        </Card>
       );
     };
 
-    return (
-      <div className="space-y-4" onMouseUp={handleMouseUp}>
-        {/* Generation progress banner */}
-        {isGenerating && (
-          <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 animate-fade-in">
-            <div className="flex items-center gap-3 mb-3">
-              <Loader2 className="h-5 w-5 text-primary animate-spin shrink-0" />
-              <span className="text-sm font-medium text-foreground">Создаём ваш гайд…</span>
-            </div>
-            <Progress value={genProgressVal} className="h-1.5 mb-3" />
-            <div className="flex items-center gap-4">
-              {genStages.map((stage) => {
-                const Icon = stage.icon;
-                return (
-                  <div key={stage.key} className={cn("flex items-center gap-1.5 text-xs transition-colors",
-                    stage.status === "done" ? "text-accent" : stage.status === "running" ? "text-foreground" : "text-muted-foreground/40")}>
-                    {stage.status === "done" ? <CheckCircle2 className="h-3.5 w-3.5" /> : stage.status === "running" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Icon className="h-3.5 w-3.5" />}
-                    {stage.label}
-                  </div>
-                );
-              })}
-            </div>
+    /* ─── Side panel renderer ─── */
+    const renderSidePanel = () => (
+      <div className="space-y-4">
+        {/* Side panel header */}
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Панель AI</h3>
+          <button onClick={() => setShowSidePanel(false)} className="text-muted-foreground hover:text-foreground">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+
+        {/* AI Actions — deterministic buttons */}
+        <div className="space-y-1.5">
+          {menuItems.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => handleAssistantAction(item.action)}
+              disabled={actMutation.isPending}
+              className="w-full text-left px-3 py-2 rounded-lg border border-border bg-card hover:border-primary/30 hover:bg-primary/5 text-sm text-foreground transition-all disabled:opacity-50"
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Selection indicator */}
+        {selectedText && (
+          <div className="p-2 rounded-lg bg-primary/5 border border-primary/20">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">
+              Выделено ({selType === "term" ? "термин" : "фрагмент"})
+            </p>
+            <p className="text-xs text-foreground truncate">{selectedText}</p>
           </div>
         )}
 
-        {/* Header */}
+        {/* Side panel content (results from AI actions) */}
+        {sidePanel && (
+          <div className="space-y-3 p-3 rounded-lg border border-border bg-card/50">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-semibold text-foreground">
+                {sidePanel.type === "loading" ? "Загрузка..." :
+                 sidePanel.type === "sources" ? "Источники" :
+                 sidePanel.type === "error" ? "Ошибка" : "Результат"}
+              </h4>
+              <button onClick={() => setSidePanel(null)} className="text-muted-foreground hover:text-foreground"><X className="h-3 w-3" /></button>
+            </div>
+
+            {sidePanel.type === "loading" && <Loader2 className="h-5 w-5 text-primary animate-spin" />}
+
+            {sidePanel.type === "error" && sidePanel.error && (
+              <EdgeErrorCard error={sidePanel.error} onRetry={() => setSidePanel(null)} />
+            )}
+
+            {sidePanel.type === "sources" && (
+              <div className="space-y-1">
+                {(sidePanel.refs || []).length > 0 ? sidePanel.refs.map((r: string, i: number) => (
+                  <p key={i} className="text-xs text-muted-foreground flex items-center gap-1"><FileSearch className="h-3 w-3" />{r}</p>
+                )) : <p className="text-xs text-muted-foreground">Нет привязанных источников</p>}
+              </div>
+            )}
+
+            {sidePanel.type === "result" && sidePanel.payload && (() => {
+              const p = sidePanel.payload;
+              if (p.kind === "assistant_note") {
+                return <AssistantNoteCard payload={p} sourceRefs={sidePanel.source_refs} />;
+              }
+              if (p.kind === "method_pack" && p.blocks) {
+                return (
+                  <div className="space-y-2">
+                    {p.blocks.map((b: any) => <BlockRenderer key={b.id} block={b} />)}
+                  </div>
+                );
+              }
+              if (p.kind === "quiz" && p.questions) {
+                return <p className="text-sm text-muted-foreground">Квиз создан — переключено на основной контент</p>;
+              }
+              if (p.kind === "flashcards" && p.cards) {
+                return <p className="text-sm text-muted-foreground">Карточки созданы — переключено</p>;
+              }
+              return <UnknownPayloadCard kind={p.kind || "unknown"} payload={p} />;
+            })()}
+          </div>
+        )}
+
+        {/* Sources quick access */}
+        <div className="pt-2 border-t border-border space-y-2">
+          <button
+            onClick={() => setShowSourceManager(!showSourceManager)}
+            className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
+          >
+            <FileText className="h-3 w-3" />
+            <span>Источники ({projectSources.length})</span>
+            <ChevronDown className={cn("h-3 w-3 ml-auto transition-transform", showSourceManager && "rotate-180")} />
+          </button>
+
+          {showSourceManager && (
+            <div className="space-y-2 animate-fade-in">
+              {projectSources.map((src: any) => (
+                <div key={src.id} className="flex items-center justify-between text-xs p-2 rounded bg-muted/30">
+                  <span className="text-foreground truncate flex-1">{src.file_name}</span>
+                  <button onClick={() => handleRemoveSource(src.id)} className="text-muted-foreground hover:text-destructive ml-2">
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+              <div className="flex gap-1.5">
+                <Button variant="outline" size="sm" className="text-xs flex-1 h-7" onClick={() => sourceInputRef.current?.click()}>
+                  <Plus className="h-3 w-3 mr-1" /> Добавить
+                </Button>
+                <Button variant="outline" size="sm" className="text-xs flex-1 h-7" onClick={handleReplan} disabled={isReplanning}>
+                  {isReplanning ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <RefreshCw className="h-3 w-3 mr-1" />}
+                  Replan
+                </Button>
+              </div>
+              <input ref={sourceInputRef} type="file" accept=".pdf,.txt,.md,.docx" multiple className="hidden"
+                onChange={(e) => { if (e.target.files?.length) handleAddSources(Array.from(e.target.files)); e.target.value = ""; }} />
+            </div>
+          )}
+        </div>
+      </div>
+    );
+
+    return (
+      <div className="space-y-3" onMouseUp={handleMouseUp}>
+        {/* ── Header bar: preset badge + title + next step ── */}
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2 min-w-0">
-            <Badge variant="outline" className="shrink-0">{OUTPUT_FORMATS.find((f) => f.value === selectedFormat)?.label}</Badge>
-            <h2 className="text-base font-bold text-foreground truncate">{activeArtifact?.title || "Рабочее пространство"}</h2>
+            <Badge variant="outline" className="shrink-0 text-xs">{presetLabel(selectedFormat)}</Badge>
+            <h2 className="text-base font-bold text-foreground truncate">{project?.title || activeArtifact?.title || "Плеер"}</h2>
           </div>
           <div className="flex items-center gap-2">
-            {/* AI Actions dropdown — localized */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" disabled={actMutation.isPending || isGenerating}>
-                  {actMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lightbulb className="h-4 w-4" />}
-                  <span className="ml-1.5 hidden sm:inline">Действия AI</span>
-                  <ChevronDown className="h-3 w-3 ml-1" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                {menuItems.map((item) => (
-                  <DropdownMenuItem key={item.id} onClick={() => handleAssistantAction(item.action)}>
-                    {item.label}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            {/* Next step / checkin */}
-            <Button size="sm" variant="default" onClick={() => setPhase("checkin")} disabled={actMutation.isPending || isGenerating}>
-              Следующий шаг <ChevronRight className="h-4 w-4 ml-1" />
+            {!showSidePanel && (
+              <Button variant="ghost" size="sm" onClick={() => setShowSidePanel(true)}>
+                <PanelRight className="h-4 w-4" />
+              </Button>
+            )}
+            <Button size="sm" variant="default" onClick={handleNextStep} disabled={actMutation.isPending || !nextStep}>
+              {actMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <MapPin className="h-4 w-4 mr-1" />}
+              {nextStep ? "Следующий шаг" : "Завершить"}
             </Button>
           </div>
         </div>
 
-        {/* Roadmap mini-bar */}
+        {/* ── Roadmap mini-bar ── */}
         {roadmap.length > 0 && (
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-            {roadmap.map((step: any) => (
-              <div key={step.id} title={step.title}
-                className={cn("h-2 flex-1 rounded-full min-w-[20px] transition-all",
-                  step.status === "completed" ? "bg-accent" :
-                  step.status === "available" ? "bg-primary" :
-                  step.status === "in_progress" ? "bg-primary/50" : "bg-muted")} />
-            ))}
+          <div className="space-y-1">
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+              {roadmap.map((step: any, i: number) => {
+                const isCurrent = step.status === "in_progress" || step.status === "available";
+                return (
+                  <div key={step.id} title={step.title}
+                    className={cn("h-2 flex-1 rounded-full min-w-[20px] transition-all cursor-pointer",
+                      step.status === "completed" ? "bg-accent" :
+                      step.status === "available" ? "bg-primary" :
+                      step.status === "in_progress" ? "bg-primary/60 animate-pulse" : "bg-muted",
+                      isCurrent && "ring-1 ring-primary ring-offset-1 ring-offset-background"
+                    )} />
+                );
+              })}
+            </div>
+            {nextStep && (
+              <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                <MapPin className="h-3 w-3 text-primary" />
+                Далее: <span className="text-foreground font-medium">{nextStep.title}</span>
+                {nextStep.artifact_type && (
+                  <Badge variant="secondary" className="text-[9px] px-1 py-0 ml-1">{nextStep.artifact_type}</Badge>
+                )}
+              </p>
+            )}
           </div>
         )}
 
-        {/* Content area */}
-        <div className={cn("grid gap-4", sidePanel ? "grid-cols-1 lg:grid-cols-3" : "grid-cols-1")}>
-          <div className={cn(sidePanel ? "lg:col-span-2" : "")}>
-            {isGenerating ? (
-              <div className="text-center py-16 space-y-4 animate-fade-in">
-                <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto">
-                  <Sparkles className="h-8 w-8 text-primary animate-pulse" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-foreground">Готовим ваш гайд</p>
-                  <p className="text-xs text-muted-foreground mt-1">Контент появится здесь автоматически</p>
-                </div>
-              </div>
-            ) : actMutation.isPending ? (
+        {/* ── 70/30 layout ── */}
+        <div className={cn("grid gap-4", showSidePanel ? "lg:grid-cols-[1fr_340px]" : "grid-cols-1")}>
+          {/* ── Content (70%) ── */}
+          <div className="min-w-0">
+            {actMutation.isPending ? (
               <div className="text-center py-16"><Loader2 className="h-8 w-8 text-primary animate-spin mx-auto" /><p className="text-sm text-muted-foreground mt-3">Генерация...</p></div>
             ) : submitMutation.isPending ? (
               <div className="text-center py-16"><Loader2 className="h-8 w-8 text-primary animate-spin mx-auto" /><p className="text-sm text-muted-foreground mt-3">Проверка...</p></div>
             ) : (
-              <div className={cn(!isGenerating && activeArtifact && "animate-fade-in")}>
-                {renderPlayer()}
+              <div className="animate-fade-in">
+                {renderContent()}
               </div>
+            )}
+
+            {/* Post-submit actions */}
+            {quizSubmitted && (
+              <div className="flex gap-2 justify-center pt-4">
+                <Button variant="outline" size="sm" onClick={() => { setQuizSubmitted(false); setSubmitFeedback(null); setSubmitScore(null); }}>
+                  <RotateCcw className="h-4 w-4 mr-1" /> Попробовать снова
+                </Button>
+                <Button size="sm" onClick={() => { handleCheckin(); handleNextStep(); }}>
+                  Далее <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+              </div>
+            )}
+
+            {/* ── Inline Check-in (triggered after submit) ── */}
+            {showCheckinInPlayer && (
+              <Card className="mt-4 border-primary/20 bg-primary/5">
+                <CardContent className="pt-5 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-bold text-foreground">Сверка</h3>
+                    <button onClick={() => setShowCheckinInPlayer(false)} className="text-muted-foreground hover:text-foreground">
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Ответьте, чтобы адаптировать следующие шаги.</p>
+
+                  <div className="space-y-3">
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-foreground">Что сложно? (темы через запятую)</label>
+                      <Input value={checkinAnswers.hardTopics} onChange={(e) => setCheckinAnswers((p) => ({ ...p, hardTopics: e.target.value }))}
+                        placeholder="Например: дженерики" className="h-8 text-xs" />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-foreground">Темп?</label>
+                      <div className="flex gap-1.5">
+                        {["slower", "normal", "faster"].map((v) => (
+                          <button key={v} onClick={() => setCheckinAnswers((p) => ({ ...p, pace: v }))}
+                            className={cn("flex-1 p-2 rounded-lg border text-xs transition-all",
+                              checkinAnswers.pace === v ? "border-primary bg-primary/10 text-foreground" : "border-border text-muted-foreground")}>
+                            {v === "slower" ? "Медленнее" : v === "normal" ? "Норм" : "Быстрее"}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-foreground">Чего добавить?</label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {["Практика", "Примеры", "Тесты"].map((opt) => (
+                          <button key={opt} onClick={() => setCheckinAnswers((p) => ({ ...p, addMore: p.addMore === opt ? "" : opt }))}
+                            className={cn("px-3 py-1.5 rounded-full border text-xs transition-all",
+                              checkinAnswers.addMore === opt ? "border-primary bg-primary/10 text-foreground" : "border-border text-muted-foreground")}>
+                            {opt}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <Button size="sm" className="w-full" onClick={handleCheckin}>
+                    Обновить план <ArrowRight className="h-4 w-4 ml-1" />
+                  </Button>
+                </CardContent>
+              </Card>
             )}
           </div>
 
-          {/* Side panel */}
-          {sidePanel && renderSidePanel()}
+          {/* ── Side panel (30%) ── */}
+          {showSidePanel && (
+            <div className="border border-border rounded-lg p-4 bg-card/50 h-fit sticky top-4">
+              {renderSidePanel()}
+            </div>
+          )}
         </div>
-
-        {/* Submitted quiz: retry + checkin */}
-        {quizSubmitted && (
-          <div className="flex gap-2 justify-center pt-2">
-            <Button variant="outline" size="sm" onClick={() => { setQuizSubmitted(false); setSubmitFeedback(null); setSubmitScore(null); }}>
-              <RotateCcw className="h-4 w-4 mr-1" /> Попробовать снова
-            </Button>
-            <Button size="sm" onClick={() => setPhase("checkin")}>
-              Далее <ChevronRight className="h-4 w-4 ml-1" />
-            </Button>
-          </div>
-        )}
       </div>
     );
   }
 
-  /* ─── CHECK-IN ─── */
+  /* ─── FINISH ─── */
+  if (phase === "finish") {
+    return (
+      <div className="space-y-6 max-w-xl mx-auto text-center py-8">
+        <Award className="h-16 w-16 text-primary mx-auto" />
+        <h2 className="text-xl font-bold text-foreground">Готово!</h2>
+        <p className="text-sm text-muted-foreground">Вы прошли все шаги. Можете вернуться к результатам или начать заново.</p>
+
+        <div className="flex gap-3 justify-center">
+          <Button variant="outline" onClick={() => setPhase("player")}>
+            К результатам
+          </Button>
+          <Button onClick={() => {
+            setPhase("intake");
+            setIntakeStep(0);
+            setIntake({ files: [], pastedText: "", goal: "", knowledgeLevel: "", depth: "", deadline: "", hoursPerWeek: "", preferences: [] });
+            setProjectId(null);
+            setActiveArtifact(null);
+            setSidePanel(null);
+            setQuizSubmitted(false);
+            setSubmitFeedback(null);
+            setSubmitScore(null);
+            setCompletedSteps(0);
+            setPipelineError(null);
+            setShowCheckinInPlayer(false);
+          }}>
+            <RefreshCw className="h-4 w-4 mr-2" /> Новый проект
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  /* ─── CHECK-IN (standalone fallback) ─── */
   if (phase === "checkin") {
     return (
       <div className="space-y-6 max-w-xl mx-auto">
@@ -1504,38 +1806,6 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
           </Button>
           <Button onClick={() => { handleCheckin(); handleNextStep(); }}>
             Обновить и продолжить <ArrowRight className="h-4 w-4 ml-1" />
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  /* ─── FINISH ─── */
-  if (phase === "finish") {
-    return (
-      <div className="space-y-6 max-w-xl mx-auto text-center py-8">
-        <Award className="h-16 w-16 text-primary mx-auto" />
-        <h2 className="text-xl font-bold text-foreground">Готово!</h2>
-        <p className="text-sm text-muted-foreground">Вы прошли все шаги. Можете вернуться к результатам или начать заново.</p>
-
-        <div className="flex gap-3 justify-center">
-          <Button variant="outline" onClick={() => setPhase("player")}>
-            К результатам
-          </Button>
-          <Button onClick={() => {
-            setPhase("intake");
-            setIntakeStep(0);
-            setIntake({ files: [], pastedText: "", goal: "", knowledgeLevel: "", depth: "", deadline: "", hoursPerWeek: "", preferences: [] });
-            setProjectId(null);
-            setActiveArtifact(null);
-            setSidePanel(null);
-            setQuizSubmitted(false);
-            setSubmitFeedback(null);
-            setSubmitScore(null);
-            setCompletedSteps(0);
-            setPipelineError(null);
-          }}>
-            <RefreshCw className="h-4 w-4 mr-2" /> Новый проект
           </Button>
         </div>
       </div>
