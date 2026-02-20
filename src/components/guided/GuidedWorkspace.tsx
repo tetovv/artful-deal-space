@@ -873,51 +873,27 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
     );
   }
 
-  /* ─── GENERATE ─── */
-  if (phase === "generate") {
-    const steps = [
-      { key: "ingesting", label: "Извлечение и индексация текста", icon: FileText },
-      { key: "planning", label: "Создание учебного плана", icon: Brain },
-      { key: "generating", label: "Генерация первого результата", icon: Sparkles },
+  /* ─── GENERATE + WORK (unified) ─── */
+  if (phase === "generate" || phase === "work") {
+    const isGenerating = phase === "generate" && genStatus !== "done" && genStatus !== "error";
+    const isError = phase === "generate" && genStatus === "error";
+    const genSteps = [
+      { key: "ingesting", label: "Извлечение текста", icon: FileText },
+      { key: "planning", label: "Учебный план", icon: Brain },
+      { key: "generating", label: "Генерация", icon: Sparkles },
     ];
-    const currentIdx = steps.findIndex((s) => s.key === genStatus);
-    const progressVal = genStatus === "done" ? 100 : genStatus === "error" ? 0 : ((currentIdx + 1) / steps.length) * 90;
+    const currentGenIdx = genSteps.findIndex((s) => s.key === genStatus);
+    const genProgressVal = genStatus === "done" ? 100 : genStatus === "error" ? 0 : ((currentGenIdx + 1) / genSteps.length) * 90;
 
-    return (
-      <div className="space-y-6 max-w-xl mx-auto text-center py-8">
-        {genStatus === "error" ? (
-          <>
-            <AlertCircle className="h-12 w-12 text-destructive mx-auto" />
-            <p className="text-sm text-destructive">Произошла ошибка. Попробуйте снова.</p>
-            <Button variant="outline" onClick={() => { setPhase("recommendation"); setGenStatus("idle"); }}>Назад</Button>
-          </>
-        ) : (
-          <>
-            <Loader2 className="h-12 w-12 text-primary animate-spin mx-auto" />
-            <Progress value={progressVal} className="h-2 max-w-xs mx-auto" />
-            <div className="space-y-3">
-              {steps.map((s, i) => {
-                const Icon = s.icon;
-                const isDone = currentIdx > i || genStatus === "done";
-                const isCurrent = currentIdx === i && genStatus !== "done";
-                return (
-                  <div key={s.key} className={cn("flex items-center gap-3 justify-center text-sm",
-                    isDone ? "text-accent" : isCurrent ? "text-foreground" : "text-muted-foreground/40")}>
-                    {isDone ? <CheckCircle2 className="h-4 w-4" /> : isCurrent ? <Loader2 className="h-4 w-4 animate-spin" /> : <Icon className="h-4 w-4" />}
-                    {s.label}
-                  </div>
-                );
-              })}
-            </div>
-            <p className="text-xs text-muted-foreground">Это может занять 30–60 секунд</p>
-          </>
-        )}
-      </div>
-    );
-  }
-
-  /* ─── WORK ─── */
-  if (phase === "work") {
+    if (isError) {
+      return (
+        <div className="space-y-6 max-w-xl mx-auto text-center py-8">
+          <AlertCircle className="h-12 w-12 text-destructive mx-auto" />
+          <p className="text-sm text-destructive">Произошла ошибка. Попробуйте снова.</p>
+          <Button variant="outline" onClick={() => { setPhase("recommendation"); setGenStatus("idle"); }}>Назад</Button>
+        </div>
+      );
+    }
     const pub = activeArtifact?.public_json as any;
     const artifactKind = pub?.kind || activeArtifact?.type || null;
     const menuItems = getAssistantActions(selectedFormat, artifactKind, quizSubmitted, hasSelection);
@@ -975,6 +951,30 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
 
     return (
       <div className="space-y-4" onMouseUp={handleMouseUp}>
+        {/* Generation progress banner */}
+        {isGenerating && (
+          <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 animate-fade-in">
+            <div className="flex items-center gap-3 mb-3">
+              <Loader2 className="h-5 w-5 text-primary animate-spin shrink-0" />
+              <span className="text-sm font-medium text-foreground">Создаём ваш гайд…</span>
+            </div>
+            <Progress value={genProgressVal} className="h-1.5 mb-3" />
+            <div className="flex items-center gap-4">
+              {genSteps.map((s, i) => {
+                const Icon = s.icon;
+                const isDone = currentGenIdx > i;
+                const isCurrent = currentGenIdx === i;
+                return (
+                  <div key={s.key} className={cn("flex items-center gap-1.5 text-xs transition-colors",
+                    isDone ? "text-accent" : isCurrent ? "text-foreground" : "text-muted-foreground/40")}>
+                    {isDone ? <CheckCircle2 className="h-3.5 w-3.5" /> : isCurrent ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Icon className="h-3.5 w-3.5" />}
+                    {s.label}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
         {/* Header */}
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2 min-w-0">
@@ -985,7 +985,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
             {/* AI Actions dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" disabled={actMutation.isPending}>
+                <Button variant="outline" size="sm" disabled={actMutation.isPending || isGenerating}>
                   {actMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lightbulb className="h-4 w-4" />}
                   <span className="ml-1.5 hidden sm:inline">AI Actions</span>
                   <ChevronDown className="h-3 w-3 ml-1" />
@@ -1001,7 +1001,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
             </DropdownMenu>
 
             {/* Next step / checkin */}
-            <Button size="sm" variant="default" onClick={() => setPhase("checkin")} disabled={actMutation.isPending}>
+            <Button size="sm" variant="default" onClick={() => setPhase("checkin")} disabled={actMutation.isPending || isGenerating}>
               Следующий шаг <ChevronRight className="h-4 w-4 ml-1" />
             </Button>
           </div>
@@ -1023,12 +1023,24 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
         {/* Content area */}
         <div className={cn("grid gap-4", sidePanel ? "grid-cols-1 lg:grid-cols-3" : "grid-cols-1")}>
           <div className={cn(sidePanel ? "lg:col-span-2" : "")}>
-            {actMutation.isPending ? (
+            {isGenerating ? (
+              <div className="text-center py-16 space-y-4 animate-fade-in">
+                <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto">
+                  <Sparkles className="h-8 w-8 text-primary animate-pulse" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-foreground">Готовим ваш гайд</p>
+                  <p className="text-xs text-muted-foreground mt-1">Контент появится здесь автоматически</p>
+                </div>
+              </div>
+            ) : actMutation.isPending ? (
               <div className="text-center py-16"><Loader2 className="h-8 w-8 text-primary animate-spin mx-auto" /><p className="text-sm text-muted-foreground mt-3">Генерация...</p></div>
             ) : submitMutation.isPending ? (
               <div className="text-center py-16"><Loader2 className="h-8 w-8 text-primary animate-spin mx-auto" /><p className="text-sm text-muted-foreground mt-3">Проверка...</p></div>
             ) : (
-              renderPlayer()
+              <div className={cn(!isGenerating && activeArtifact && "animate-fade-in")}>
+                {renderPlayer()}
+              </div>
             )}
           </div>
 
