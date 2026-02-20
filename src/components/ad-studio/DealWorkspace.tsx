@@ -6,10 +6,9 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Progress } from "@/components/ui/progress";
-import { Separator } from "@/components/ui/separator";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Collapsible, CollapsibleContent, CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
@@ -18,6 +17,7 @@ import {
   CheckCircle2, AlertTriangle, Clock, FileText, Upload, Download,
   ExternalLink, Pin, RefreshCw, MessageCircle, ClipboardCopy,
   Archive, Files, CreditCard, Radio, ScrollText, CalendarDays, Copy,
+  ChevronDown, ChevronRight,
 } from "lucide-react";
 import { Deal, DealStatus } from "@/types";
 import { cn } from "@/lib/utils";
@@ -57,7 +57,6 @@ function getPrimaryAction(status: DealStatus): { label: string; icon: any } | nu
     case "briefing": return { label: "Отправить бриф", icon: Send };
     case "in_progress": return { label: "Отправить на проверку", icon: Upload };
     case "review": return { label: "Подтвердить выполнение", icon: CheckCircle2 };
-    case "disputed": return { label: "Открыть спор", icon: AlertTriangle };
     default: return null;
   }
 }
@@ -117,7 +116,7 @@ const paymentStatusLabels = { reserved: "Резерв", in_progress: "В раб�
 const paymentStatusColors = { reserved: "bg-warning/15 text-warning", in_progress: "bg-primary/15 text-primary", review: "bg-accent/15 text-accent", released: "bg-success/15 text-success" };
 
 /* ═══════════════════════════════════════════════════════
-   SIDEBAR — dense deal list
+   SIDEBAR
    ═══════════════════════════════════════════════════════ */
 function DealSidebar({
   selectedId, onSelect, searchQuery, setSearchQuery, statusFilter, setStatusFilter,
@@ -171,7 +170,7 @@ function DealSidebar({
               key={f.key}
               onClick={() => setStatusFilter(f.key)}
               className={cn(
-                "px-2 py-0.5 rounded text-[11px] font-medium transition-colors",
+                "px-2 py-0.5 rounded text-[12px] font-medium transition-colors",
                 statusFilter === f.key
                   ? "bg-primary/15 text-primary"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
@@ -188,7 +187,6 @@ function DealSidebar({
           const completedMs = deal.milestones.filter((m) => m.completed).length;
           const totalMs = deal.milestones.length;
           const isSelected = selectedId === deal.id;
-          const advScore = scores.get(deal.advertiserId);
 
           return (
             <button
@@ -205,17 +203,16 @@ function DealSidebar({
                   {statusLabels[deal.status]}
                 </span>
               </div>
-              <div className="flex items-center justify-between mt-1">
+              <div className="flex items-center justify-between mt-0.5">
                 <span className="text-[11px] text-muted-foreground truncate">
                   {deal.advertiserName} → {deal.creatorName}
-                  {advScore?.isLowScore && <AlertTriangle className="inline h-2.5 w-2.5 text-destructive ml-1" />}
                 </span>
                 <span className="text-[12px] font-medium text-card-foreground shrink-0">{deal.budget.toLocaleString()} ₽</span>
               </div>
               {totalMs > 0 && (
                 <div className="flex items-center gap-1.5 mt-1">
-                  <div className="h-1 flex-1 bg-muted rounded-full overflow-hidden">
-                    <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${(completedMs / totalMs) * 100}%` }} />
+                  <div className="h-[3px] flex-1 bg-muted rounded-full overflow-hidden">
+                    <div className="h-full bg-primary/60 rounded-full transition-all" style={{ width: `${(completedMs / totalMs) * 100}%` }} />
                   </div>
                   <span className="text-[10px] text-muted-foreground">{completedMs}/{totalMs}</span>
                 </div>
@@ -232,7 +229,7 @@ function DealSidebar({
 }
 
 /* ═══════════════════════════════════════════════════════
-   CHAT TAB — centered, no duplicate summary
+   CHAT TAB
    ═══════════════════════════════════════════════════════ */
 function ChatTab({ deal }: { deal: Deal }) {
   useRealtimeMessages(deal.id);
@@ -241,16 +238,15 @@ function ChatTab({ deal }: { deal: Deal }) {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto py-4">
-        <div className="max-w-[820px] mx-auto px-4 space-y-2.5">
+      <div className="flex-1 overflow-y-auto py-3">
+        <div className="max-w-[820px] mx-auto px-4 space-y-2">
           {dealMessages.map((msg) => {
             const isMe = msg.senderId === "u1";
             return (
               <div key={msg.id} className={cn("flex", isMe ? "justify-end" : "justify-start")}>
                 <div
                   className={cn(
-                    "max-w-[70%] rounded-2xl px-4 py-2.5",
+                    "max-w-[65%] rounded-2xl px-3.5 py-2",
                     isMe
                       ? "bg-primary text-primary-foreground rounded-br-md"
                       : "bg-secondary text-secondary-foreground rounded-bl-md"
@@ -259,13 +255,13 @@ function ChatTab({ deal }: { deal: Deal }) {
                   <p className="text-[11px] font-semibold mb-0.5 opacity-70">{msg.senderName}</p>
                   <p className="text-[15px] leading-relaxed">{msg.content}</p>
                   {msg.attachment && (
-                    <div className="mt-2 flex items-center gap-2 text-[13px]">
+                    <div className="mt-1.5 flex items-center gap-2 text-[13px]">
                       <Paperclip className="h-3 w-3 opacity-60" />
-                      <a href="#" className="underline hover:no-underline">{msg.attachment}</a>
-                      <button className="opacity-60 hover:opacity-100"><Download className="h-3 w-3" /></button>
+                      <a href="#" className="underline hover:no-underline truncate">{msg.attachment}</a>
+                      <button className="opacity-60 hover:opacity-100 shrink-0"><Download className="h-3 w-3" /></button>
                     </div>
                   )}
-                  <p className="text-[10px] opacity-50 mt-1 text-right">
+                  <p className="text-[10px] opacity-50 mt-0.5 text-right">
                     {new Date(msg.timestamp).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}
                   </p>
                 </div>
@@ -273,13 +269,12 @@ function ChatTab({ deal }: { deal: Deal }) {
             );
           })}
           {dealMessages.length === 0 && (
-            <div className="text-center text-[14px] text-muted-foreground py-20">Нет сообщений</div>
+            <div className="text-center text-[14px] text-muted-foreground py-16">Нет сообщений</div>
           )}
         </div>
       </div>
 
-      {/* Composer */}
-      <div className="px-4 py-2.5 border-t border-border bg-card">
+      <div className="px-4 py-2 border-t border-border bg-card">
         <div className="max-w-[820px] mx-auto flex gap-2 items-center">
           <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0">
             <Paperclip className="h-4 w-4" />
@@ -306,7 +301,7 @@ function TermsTab() {
   const [selectedVersion, setSelectedVersion] = useState(mockTermsVersions.length - 1);
   const ver = mockTermsVersions[selectedVersion];
 
-  const statusLabel = ver.status === "accepted" ? "Согласовано" : ver.status === "draft" ? "Черновик" : "Ожидает подтверждения";
+  const statusLabel = ver.status === "accepted" ? "Согласовано" : ver.status === "draft" ? "Черновик" : "Ожидает";
   const statusColor = ver.status === "accepted" ? "bg-success/15 text-success border-success/30" : ver.status === "draft" ? "bg-muted text-muted-foreground border-muted-foreground/20" : "bg-warning/15 text-warning border-warning/30";
 
   const fieldLabels: Record<string, string> = {
@@ -318,7 +313,6 @@ function TermsTab() {
 
   return (
     <div className="p-4 space-y-3 max-w-[820px] mx-auto">
-      {/* Version selector + status */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           {mockTermsVersions.map((v, i) => (
@@ -341,13 +335,12 @@ function TermsTab() {
         </span>
       </div>
 
-      {/* Terms fields */}
       <Card>
         <CardContent className="p-3 space-y-0">
           {Object.entries(ver.fields).map(([key, value], i) => (
-            <div key={key} className={cn("flex items-start justify-between py-2", i > 0 && "border-t border-border/50")}>
+            <div key={key} className={cn("flex items-start justify-between py-1.5", i > 0 && "border-t border-border/50")}>
               <span className="text-[13px] text-muted-foreground w-36 shrink-0">{fieldLabels[key] || key}</span>
-              <span className="text-[13px] font-medium text-card-foreground text-right flex-1">{value}</span>
+              <span className="text-[14px] font-medium text-card-foreground text-right flex-1">{value}</span>
             </div>
           ))}
         </CardContent>
@@ -360,15 +353,11 @@ function TermsTab() {
         </div>
       )}
 
-      {/* Actions */}
       {ver.status === "draft" && (
-        <div className="flex items-center gap-2">
-          <Button size="sm" className="text-[13px] h-8">
-            <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
-            Подтвердить условия
-          </Button>
-          <Button size="sm" variant="outline" className="text-[13px] h-8">Предложить изменения</Button>
-        </div>
+        <Button size="sm" className="text-[13px] h-8">
+          <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+          Подтвердить условия
+        </Button>
       )}
       {ver.status === "accepted" && (
         <Button size="sm" variant="outline" className="text-[13px] h-8">
@@ -376,7 +365,6 @@ function TermsTab() {
         </Button>
       )}
 
-      {/* Contextual links */}
       <div className="flex items-center gap-4 pt-1">
         <button className="text-[12px] text-primary hover:underline flex items-center gap-1">
           <Radio className="h-3 w-3" /> Маркировка (ОРД) →
@@ -404,14 +392,14 @@ function FilesTab() {
         if (files.length === 0) return null;
         return (
           <div key={type}>
-            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+            <p className="text-[12px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
               {fileTypeLabels[type]}
             </p>
             <div className="space-y-0.5">
               {files.map((file) => (
                 <div key={file.id} className="flex items-center gap-2.5 px-2.5 py-1.5 rounded bg-muted/30 hover:bg-muted/50 transition-colors">
                   <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  <span className="text-[13px] font-medium text-card-foreground truncate flex-1">{file.name}</span>
+                  <span className="text-[14px] font-medium text-card-foreground truncate flex-1">{file.name}</span>
                   {file.pinned && <Pin className="h-3 w-3 text-primary shrink-0" />}
                   <span className="text-[11px] text-muted-foreground shrink-0">{file.uploader} · {file.date}</span>
                   <a href="#" className="text-muted-foreground hover:text-foreground"><ExternalLink className="h-3.5 w-3.5" /></a>
@@ -433,60 +421,44 @@ function FilesTab() {
 /* ═══════════════════════════════════════════════════════
    PAYMENT TAB
    ═══════════════════════════════════════════════════════ */
-function PaymentTab({ deal }: { deal: Deal }) {
+function PaymentTab() {
   return (
     <div className="p-4 space-y-3 max-w-[820px] mx-auto">
-      {/* Summary row */}
       <div className="grid grid-cols-3 gap-2">
         {[
-          { label: "Сумма", value: `${deal.budget.toLocaleString()} ₽`, color: "text-card-foreground" },
+          { label: "Сумма", value: `${mockPayment.total.toLocaleString()} ₽`, color: "text-card-foreground" },
           { label: "Зарезервировано", value: `${mockPayment.reserved.toLocaleString()} ₽`, color: "text-card-foreground" },
           { label: "Выплачено", value: `${mockPayment.released.toLocaleString()} ₽`, color: "text-success" },
         ].map((item) => (
-          <div key={item.label} className="p-2.5 rounded bg-muted/30">
-            <p className="text-[11px] text-muted-foreground">{item.label}</p>
+          <div key={item.label} className="p-2 rounded bg-muted/30">
+            <p className="text-[12px] text-muted-foreground">{item.label}</p>
             <p className={cn("text-[16px] font-bold", item.color)}>{item.value}</p>
           </div>
         ))}
       </div>
 
-      {/* Milestones */}
       <Card>
         <CardContent className="p-3 space-y-0">
-          <p className="text-[14px] font-semibold text-card-foreground mb-1.5">Этапы оплаты</p>
+          <p className="text-[14px] font-semibold text-card-foreground mb-1">Этапы оплаты</p>
           {mockPayment.milestones.map((ms, i) => (
-            <div key={ms.id} className={cn("flex items-center justify-between py-2", i > 0 && "border-t border-border/50")}>
-              <div className="flex items-center gap-2.5">
+            <div key={ms.id} className={cn("flex items-center justify-between py-1.5", i > 0 && "border-t border-border/50")}>
+              <div className="flex items-center gap-2">
                 <span className={cn("text-[11px] font-medium px-1.5 py-0.5 rounded", paymentStatusColors[ms.status])}>
                   {paymentStatusLabels[ms.status]}
                 </span>
-                <span className="text-[13px] text-card-foreground">{ms.label}</span>
+                <span className="text-[14px] text-card-foreground">{ms.label}</span>
               </div>
-              <span className="text-[13px] font-medium text-card-foreground">{ms.amount.toLocaleString()} ₽</span>
+              <span className="text-[14px] font-medium text-card-foreground">{ms.amount.toLocaleString()} ₽</span>
             </div>
           ))}
         </CardContent>
       </Card>
 
-      {/* Commission */}
       <div className="flex items-center justify-between px-3 py-1.5 rounded bg-muted/20 text-[12px]">
         <span className="text-muted-foreground">Комиссия ({mockPayment.commissionPercent}%)</span>
         <span className="font-medium text-card-foreground">{mockPayment.commission.toLocaleString()} ₽</span>
       </div>
 
-      {/* Actions */}
-      <div className="flex items-center gap-2">
-        <Button size="sm" className="text-[13px] h-8">
-          <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
-          Подтвердить выполнение
-        </Button>
-        <Button size="sm" variant="outline" className="text-[13px] h-8 text-destructive border-destructive/30 hover:bg-destructive/10">
-          <AlertTriangle className="h-3.5 w-3.5 mr-1.5" />
-          Открыть спор
-        </Button>
-      </div>
-
-      {/* Contextual links */}
       <button className="text-[12px] text-primary hover:underline flex items-center gap-1">
         <Radio className="h-3 w-3" /> Маркировка (ОРД) →
       </button>
@@ -495,7 +467,7 @@ function PaymentTab({ deal }: { deal: Deal }) {
 }
 
 /* ═══════════════════════════════════════════════════════
-   ORD TAB (accessed via "Ещё" menu)
+   ORD TAB
    ═══════════════════════════════════════════════════════ */
 function OrdTab() {
   const erid = "2SDnjek4fP1";
@@ -503,7 +475,7 @@ function OrdTab() {
     <div className="p-4 space-y-3 max-w-[820px] mx-auto">
       <Card>
         <CardContent className="p-3 space-y-0">
-          <div className="flex items-center justify-between py-2">
+          <div className="flex items-center justify-between py-1.5">
             <span className="text-[14px] font-semibold text-card-foreground">Статус ОРД</span>
             <span className="flex items-center gap-1 text-[12px] text-success font-medium">
               <CheckCircle2 className="h-3.5 w-3.5" /> Подключено
@@ -513,8 +485,8 @@ function OrdTab() {
             { label: "ERID", value: erid, mono: true, copyable: true },
             { label: "Синхронизация", value: "19.02.2026, 14:33" },
             { label: "Условия", value: "v1 (согласовано)" },
-          ].map((row, i) => (
-            <div key={row.label} className="flex items-center justify-between py-2 border-t border-border/50">
+          ].map((row) => (
+            <div key={row.label} className="flex items-center justify-between py-1.5 border-t border-border/50">
               <span className="text-[13px] text-muted-foreground">{row.label}</span>
               <div className="flex items-center gap-1.5">
                 <span className={cn("text-[13px] text-card-foreground", row.mono && "font-mono font-semibold text-primary")}>{row.value}</span>
@@ -529,7 +501,6 @@ function OrdTab() {
         </CardContent>
       </Card>
 
-      {/* ORD events */}
       <div className="space-y-1">
         <p className="text-[12px] font-semibold text-muted-foreground uppercase tracking-wider">Журнал ОРД</p>
         {mockAudit.filter((e) => e.category === "ord").map((e) => (
@@ -549,7 +520,7 @@ function OrdTab() {
 }
 
 /* ═══════════════════════════════════════════════════════
-   AUDIT TAB (accessed via "Ещё" menu)
+   AUDIT TAB
    ═══════════════════════════════════════════════════════ */
 function AuditTab() {
   const [filter, setFilter] = useState<string>("all");
@@ -585,7 +556,7 @@ function AuditTab() {
           {filtered.map((entry, i) => {
             const Icon = categoryIcons[entry.category] || ScrollText;
             return (
-              <div key={entry.id} className={cn("flex items-start gap-2.5 px-3 py-2", i > 0 && "border-t border-border/50")}>
+              <div key={entry.id} className={cn("flex items-start gap-2.5 px-3 py-1.5", i > 0 && "border-t border-border/50")}>
                 <Icon className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="text-[13px] text-card-foreground">{entry.action}</p>
@@ -614,6 +585,7 @@ export function DealWorkspace() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [activeSubTab, setActiveSubTab] = useState("chat");
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   const primaryAction = getPrimaryAction(selectedDeal.status);
   const completedMs = selectedDeal.milestones.filter((m) => m.completed).length;
@@ -637,38 +609,25 @@ export function DealWorkspace() {
     <div className="flex-1 flex h-full overflow-hidden">
       <DealSidebar
         selectedId={selectedDeal.id}
-        onSelect={(d) => { setSelectedDeal(d); setActiveSubTab("chat"); }}
+        onSelect={(d) => { setSelectedDeal(d); setActiveSubTab("chat"); setDetailsOpen(false); }}
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
         statusFilter={statusFilter}
         setStatusFilter={setStatusFilter}
       />
 
-      {/* Main workspace — centered content */}
+      {/* Main workspace */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Header — single source of truth */}
-        <div className="px-5 py-2.5 border-b border-border bg-card">
+        {/* ── Header: single source of truth ── */}
+        <div className="px-5 py-2 border-b border-border bg-card">
           <div className="max-w-[1100px]">
-            {/* Row 1: Title + status + primary action */}
+            {/* Row 1: Title + status + ONE primary CTA + kebab */}
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2.5 min-w-0">
-                <h1 className="text-[17px] font-bold text-card-foreground truncate">{selectedDeal.title}</h1>
+                <h1 className="text-[19px] font-bold text-card-foreground truncate">{selectedDeal.title}</h1>
                 <span className={cn("text-[11px] font-medium px-1.5 py-0.5 rounded border shrink-0", statusColors[selectedDeal.status])}>
                   {statusLabels[selectedDeal.status]}
                 </span>
-                <span className="text-[14px] font-semibold text-card-foreground shrink-0">{selectedDeal.budget.toLocaleString()} ₽</span>
-                {selectedDeal.deadline && (
-                  <span className="flex items-center gap-1 text-[12px] text-muted-foreground shrink-0">
-                    <CalendarDays className="h-3 w-3" />
-                    {new Date(selectedDeal.deadline).toLocaleDateString("ru-RU")}
-                  </span>
-                )}
-                <span className="flex items-center gap-1 text-[11px] text-success shrink-0">
-                  <ShieldCheck className="h-3 w-3" /> Безопасная сделка
-                </span>
-                {totalMs > 0 && (
-                  <span className="text-[11px] text-muted-foreground shrink-0">{completedMs}/{totalMs}</span>
-                )}
               </div>
 
               <div className="flex items-center gap-1.5 shrink-0">
@@ -688,25 +647,71 @@ export function DealWorkspace() {
                     <DropdownMenuItem><Download className="h-3.5 w-3.5 mr-2" /> Экспорт</DropdownMenuItem>
                     <DropdownMenuItem><Copy className="h-3.5 w-3.5 mr-2" /> Дублировать</DropdownMenuItem>
                     <DropdownMenuItem><Archive className="h-3.5 w-3.5 mr-2" /> Архивировать</DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem className="text-destructive focus:text-destructive">
+                      <AlertTriangle className="h-3.5 w-3.5 mr-2" /> Открыть спор
+                    </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
             </div>
 
-            {/* Row 2: participants + ID */}
-            <div className="flex items-center gap-3 mt-1 text-[12px] text-muted-foreground">
-              <span>{selectedDeal.advertiserName} → {selectedDeal.creatorName}</span>
-              <button
-                className="flex items-center gap-1 hover:text-foreground transition-colors font-mono text-[11px]"
-                onClick={() => { navigator.clipboard.writeText(selectedDeal.id); toast.success("ID скопирован"); }}
-              >
-                #{selectedDeal.id} <ClipboardCopy className="h-2.5 w-2.5" />
-              </button>
-            </div>
+            {/* Collapsible "Deal details" row */}
+            <Collapsible open={detailsOpen} onOpenChange={setDetailsOpen}>
+              <CollapsibleTrigger className="flex items-center gap-1.5 mt-1 text-[12px] text-muted-foreground hover:text-foreground transition-colors">
+                {detailsOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                <span>Детали сделки</span>
+                {!detailsOpen && (
+                  <span className="text-muted-foreground/60 ml-1">
+                    — {selectedDeal.budget.toLocaleString()} ₽
+                    {selectedDeal.deadline && ` · до ${new Date(selectedDeal.deadline).toLocaleDateString("ru-RU")}`}
+                    {totalMs > 0 && ` · ${completedMs}/${totalMs}`}
+                  </span>
+                )}
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="mt-1.5 grid grid-cols-2 gap-x-6 gap-y-1 text-[13px] pb-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground">Сумма:</span>
+                    <span className="font-semibold text-card-foreground">{selectedDeal.budget.toLocaleString()} ₽</span>
+                  </div>
+                  {selectedDeal.deadline && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground">Дедлайн:</span>
+                      <span className="font-medium text-card-foreground flex items-center gap-1">
+                        <CalendarDays className="h-3 w-3" />
+                        {new Date(selectedDeal.deadline).toLocaleDateString("ru-RU")}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground">Стороны:</span>
+                    <span className="text-card-foreground">{selectedDeal.advertiserName} → {selectedDeal.creatorName}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground flex items-center gap-1">
+                      <ShieldCheck className="h-3 w-3 text-success" /> Безопасная сделка
+                    </span>
+                    {totalMs > 0 && (
+                      <span className="text-muted-foreground ml-auto">Этап {completedMs}/{totalMs}</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground">ID:</span>
+                    <button
+                      className="flex items-center gap-1 hover:text-foreground transition-colors font-mono text-[11px] text-muted-foreground"
+                      onClick={() => { navigator.clipboard.writeText(selectedDeal.id); toast.success("ID скопирован"); }}
+                    >
+                      #{selectedDeal.id} <ClipboardCopy className="h-2.5 w-2.5" />
+                    </button>
+                  </div>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
           </div>
         </div>
 
-        {/* Sub-tabs: 4 core + "Ещё" dropdown */}
+        {/* ── Sub-tabs: 4 core + "Ещё" dropdown ── */}
         <div className="border-b border-border bg-card px-5">
           <div className="flex items-center gap-0">
             {coreTabs.map((tab) => (
@@ -714,7 +719,7 @@ export function DealWorkspace() {
                 key={tab.value}
                 onClick={() => setActiveSubTab(tab.value)}
                 className={cn(
-                  "flex items-center gap-1.5 px-3 h-9 text-[13px] font-medium border-b-2 transition-colors",
+                  "flex items-center gap-1.5 px-3 h-9 text-[14px] font-medium border-b-2 transition-colors",
                   activeSubTab === tab.value
                     ? "border-primary text-foreground"
                     : "border-transparent text-muted-foreground hover:text-foreground"
@@ -725,19 +730,18 @@ export function DealWorkspace() {
               </button>
             ))}
 
-            {/* "Ещё" dropdown for Маркировка & Аудит */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
                   className={cn(
-                    "flex items-center gap-1 px-3 h-9 text-[13px] font-medium border-b-2 transition-colors",
+                    "flex items-center gap-1 px-3 h-9 text-[14px] font-medium border-b-2 transition-colors",
                     isMoreTab
                       ? "border-primary text-foreground"
                       : "border-transparent text-muted-foreground hover:text-foreground"
                   )}
                 >
                   Ещё
-                  <MoreVertical className="h-3 w-3" />
+                  <ChevronDown className="h-3 w-3" />
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start">
@@ -751,12 +755,12 @@ export function DealWorkspace() {
           </div>
         </div>
 
-        {/* Tab content */}
+        {/* ── Tab content ── */}
         <div className="flex-1 overflow-y-auto">
           {activeSubTab === "chat" && <ChatTab deal={selectedDeal} />}
           {activeSubTab === "terms" && <TermsTab />}
           {activeSubTab === "files" && <FilesTab />}
-          {activeSubTab === "payment" && <PaymentTab deal={selectedDeal} />}
+          {activeSubTab === "payment" && <PaymentTab />}
           {activeSubTab === "ord" && <OrdTab />}
           {activeSubTab === "audit" && <AuditTab />}
         </div>
