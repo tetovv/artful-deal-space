@@ -2,6 +2,9 @@ import { useState, useMemo } from "react";
 import { deals, messages as allMessages, creators } from "@/data/mockData";
 import { useRealtimeMessages } from "@/hooks/useRealtimeMessages";
 import { useAdvertiserScores } from "@/hooks/useAdvertiserScores";
+import { useAdvertiserVerification } from "@/components/ad-studio/AdvertiserSettings";
+import { AdvertiserSettings } from "@/components/ad-studio/AdvertiserSettings";
+import { BuiltInAds } from "@/components/ad-studio/BuiltInAds";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -12,7 +15,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Send, Paperclip, CheckCircle2, AlertTriangle, ShieldAlert, Palette,
-  Search, Star, MapPin, Users, Filter, MessageSquarePlus, Eye, Megaphone,
+  Search, Star, MapPin, Users, Filter, MessageSquarePlus, Eye, Megaphone, MonitorPlay, Settings,
 } from "lucide-react";
 import { Deal, DealStatus } from "@/types";
 import { cn } from "@/lib/utils";
@@ -56,8 +59,24 @@ const CHAT_BG_PRESETS = [
 const NICHES = ["Образование", "Технологии", "Дизайн", "Фото", "Музыка", "Подкасты", "Бизнес", "Видео", "Motion"];
 const GEOS = ["Россия", "Беларусь", "Казахстан", "Украина"];
 
+/* ── Soft-block banner ── */
+function VerificationBanner({ onGoToSettings }: { onGoToSettings: () => void }) {
+  return (
+    <div className="mx-4 mt-4 p-3 rounded-lg border border-yellow-500/30 bg-yellow-500/5 flex items-center gap-3">
+      <AlertTriangle className="h-5 w-5 text-yellow-600 shrink-0" />
+      <div className="flex-1">
+        <p className="text-sm font-medium text-foreground">Пройдите верификацию</p>
+        <p className="text-xs text-muted-foreground">Для связи с авторами подтвердите реквизиты ИП/ООО и подключите ОРД</p>
+      </div>
+      <Button size="sm" variant="outline" onClick={onGoToSettings} className="shrink-0">
+        Настроить
+      </Button>
+    </div>
+  );
+}
+
 /* ── Биржа (Marketplace) Tab ── */
-function BirzhaTab() {
+function BirzhaTab({ isVerified, onGoToSettings }: { isVerified: boolean; onGoToSettings: () => void }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedNiche, setSelectedNiche] = useState<string>("all");
   const [selectedGeo, setSelectedGeo] = useState<string>("all");
@@ -90,6 +109,8 @@ function BirzhaTab() {
 
   return (
     <div className="flex-1 overflow-y-auto">
+      {!isVerified && <VerificationBanner onGoToSettings={onGoToSettings} />}
+
       {/* Filters */}
       <div className="p-4 border-b border-border bg-card space-y-3">
         <div className="flex items-center gap-3">
@@ -177,10 +198,19 @@ function BirzhaTab() {
                 </div>
               </div>
               <div className="flex flex-col gap-2 shrink-0">
-                <Button size="sm" className="text-xs">
-                  <MessageSquarePlus className="h-3.5 w-3.5 mr-1.5" />
-                  Предложить сделку
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span>
+                      <Button size="sm" className="text-xs" disabled={!isVerified}>
+                        <MessageSquarePlus className="h-3.5 w-3.5 mr-1.5" />
+                        Предложить сделку
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  {!isVerified && (
+                    <TooltipContent><p className="text-xs">Пройдите верификацию в Настройках</p></TooltipContent>
+                  )}
+                </Tooltip>
                 <Button size="sm" variant="outline" className="text-xs" asChild>
                   <a href={`/creator/${creator.userId}`}>
                     <Eye className="h-3.5 w-3.5 mr-1.5" />
@@ -420,14 +450,19 @@ function DealsTab() {
 }
 
 /* ── Main AdStudio Page ── */
+type AdStudioTab = "birzha" | "deals" | "builtin" | "settings";
+
 const AdStudio = () => {
-  const [activeTab, setActiveTab] = useState<"birzha" | "deals">("birzha");
+  const [activeTab, setActiveTab] = useState<AdStudioTab>("birzha");
+  const { isVerified } = useAdvertiserVerification();
+
+  const goToSettings = () => setActiveTab("settings");
 
   return (
     <div className="flex flex-col h-[calc(100vh-3.5rem)] max-h-[calc(100vh-3.5rem)]">
       {/* Tab switcher */}
       <div className="px-4 pt-3 pb-0 bg-card border-b border-border">
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "birzha" | "deals")}>
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as AdStudioTab)}>
           <TabsList className="bg-muted/50">
             <TabsTrigger value="birzha" className="text-sm gap-1.5">
               <Search className="h-3.5 w-3.5" />
@@ -437,12 +472,26 @@ const AdStudio = () => {
               <Megaphone className="h-3.5 w-3.5" />
               Мои сделки
             </TabsTrigger>
+            <TabsTrigger value="builtin" className="text-sm gap-1.5">
+              <MonitorPlay className="h-3.5 w-3.5" />
+              Встроенная реклама
+            </TabsTrigger>
+            <TabsTrigger value="settings" className="text-sm gap-1.5 relative">
+              <Settings className="h-3.5 w-3.5" />
+              Настройки
+              {!isVerified && (
+                <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-yellow-500" />
+              )}
+            </TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
 
       {/* Tab content */}
-      {activeTab === "birzha" ? <BirzhaTab /> : <DealsTab />}
+      {activeTab === "birzha" && <BirzhaTab isVerified={isVerified} onGoToSettings={goToSettings} />}
+      {activeTab === "deals" && <DealsTab />}
+      {activeTab === "builtin" && <BuiltInAds isVerified={isVerified} onGoToSettings={goToSettings} />}
+      {activeTab === "settings" && <AdvertiserSettings />}
     </div>
   );
 };
