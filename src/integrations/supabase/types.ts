@@ -751,6 +751,7 @@ export type Database = {
           project_id: string
           source_id: string
           token_count: number | null
+          tsv: unknown
           user_id: string
         }
         Insert: {
@@ -762,6 +763,7 @@ export type Database = {
           project_id: string
           source_id: string
           token_count?: number | null
+          tsv?: unknown
           user_id: string
         }
         Update: {
@@ -773,6 +775,7 @@ export type Database = {
           project_id?: string
           source_id?: string
           token_count?: number | null
+          tsv?: unknown
           user_id?: string
         }
         Relationships: [
@@ -1062,6 +1065,22 @@ export type Database = {
         }
         Returns: boolean
       }
+      match_chunks_fts: {
+        Args: {
+          p_fts_config?: string
+          p_limit?: number
+          p_project_id: string
+          p_query: string
+        }
+        Returns: {
+          content: string
+          id: string
+          metadata: Json
+          score: number
+        }[]
+      }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
     }
     Enums: {
       app_role: "user" | "creator" | "advertiser" | "moderator" | "support"
