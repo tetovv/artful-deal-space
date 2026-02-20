@@ -10,6 +10,7 @@ import {
   ArrowRight, ChevronDown, Plus, Trash2, MapPin,
   RefreshCw, Award, Bug, Copy, AlertTriangle, PanelRight
 } from "lucide-react";
+import { extractTextFromFile, chunkText } from "@/lib/clientExtract";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
@@ -776,28 +777,103 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
     // This is a no-op placeholder for retry — real upload happens in handleGenerate
   };
 
-  /** Server-side ingest: call project_ingest edge function */
+  /** Client-side ingest: extract text from files on client, chunk, and insert directly into DB.
+   *  This avoids Edge Function memory limits (WORKER_LIMIT / 546). */
   const runStageIngest = async (projId: string, sources: { storage_path: string; file_name: string; source_id: string }[], pastedText?: string): Promise<void> => {
-    const body: any = { project_id: projId, sources };
+    if (!user) throw { functionName: "project_ingest", status: 0, body: "Не авторизован" } as EdgeError;
 
-    // Add pasted text as inline document
+    const allChunks: { content: string; metadata: any; source_id: string }[] = [];
+    const failedFiles: string[] = [];
+
+    // Extract text from each uploaded file on client side
+    for (const src of sources) {
+      try {
+        // Download file from storage
+        const { data: blob, error: dlErr } = await supabase.storage
+          .from("ai_sources")
+          .download(src.storage_path);
+        if (dlErr || !blob) { failedFiles.push(src.file_name); continue; }
+
+        // Convert Blob to File for extractTextFromFile
+        const file = new File([blob], src.file_name);
+        const text = await extractTextFromFile(file);
+        if (!text.trim()) { failedFiles.push(src.file_name); continue; }
+
+        const chunks = chunkText(text);
+        for (const c of chunks) {
+          allChunks.push({
+            content: c.content,
+            metadata: { file_name: src.file_name, chunk_index: c.chunk_index, start_char: c.start_char, end_char: c.end_char },
+            source_id: src.source_id,
+          });
+        }
+
+        // Update source status
+        await supabase.from("project_sources").update({ status: "processed", chunk_count: chunks.length }).eq("id", src.source_id);
+        await yieldToUI();
+      } catch (e: any) {
+        console.warn(`Client extraction failed for ${src.file_name}:`, e);
+        failedFiles.push(src.file_name);
+      }
+    }
+
+    // Add pasted text
     if (pastedText?.trim()) {
-      body.documents = [{ text: pastedText.trim(), file_name: "pasted_text.txt" }];
+      // Create a source record for pasted text
+      const { data: srcRec } = await supabase.from("project_sources").insert({
+        project_id: projId, user_id: user.id,
+        file_name: "pasted_text.txt", file_type: "txt",
+        storage_path: `${user.id}/${projId}/pasted_text.txt`,
+        status: "processed", file_size: pastedText.length,
+      }).select("id").single();
+
+      const sourceId = srcRec?.id;
+      if (sourceId) {
+        const chunks = chunkText(pastedText);
+        for (const c of chunks) {
+          allChunks.push({
+            content: c.content,
+            metadata: { file_name: "pasted_text.txt", chunk_index: c.chunk_index, start_char: c.start_char, end_char: c.end_char },
+            source_id: sourceId,
+          });
+        }
+      }
     }
 
-    const result = await withTimeout(
-      callEdge("project_ingest", body),
-      STAGE_TIMEOUT_MS,
-      "project_ingest"
-    );
-
-    if (!result.success) {
-      throw { functionName: "project_ingest", status: 0, body: result.error || "Ingest failed" } as EdgeError;
+    if (allChunks.length === 0) {
+      throw { functionName: "project_ingest", status: 0, body: "Не удалось извлечь текст ни из одного файла. Убедитесь, что файлы содержат читаемый текст." } as EdgeError;
     }
 
-    // Report failed files if any
-    if (result.files_failed?.length > 0) {
-      console.warn("Some files failed to process:", result.files_failed);
+    const totalChars = allChunks.reduce((sum, c) => sum + c.content.length, 0);
+    if (totalChars < 200) {
+      throw { functionName: "project_ingest", status: 0, body: "Слишком мало текстового контента. Загрузите файлы с большим объёмом текста." } as EdgeError;
+    }
+
+    // Delete old chunks and insert new ones
+    await supabase.from("project_chunks").delete().eq("project_id", projId);
+
+    let inserted = 0;
+    for (let i = 0; i < allChunks.length; i += 50) {
+      const batch = allChunks.slice(i, i + 50).map(c => ({
+        project_id: projId,
+        user_id: user.id,
+        content: c.content,
+        metadata: c.metadata,
+        source_id: c.source_id,
+      }));
+      const { error: insertErr } = await supabase.from("project_chunks").insert(batch);
+      if (insertErr) { console.error("Chunk insert error:", insertErr); continue; }
+      inserted += batch.length;
+    }
+
+    if (inserted === 0) {
+      throw { functionName: "project_ingest", status: 0, body: "Не удалось сохранить данные. Попробуйте ещё раз." } as EdgeError;
+    }
+
+    await supabase.from("projects").update({ status: "ingested" }).eq("id", projId);
+
+    if (failedFiles.length > 0) {
+      console.warn("Files failed client-side extraction:", failedFiles);
     }
   };
 
