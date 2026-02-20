@@ -10,7 +10,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
@@ -61,14 +60,6 @@ function deriveStatus(proj: any): GuideStatus {
   return "ready";
 }
 
-const GEN_STAGES = ["Загрузка материалов", "Извлечение текста", "Планирование", "Генерация артефактов"];
-
-function genStageIndex(status: string): number {
-  if (status === "draft") return 0;
-  if (status === "ingesting" || status === "ingested") return 1;
-  if (status === "planning") return 2;
-  return 3;
-}
 
 /* ─── Props ─── */
 interface MyMaterialsProps {
@@ -212,22 +203,6 @@ export const MyMaterials = ({ onResume, onNewProject }: MyMaterialsProps) => {
                 </div>
 
                 {/* Status-specific content */}
-                {status === "generating" && (
-                  <div className="space-y-1.5">
-                    <div className="flex items-center gap-2 text-[12px] text-warning font-medium">
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                      {GEN_STAGES[genStageIndex(proj.status)]}
-                    </div>
-                    <Progress value={((genStageIndex(proj.status) + 1) / 4) * 100} className="h-1" />
-                    <div className="flex gap-1">
-                      {GEN_STAGES.map((stage, i) => (
-                        <div key={i} className={cn("h-1 flex-1 rounded-full",
-                          i <= genStageIndex(proj.status) ? "bg-warning" : "bg-muted")} />
-                      ))}
-                    </div>
-                  </div>
-                )}
-
                 {status === "error" && (
                   <div className="flex items-center gap-2 text-[12px] text-destructive">
                     <AlertTriangle className="h-3 w-3" />
@@ -260,9 +235,9 @@ export const MyMaterials = ({ onResume, onNewProject }: MyMaterialsProps) => {
                     onClick={() => onResume(proj.id)}
                   >
                     {hasProgress ? (
-                      <><Play className="h-3 w-3" /> Продолжить</>
+                      <><Play className="h-3 w-3" /> Продолжить изучение</>
                     ) : (
-                      <><BookOpen className="h-3 w-3" /> Открыть</>
+                      <><BookOpen className="h-3 w-3" /> Начать изучать</>
                     )}
                   </Button>
                 )}
@@ -274,7 +249,7 @@ export const MyMaterials = ({ onResume, onNewProject }: MyMaterialsProps) => {
                     className="w-full text-xs gap-1.5"
                     onClick={() => onResume(proj.id)}
                   >
-                    <Loader2 className="h-3 w-3 animate-spin" /> Прогресс генерации
+                    <Loader2 className="h-3 w-3 animate-spin" /> Создаётся…
                   </Button>
                 )}
 
