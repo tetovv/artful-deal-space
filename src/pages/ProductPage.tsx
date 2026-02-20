@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
 import { CommentsSection } from "@/components/comments/CommentsSection";
 import { VideoPlayer } from "@/components/VideoPlayer";
+import { useReaction } from "@/hooks/useReaction";
 
 const ProductPage = () => {
   const { id } = useParams();
@@ -22,10 +23,9 @@ const ProductPage = () => {
   const mockItem = mockItems.find((c) => c.id === id);
   const [bought, setBought] = useState(purchasedItems.includes(id || ""));
   const [buying, setBuying] = useState(false);
-  const [liked, setLiked] = useState(false);
-  const [disliked, setDisliked] = useState(false);
   const [bookmarked, setBookmarked] = useState(false);
   const [bookmarking, setBookmarking] = useState(false);
+  const { likes, dislikes, userReaction, toggleReaction } = useReaction(id);
 
   // Check if bookmarked
   useEffect(() => {
@@ -129,22 +129,23 @@ const ProductPage = () => {
               <div className="flex items-center gap-2 flex-wrap">
                 <div className="flex items-center rounded-lg overflow-hidden border border-border">
                   <Button
-                    variant={liked ? "default" : "ghost"}
+                    variant={userReaction === "like" ? "default" : "ghost"}
                     size="sm"
-                    onClick={() => { setLiked(!liked); if (disliked) setDisliked(false); }}
+                    onClick={() => toggleReaction("like")}
                     className="gap-1.5 rounded-none border-0"
                   >
-                    <ThumbsUp className={cn("h-4 w-4", liked && "fill-current")} />
-                    {item.likes.toLocaleString()}
+                    <ThumbsUp className={cn("h-4 w-4", userReaction === "like" && "fill-current")} />
+                    {likes.toLocaleString()}
                   </Button>
                   <Separator orientation="vertical" className="h-5" />
                   <Button
-                    variant={disliked ? "default" : "ghost"}
+                    variant={userReaction === "dislike" ? "default" : "ghost"}
                     size="sm"
-                    onClick={() => { setDisliked(!disliked); if (liked) setLiked(false); }}
+                    onClick={() => toggleReaction("dislike")}
                     className="rounded-none border-0"
                   >
-                    <ThumbsDown className={cn("h-4 w-4", disliked && "fill-current")} />
+                    <ThumbsDown className={cn("h-4 w-4", userReaction === "dislike" && "fill-current")} />
+                    {dislikes > 0 && <span>{dislikes.toLocaleString()}</span>}
                   </Button>
                 </div>
                 <Button variant="outline" size="sm" className="gap-1.5">
