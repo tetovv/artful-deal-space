@@ -5,11 +5,12 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   FolderOpen, Plus, Clock, BookOpen, HelpCircle, CreditCard, Presentation,
   GraduationCap, ChevronRight, Trash2, Wrench, Play, Loader2,
-  AlertTriangle, RotateCcw, MoreVertical,
+  AlertTriangle, RotateCcw, MoreVertical, XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
@@ -24,44 +25,38 @@ import { LegacyWorkspace } from "@/components/guided/LegacyWorkspace";
 
 /* ─── Format icons ─── */
 const FORMAT_ICONS: Record<string, React.ElementType> = {
-  COURSE_LEARN: BookOpen,
-  EXAM_PREP: GraduationCap,
-  QUIZ_ONLY: HelpCircle,
-  FLASHCARDS: CreditCard,
-  PRESENTATION: Presentation,
-  self_learn: BookOpen,
-  exam_prep: GraduationCap,
-  quiz_only: HelpCircle,
-  flashcards: CreditCard,
-  presentation: Presentation,
+  COURSE_LEARN: BookOpen, EXAM_PREP: GraduationCap, QUIZ_ONLY: HelpCircle,
+  FLASHCARDS: CreditCard, PRESENTATION: Presentation,
+  self_learn: BookOpen, exam_prep: GraduationCap, quiz_only: HelpCircle,
+  flashcards: CreditCard, presentation: Presentation,
 };
 
 const GOAL_LABELS: Record<string, string> = {
-  COURSE_LEARN: "Курс",
-  EXAM_PREP: "Подготовка",
-  QUIZ_ONLY: "Тесты",
-  FLASHCARDS: "Карточки",
-  PRESENTATION: "Презентация",
-  self_learn: "Курс",
-  exam_prep: "Подготовка",
-  quiz_only: "Тесты",
-  flashcards: "Карточки",
-  presentation: "Презентация",
+  COURSE_LEARN: "Курс", EXAM_PREP: "Подготовка", QUIZ_ONLY: "Тесты",
+  FLASHCARDS: "Карточки", PRESENTATION: "Презентация",
+  self_learn: "Курс", exam_prep: "Подготовка", quiz_only: "Тесты",
+  flashcards: "Карточки", presentation: "Презентация",
 };
 
-/* ─── Guide status types ─── */
+const JOB_STUCK_MINUTES = 3;
+
 type GuideStatus = "ready" | "error" | "generating" | "draft";
 
-function deriveStatus(proj: any): GuideStatus {
+function deriveStatus(proj: any, job?: any): GuideStatus {
   const s = proj.status as string;
   if (s === "error" || s === "failed") return "error";
-  if (["generating", "ingesting", "planning"].includes(s)) return "generating";
+  if (["generating", "ingesting", "planning"].includes(s)) {
+    // Check if job is stuck
+    if (job && (job.status === "running" || job.status === "queued")) {
+      const updatedMs = new Date(job.updated_at).getTime();
+      if (Date.now() - updatedMs > JOB_STUCK_MINUTES * 60_000) return "error";
+    }
+    return "generating";
+  }
   if (s === "draft" || s === "uploaded" || s === "ingested") return "draft";
   return "ready";
 }
 
-
-/* ─── Props ─── */
 interface MyMaterialsProps {
   onResume: (projectId: string) => void;
   onNewProject: () => void;
@@ -71,6 +66,7 @@ export const MyMaterials = ({ onResume, onNewProject }: MyMaterialsProps) => {
   const { user } = useAuth();
   const [legacyProjectId, setLegacyProjectId] = useState<string | null>(null);
 
+  // Fetch projects
   const { data: projects = [], refetch: refetchProjects } = useQuery({
     queryKey: ["my-guided-projects", user?.id],
     queryFn: async () => {
@@ -84,10 +80,36 @@ export const MyMaterials = ({ onResume, onNewProject }: MyMaterialsProps) => {
       return data || [];
     },
     enabled: !!user,
-    refetchInterval: 5000, // Poll for status changes
+    refetchInterval: 5000,
   });
 
+  // Fetch latest ingest_jobs for all projects (for progress display)
+  const projectIds = projects.map((p: any) => p.id);
+  const { data: ingestJobs = [] } = useQuery({
+    queryKey: ["ingest-jobs", projectIds.join(",")],
+    queryFn: async () => {
+      if (!projectIds.length) return [];
+      const { data } = await supabase
+        .from("ingest_jobs")
+        .select("*")
+        .in("project_id", projectIds)
+        .order("created_at", { ascending: false });
+      return data || [];
+    },
+    enabled: projectIds.length > 0,
+    refetchInterval: 2000,
+  });
+
+  // Map project_id → latest job
+  const jobByProject: Record<string, any> = {};
+  for (const job of ingestJobs as any[]) {
+    if (!jobByProject[job.project_id]) {
+      jobByProject[job.project_id] = job;
+    }
+  }
+
   const handleDelete = async (id: string) => {
+    await supabase.from("ingest_jobs").delete().eq("project_id", id);
     await supabase.from("artifacts").delete().eq("project_id", id);
     await supabase.from("project_chunks").delete().eq("project_id", id);
     await supabase.from("project_sources").delete().eq("project_id", id);
@@ -97,11 +119,21 @@ export const MyMaterials = ({ onResume, onNewProject }: MyMaterialsProps) => {
   };
 
   const handleRetry = (projectId: string) => {
-    // Re-trigger generation by resuming the project
     onResume(projectId);
   };
 
-  /* ─── Legacy view (read-only) ─── */
+  const handleCancelJob = async (projectId: string) => {
+    const job = jobByProject[projectId];
+    if (job) {
+      await supabase.from("ingest_jobs").update({
+        status: "canceled", message: "Отменено пользователем",
+        finished_at: new Date().toISOString(),
+      }).eq("id", job.id);
+      await supabase.from("projects").update({ status: "error", ingest_error: "Отменено" }).eq("id", projectId);
+      toast.success("Индексация отменена");
+    }
+  };
+
   if (legacyProjectId) {
     return (
       <div className="space-y-4">
@@ -115,7 +147,6 @@ export const MyMaterials = ({ onResume, onNewProject }: MyMaterialsProps) => {
 
   return (
     <div className="space-y-4">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-foreground">Мои гайды</h2>
         <Button size="sm" onClick={onNewProject}>
@@ -123,7 +154,6 @@ export const MyMaterials = ({ onResume, onNewProject }: MyMaterialsProps) => {
         </Button>
       </div>
 
-      {/* Empty state */}
       {projects.length === 0 ? (
         <div className="text-center py-16 space-y-3">
           <FolderOpen className="h-12 w-12 text-muted-foreground/30 mx-auto" />
@@ -135,17 +165,23 @@ export const MyMaterials = ({ onResume, onNewProject }: MyMaterialsProps) => {
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {projects.map((proj: any) => {
-            const status = deriveStatus(proj);
+            const job = jobByProject[proj.id];
+            const status = deriveStatus(proj, job);
             const FormatIcon = FORMAT_ICONS[proj.goal] || BookOpen;
             const goalLabel = GOAL_LABELS[proj.goal] || proj.goal || "Гайд";
             const roadmapSteps = (proj.roadmap as any[])?.length || 0;
             const completedSteps = (proj.roadmap as any[])?.filter((s: any) => s.status === "completed").length || 0;
             const progressPercent = roadmapSteps > 0 ? Math.round((completedSteps / roadmapSteps) * 100) : 0;
-            const hasProgress = completedSteps > 0; // proxy for last_position
+            const hasProgress = completedSteps > 0;
+
+            // Job-based progress for generating state
+            const jobProgress = job?.progress || 0;
+            const jobMessage = job?.message || "";
+            const jobStuck = job && (job.status === "running" || job.status === "queued")
+              && (Date.now() - new Date(job.updated_at).getTime() > JOB_STUCK_MINUTES * 60_000);
 
             return (
               <Card key={proj.id} className="p-4 space-y-3 hover:border-primary/30 transition-all group">
-                {/* Top row: icon + title + kebab */}
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2.5 min-w-0">
                     <div className={cn("h-9 w-9 rounded-lg flex items-center justify-center shrink-0",
@@ -168,7 +204,6 @@ export const MyMaterials = ({ onResume, onNewProject }: MyMaterialsProps) => {
                     </div>
                   </div>
 
-                  {/* Kebab menu */}
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <button className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground transition-all p-1 rounded">
@@ -200,11 +235,13 @@ export const MyMaterials = ({ onResume, onNewProject }: MyMaterialsProps) => {
                   </DropdownMenu>
                 </div>
 
-              {/* Status-specific content */}
+                {/* Status content */}
                 {status === "error" && (
-                  <div className="flex items-center gap-2 text-[12px] text-destructive">
-                    <AlertTriangle className="h-3 w-3" />
-                    <span>Ошибка генерации</span>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 text-[12px] text-destructive">
+                      <AlertTriangle className="h-3 w-3" />
+                      <span>{jobStuck ? "Воркер не отвечает" : (job?.error || proj.ingest_error || "Ошибка генерации")}</span>
+                    </div>
                   </div>
                 )}
 
@@ -212,12 +249,10 @@ export const MyMaterials = ({ onResume, onNewProject }: MyMaterialsProps) => {
                   <div className="space-y-1.5">
                     <div className="flex items-center gap-2 text-[12px] text-primary">
                       <Loader2 className="h-3 w-3 animate-spin" />
-                      <span>Генерация… {(proj as any).ingest_progress > 0 ? `${(proj as any).ingest_progress}%` : ""}</span>
+                      <span className="truncate">{jobMessage || `Генерация… ${jobProgress}%`}</span>
                     </div>
-                    {(proj as any).ingest_progress > 0 && (
-                      <div className="h-1 rounded-full bg-muted overflow-hidden">
-                        <div className="h-full bg-primary transition-all" style={{ width: `${(proj as any).ingest_progress}%` }} />
-                      </div>
+                    {jobProgress > 0 && (
+                      <Progress value={jobProgress} className="h-1" />
                     )}
                   </div>
                 )}
@@ -245,41 +280,21 @@ export const MyMaterials = ({ onResume, onNewProject }: MyMaterialsProps) => {
                   </div>
                 )}
 
-                {/* Action button */}
+                {/* Action buttons */}
                 {status === "error" ? (
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    className="w-full text-xs gap-1.5"
-                    onClick={() => handleRetry(proj.id)}
-                  >
+                  <Button variant="destructive" size="sm" className="w-full text-xs gap-1.5" onClick={() => handleRetry(proj.id)}>
                     <RotateCcw className="h-3 w-3" /> Повторить
                   </Button>
                 ) : status === "generating" ? (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="w-full text-xs gap-1.5"
-                    disabled
-                  >
-                    <Loader2 className="h-3 w-3 animate-spin" /> Генерация…
+                  <Button variant="secondary" size="sm" className="w-full text-xs gap-1.5" onClick={() => handleCancelJob(proj.id)}>
+                    <XCircle className="h-3 w-3" /> Отменить
                   </Button>
                 ) : status === "draft" ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full text-xs gap-1.5"
-                    onClick={() => onResume(proj.id)}
-                  >
+                  <Button variant="outline" size="sm" className="w-full text-xs gap-1.5" onClick={() => onResume(proj.id)}>
                     <Wrench className="h-3 w-3" /> Продолжить настройку
                   </Button>
                 ) : (
-                  <Button
-                    variant="default"
-                    size="sm"
-                    className="w-full text-xs gap-1.5"
-                    onClick={() => onResume(proj.id)}
-                  >
+                  <Button variant="default" size="sm" className="w-full text-xs gap-1.5" onClick={() => onResume(proj.id)}>
                     {hasProgress ? (
                       <><Play className="h-3 w-3" /> Продолжить изучение</>
                     ) : (

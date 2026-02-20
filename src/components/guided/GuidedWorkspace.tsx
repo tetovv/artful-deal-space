@@ -163,10 +163,11 @@ const INITIAL_GEN_STAGES: GenStage[] = [
   { key: "generating", label: "Генерация первого результата", icon: Sparkles, status: "pending" },
 ];
 
-const STAGE_TIMEOUT_MS = 120_000; // Increased: large files need more time
-const LLM_STAGE_TIMEOUT_MS = 180_000; // LLM stages need even more time
-const MIN_QUALITY_CHARS = 200; // Minimum total chars for quality check
+const STAGE_TIMEOUT_MS = 300_000; // 5 min for client-side chunking
+const LLM_STAGE_TIMEOUT_MS = 180_000;
+const MIN_QUALITY_CHARS = 200;
 const MIN_QUALITY_CHUNKS = 1;
+const JOB_STUCK_MINUTES = 3; // If job hasn't updated in X minutes, consider stuck
 
 /** Yield to the browser event loop so the UI doesn't freeze */
 const yieldToUI = () => new Promise<void>(r => setTimeout(r, 0));
@@ -193,7 +194,7 @@ async function callEdge(fnName: string, body: any): Promise<any> {
   const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${fnName}`;
 
   const controller = new AbortController();
-  const timeoutMs = fnName === "project_ingest" ? 120_000 : 60_000;
+  const timeoutMs = 60_000;
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
@@ -261,7 +262,7 @@ async function callEdge(fnName: string, body: any): Promise<any> {
 const EdgeErrorCard = ({ error, onRetry, onBackToSources }: { error: EdgeError; onRetry?: () => void; onBackToSources?: () => void }) => {
   const [open, setOpen] = useState(false);
   const isQualityError = error.functionName === "quality_check"
-    || (error.functionName === "project_ingest" && (error.body?.toLowerCase().includes("мало текст") || error.body?.toLowerCase().includes("извлечь текст")));
+    || (error.functionName === "ingest" && (error.body?.toLowerCase().includes("мало текст") || error.body?.toLowerCase().includes("извлечь текст")));
 
   const userMessage = isQualityError
     ? "Недостаточно текстового контента для создания материала. Попробуйте загрузить файл с большим объёмом текста."
@@ -711,40 +712,59 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
           });
           setGenStages(INITIAL_GEN_STAGES.map(s => ({ ...s })));
         } else if (status === "ingesting") {
-          // Background ingest is running — show progress screen with polling
+          // Poll ingest_jobs for progress
           setPhase("generate");
           setGenStatus("ingesting");
           setGenStages(INITIAL_GEN_STAGES.map((s, i) => ({
             ...s,
             status: i === 0 ? "done" as GenStageStatus : i === 1 ? "running" as GenStageStatus : "pending" as GenStageStatus,
-            label: i === 1 ? `Индексация в фоне… ${(proj as any).ingest_progress || 0}%` : s.label,
+            label: i === 1 ? "Индексация…" : s.label,
           })));
-          // Start polling for ingest completion
-          const pollIngest = async () => {
-            const POLL_INTERVAL = 2000;
-            for (let i = 0; i < 150; i++) {
+          const pollIngestJob = async () => {
+            const POLL_INTERVAL = 1500;
+            for (let i = 0; i < 200; i++) {
               await new Promise(r => setTimeout(r, POLL_INTERVAL));
-              const { data: p } = await supabase.from("projects").select("status, ingest_progress, ingest_error").eq("id", resumeProjectId).single();
-              if (!p) continue;
-              const progress = (p as any).ingest_progress || 0;
-              setGenStages(prev => prev.map(s => s.key === "ingesting" ? { ...s, label: `Индексация в фоне… ${progress}%` } : s));
-              if (p.status === "ingested") {
+              const { data: jobs } = await supabase
+                .from("ingest_jobs")
+                .select("*")
+                .eq("project_id", resumeProjectId)
+                .order("created_at", { ascending: false })
+                .limit(1);
+              const job = jobs?.[0] as any;
+              if (!job) continue;
+              const progress = job.progress || 0;
+              setGenStages(prev => prev.map(s => s.key === "ingesting"
+                ? { ...s, label: `Индексация… ${progress}%` } : s));
+              // Stuck detection
+              const updatedMs = new Date(job.updated_at).getTime();
+              if ((job.status === "running" || job.status === "queued") && (Date.now() - updatedMs > JOB_STUCK_MINUTES * 60_000)) {
+                updateStage("ingesting", "error", { functionName: "ingest", status: 0, body: "Воркер не отвечает. Попробуйте повторить." });
+                setGenStatus("error");
+                setPipelineError({ functionName: "ingest", status: 0, body: "Воркер не отвечает. Попробуйте повторить." });
+                return;
+              }
+              if (job.status === "done") {
                 updateStage("ingesting", "done");
-                setGenStages(prev => prev.map(s => s.key === "ingesting" ? { ...s, label: "Индексация в фоне" } : s));
-                // Continue with planning
+                setGenStages(prev => prev.map(s => s.key === "ingesting" ? { ...s, label: "Индексация" } : s));
                 runPipelineFrom(resumeProjectId, "planning", selectedFormat);
                 return;
               }
-              if (p.status === "error") {
-                const errMsg = (p as any).ingest_error || "Ошибка индексации";
-                updateStage("ingesting", "error", { functionName: "project_ingest", status: 0, body: errMsg });
+              if (job.status === "error") {
+                const errMsg = job.error || "Ошибка индексации";
+                updateStage("ingesting", "error", { functionName: "ingest", status: 0, body: errMsg });
                 setGenStatus("error");
-                setPipelineError({ functionName: "project_ingest", status: 0, body: errMsg });
+                setPipelineError({ functionName: "ingest", status: 0, body: errMsg });
+                return;
+              }
+              if (job.status === "canceled") {
+                updateStage("ingesting", "canceled");
+                setGenStatus("error");
+                setPipelineError({ functionName: "canceled", status: 0, body: "Индексация отменена." });
                 return;
               }
             }
           };
-          pollIngest();
+          pollIngestJob();
         } else {
           // draft/uploaded/planning/generating — show progress screen (idle so user can retry)
           setPhase("generate");
@@ -872,21 +892,54 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
     // Upload stage is already done when we call runPipeline
   };
 
-  /** Client-side ingest: chunks text locally and inserts directly into DB.
+  /** Client-side ingest with ingest_jobs tracking.
+   *  Creates a job row, chunks text locally, inserts into DB, updates job progress.
    *  No edge function needed — avoids WORKER_LIMIT entirely. */
   const runStageIngest = async (
     projId: string,
     documents: { text: string; file_name: string; source_id?: string }[],
     signal?: AbortSignal,
   ): Promise<void> => {
-    if (!user) throw { functionName: "project_ingest", status: 0, body: "Не авторизован" } as EdgeError;
+    if (!user) throw { functionName: "ingest", status: 0, body: "Не авторизован" } as EdgeError;
 
     const MAX_TEXT_CHARS = 500_000;
     const maxChunkChars = 1200;
     const overlap = 150;
 
-    // Set project to ingesting
+    // Upsert ingest_jobs row: queued
+    const { data: existingJobs } = await supabase
+      .from("ingest_jobs")
+      .select("id")
+      .eq("project_id", projId)
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    let jobId: string;
+    if (existingJobs && existingJobs.length > 0) {
+      jobId = existingJobs[0].id;
+      await supabase.from("ingest_jobs").update({
+        status: "running", progress: 0, stage: "chunking",
+        message: "Подготовка текста…", error: null,
+        started_at: new Date().toISOString(), finished_at: null,
+      }).eq("id", jobId);
+    } else {
+      const { data: newJob, error: jobErr } = await supabase.from("ingest_jobs").insert({
+        project_id: projId, user_id: user.id,
+        status: "running", progress: 0, stage: "chunking",
+        message: "Подготовка текста…",
+        started_at: new Date().toISOString(),
+      }).select("id").single();
+      if (jobErr || !newJob) throw { functionName: "ingest", status: 0, body: `Не удалось создать job: ${jobErr?.message}` } as EdgeError;
+      jobId = newJob.id;
+    }
+
+    // Also set project status
     await supabase.from("projects").update({ status: "ingesting", ingest_progress: 0, ingest_error: null }).eq("id", projId);
+
+    const updateJob = async (updates: Record<string, unknown>) => {
+      await supabase.from("ingest_jobs").update(updates).eq("id", jobId);
+    };
 
     try {
       // Delete old chunks
@@ -895,7 +948,10 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
       const allChunks: { content: string; metadata: Record<string, unknown>; source_id?: string }[] = [];
 
       for (const doc of documents) {
-        if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+        if (signal?.aborted) {
+          await updateJob({ status: "canceled", message: "Отменено пользователем", finished_at: new Date().toISOString() });
+          throw new DOMException("Aborted", "AbortError");
+        }
         let text = doc.text || "";
         if (!text.trim()) continue;
         if (text.length > MAX_TEXT_CHARS) text = text.slice(0, MAX_TEXT_CHARS);
@@ -914,28 +970,36 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
           chunkIndex++;
         }
 
-        // Update source status
         if (doc.source_id) {
           await supabase.from("project_sources").update({ status: "processed", chunk_count: chunkIndex + 1 }).eq("id", doc.source_id);
         }
       }
 
       if (!allChunks.length) {
-        throw { functionName: "project_ingest", status: 0, body: "Не удалось извлечь текст. Убедитесь, что файлы содержат читаемый текст." } as EdgeError;
+        await updateJob({ status: "error", error: "Не удалось извлечь текст.", stage: "chunking", finished_at: new Date().toISOString() });
+        await supabase.from("projects").update({ status: "error", ingest_error: "Нет текста" }).eq("id", projId);
+        throw { functionName: "ingest", status: 0, body: "Не удалось извлечь текст. Убедитесь, что файлы содержат читаемый текст." } as EdgeError;
       }
 
       const totalChars = allChunks.reduce((sum, c) => sum + c.content.length, 0);
-      if (totalChars < 200) {
-        throw { functionName: "project_ingest", status: 0, body: "Слишком мало текстового контента для создания материала." } as EdgeError;
+      if (totalChars < MIN_QUALITY_CHARS) {
+        await updateJob({ status: "error", error: "Слишком мало текста.", stage: "chunking", finished_at: new Date().toISOString() });
+        await supabase.from("projects").update({ status: "error", ingest_error: "Мало текста" }).eq("id", projId);
+        throw { functionName: "ingest", status: 0, body: "Слишком мало текстового контента для создания материала." } as EdgeError;
       }
+
+      await updateJob({ stage: "inserting", message: `Сохранение ${allChunks.length} чанков…`, progress: 10 });
 
       // Insert in batches of 50
       let inserted = 0;
       for (let i = 0; i < allChunks.length; i += 50) {
-        if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+        if (signal?.aborted) {
+          await updateJob({ status: "canceled", message: "Отменено пользователем", finished_at: new Date().toISOString() });
+          throw new DOMException("Aborted", "AbortError");
+        }
 
         const batch = allChunks.slice(i, i + 50)
-          .filter((c) => !!c.source_id) // FK requires valid source_id
+          .filter((c) => !!c.source_id)
           .map((c) => ({
             project_id: projId,
             user_id: user.id,
@@ -944,6 +1008,8 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
             source_id: c.source_id!,
           }));
 
+        if (batch.length === 0) continue;
+
         const { error: insertErr } = await supabase.from("project_chunks").insert(batch);
         if (insertErr) {
           console.error("Chunk insert error:", insertErr);
@@ -951,30 +1017,39 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
         }
         inserted += batch.length;
 
-        const progress = Math.round((inserted / allChunks.length) * 100);
+        const progress = 10 + Math.round((inserted / allChunks.length) * 85);
+        await updateJob({ progress, message: `Сохранено ${inserted}/${allChunks.length}` });
         setGenStages(prev => prev.map(s => s.key === "ingesting"
           ? { ...s, label: `Индексация… ${progress}%` }
           : s));
+
+        // Yield to UI
+        await yieldToUI();
       }
 
       if (inserted === 0) {
-        throw { functionName: "project_ingest", status: 0, body: "Не удалось сохранить данные. Попробуйте ещё раз." } as EdgeError;
+        await updateJob({ status: "error", error: "Не удалось сохранить чанки (FK).", stage: "inserting", finished_at: new Date().toISOString() });
+        await supabase.from("projects").update({ status: "error", ingest_error: "Ошибка вставки" }).eq("id", projId);
+        throw { functionName: "ingest", status: 0, body: "Не удалось сохранить данные. Попробуйте ещё раз." } as EdgeError;
       }
 
+      // Done!
+      await updateJob({ status: "done", progress: 100, stage: "done", message: `Готово: ${inserted} чанков`, finished_at: new Date().toISOString() });
       await supabase.from("projects").update({ status: "ingested", ingest_progress: 100, ingest_error: null }).eq("id", projId);
       setGenStages(prev => prev.map(s => s.key === "ingesting" ? { ...s, label: "Индексация" } : s));
       console.log(`[ingest] Done: ${inserted} chunks from ${documents.length} files`);
     } catch (e: any) {
       if (e.name === "AbortError") {
-        await supabase.from("projects").update({ status: "error", ingest_progress: 0, ingest_error: "Отменено пользователем" }).eq("id", projId);
+        await supabase.from("projects").update({ status: "error", ingest_progress: 0, ingest_error: "Отменено" }).eq("id", projId);
         throw e;
       }
       if (e.functionName) {
-        await supabase.from("projects").update({ status: "error", ingest_progress: 0, ingest_error: e.body }).eq("id", projId);
+        // Already handled job update above for known errors
         throw e;
       }
+      await updateJob({ status: "error", error: (e as Error).message || String(e), stage: "unknown", finished_at: new Date().toISOString() });
       await supabase.from("projects").update({ status: "error", ingest_progress: 0, ingest_error: (e as Error).message || String(e) }).eq("id", projId);
-      throw { functionName: "project_ingest", status: 0, body: (e as Error).message || String(e) } as EdgeError;
+      throw { functionName: "ingest", status: 0, body: (e as Error).message || String(e) } as EdgeError;
     }
   };
 
@@ -1086,7 +1161,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
 
     try {
       const allText = inlineDocs.map(d => d.text).join("\n\n");
-      if (allText.length < 50) throw { functionName: "project_ingest", status: 0, body: "Слишком мало текста для демо" } as EdgeError;
+      if (allText.length < 50) throw { functionName: "ingest", status: 0, body: "Слишком мало текста для демо" } as EdgeError;
 
       // Create a source record for pasted text
       const { data: srcRec } = await supabase.from("project_sources").insert({
@@ -1097,13 +1172,13 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
       }).select("id").single();
 
       const sourceId = srcRec?.id;
-      if (!sourceId) throw { functionName: "project_ingest", status: 0, body: "Не удалось создать source запись" } as EdgeError;
+      if (!sourceId) throw { functionName: "ingest", status: 0, body: "Не удалось создать source запись" } as EdgeError;
 
       // Send pre-extracted text to lightweight edge function
       await runStageIngest(projId, inlineDocs.map(d => ({ ...d, source_id: sourceId })));
       updateStage("ingesting", "done");
     } catch (e: any) {
-      const edgeErr = e.functionName ? e : { functionName: "project_ingest", status: 0, body: e.message || String(e) };
+      const edgeErr = e.functionName ? e : { functionName: "ingest", status: 0, body: e.message || String(e) };
       updateStage("ingesting", "error", edgeErr);
       throw edgeErr;
     }
@@ -1213,7 +1288,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
       extractedDocsRef.current = extractedDocs;
       updateStage("uploading", "done");
 
-      // Send extracted text to lightweight edge function for chunking + DB insert
+      // Client-side chunking + DB insert via ingest_jobs
       await runPipelineFrom(proj.id, "ingesting", selectedFormat);
     } catch (e: any) {
       console.error("Generate error:", e);
@@ -1702,7 +1777,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
       // Determine if the error is a content quality issue
       const errorBody = pipelineError?.body?.toLowerCase() || "";
       const isQualityError = pipelineError?.functionName === "quality_check"
-        || (pipelineError?.functionName === "project_ingest" && (errorBody.includes("мало текст") || errorBody.includes("извлечь текст")));
+        || (pipelineError?.functionName === "ingest" && (errorBody.includes("мало текст") || errorBody.includes("извлечь текст")));
 
       const failedStage = genStages.find(s => s.status === "error");
       const failedStageName = failedStage?.label || pipelineError?.functionName || "unknown";
