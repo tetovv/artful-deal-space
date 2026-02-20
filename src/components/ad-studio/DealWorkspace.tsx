@@ -6,19 +6,18 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import {
-  Search, Send, Paperclip, ArrowLeft, MoreVertical, Copy, ShieldCheck,
+  Search, Send, Paperclip, MoreVertical, ShieldCheck,
   CheckCircle2, AlertTriangle, Clock, FileText, Upload, Download,
-  ExternalLink, Pin, RefreshCw, Filter, MessageCircle, ClipboardCopy,
-  Archive, Files, CreditCard, Radio, ScrollText, CalendarDays, Star,
+  ExternalLink, Pin, RefreshCw, MessageCircle, ClipboardCopy,
+  Archive, Files, CreditCard, Radio, ScrollText, CalendarDays, Copy,
 } from "lucide-react";
 import { Deal, DealStatus } from "@/types";
 import { cn } from "@/lib/utils";
@@ -55,7 +54,7 @@ const filterStatusMap: Record<string, DealStatus[]> = {
 function getPrimaryAction(status: DealStatus): { label: string; icon: any } | null {
   switch (status) {
     case "pending": return { label: "Подтвердить условия", icon: CheckCircle2 };
-    case "briefing": return { label: "Отправить на подтверждение", icon: Send };
+    case "briefing": return { label: "Отправить бриф", icon: Send };
     case "in_progress": return { label: "Отправить на проверку", icon: Upload };
     case "review": return { label: "Подтвердить выполнение", icon: CheckCircle2 };
     case "disputed": return { label: "Открыть спор", icon: AlertTriangle };
@@ -63,52 +62,49 @@ function getPrimaryAction(status: DealStatus): { label: string; icon: any } | nu
   }
 }
 
-/* ─── Mock audit entries ─── */
+/* ─── Mock data ─── */
 const mockAudit = [
-  { id: "a1", ts: "2024-12-01 10:00", who: "Мария Иванова", action: "Создала сделку", category: "terms" },
-  { id: "a2", ts: "2024-12-01 10:05", who: "Мария Иванова", action: "Загрузила файл brief_v1.pdf", category: "files", file: "brief_v1.pdf" },
-  { id: "a3", ts: "2024-12-02 09:00", who: "Алексей Петров", action: "Подтвердил условия v1", category: "terms" },
-  { id: "a4", ts: "2024-12-05 14:00", who: "Система", action: "Средства зарезервированы (45 000 ₽)", category: "payments" },
-  { id: "a5", ts: "2024-12-18 16:00", who: "Алексей Петров", action: "Загрузил draft_integration.mp4", category: "files", file: "draft_integration.mp4" },
-  { id: "a6", ts: "2024-12-19 12:00", who: "Система", action: "ERID получен: 2SDnjek4fP1", category: "ord" },
+  { id: "a1", ts: "01.12.24 10:00", who: "Мария Иванова", action: "Создала сделку", category: "terms" },
+  { id: "a2", ts: "01.12.24 10:05", who: "Мария Иванова", action: "Загрузила brief_v1.pdf", category: "files", file: "brief_v1.pdf" },
+  { id: "a3", ts: "02.12.24 09:00", who: "Алексей Петров", action: "Подтвердил условия v1", category: "terms" },
+  { id: "a4", ts: "05.12.24 14:00", who: "Система", action: "Средства зарезервированы (45 000 ₽)", category: "payments" },
+  { id: "a5", ts: "18.12.24 16:00", who: "Алексей Петров", action: "Загрузил draft_integration.mp4", category: "files", file: "draft_integration.mp4" },
+  { id: "a6", ts: "19.12.24 12:00", who: "Система", action: "ERID получен: 2SDnjek4fP1", category: "ord" },
 ];
 
-/* ─── Mock files ─── */
 const mockFiles = [
-  { id: "f1", name: "brief_v1.pdf", type: "Brief" as const, uploader: "Мария Иванова", date: "2024-12-01", pinned: false },
-  { id: "f2", name: "draft_integration.mp4", type: "Draft" as const, uploader: "Алексей Петров", date: "2024-12-18", pinned: false },
-  { id: "f3", name: "final_cut.mp4", type: "Final" as const, uploader: "Алексей Петров", date: "2025-01-08", pinned: true },
-  { id: "f4", name: "договор_оферты.pdf", type: "Legal" as const, uploader: "Система", date: "2024-12-01", pinned: false },
+  { id: "f1", name: "brief_v1.pdf", type: "Brief" as const, uploader: "Мария Иванова", date: "01.12.24", pinned: false },
+  { id: "f2", name: "draft_integration.mp4", type: "Draft" as const, uploader: "Алексей Петров", date: "18.12.24", pinned: false },
+  { id: "f3", name: "final_cut.mp4", type: "Final" as const, uploader: "Алексей Петров", date: "08.01.25", pinned: true },
+  { id: "f4", name: "договор_оферты.pdf", type: "Legal" as const, uploader: "Система", date: "01.12.24", pinned: false },
 ];
 
 const fileTypeLabels = { Brief: "Бриф", Draft: "Черновик", Final: "Финальный", Legal: "Юридический" };
 const fileTypeColors = { Brief: "bg-info/15 text-info", Draft: "bg-warning/15 text-warning", Final: "bg-success/15 text-success", Legal: "bg-muted text-muted-foreground" };
 
-/* ─── Mock terms versions ─── */
 const mockTermsVersions = [
   {
-    version: 1, status: "accepted" as const, date: "2024-12-02",
+    version: 1, status: "accepted" as const, date: "02.12.24",
     acceptedBy: ["Мария Иванова", "Алексей Петров"],
     fields: {
-      deliverable: "60-секундная рекламная интеграция", platform: "YouTube", format: "Видео",
+      deliverable: "60-сек рекламная интеграция", platform: "YouTube", format: "Видео",
       price: "45 000 ₽", deadline: "15.01.2025", paymentMilestones: "50% аванс, 50% по завершении",
       acceptanceCriteria: "Финальное видео утверждено рекламодателем", eridResponsibility: "Платформа",
       cancellation: "Возврат 100% при отмене до начала работ",
     },
   },
   {
-    version: 2, status: "draft" as const, date: "2025-01-05",
+    version: 2, status: "draft" as const, date: "05.01.25",
     acceptedBy: [],
     fields: {
-      deliverable: "60-секундная рекламная интеграция + Stories", platform: "YouTube + Instagram", format: "Видео + Stories",
+      deliverable: "60-сек интеграция + Stories", platform: "YouTube + Instagram", format: "Видео + Stories",
       price: "55 000 ₽", deadline: "20.01.2025", paymentMilestones: "50% аванс, 50% по завершении",
-      acceptanceCriteria: "Финальное видео и Stories утверждены рекламодателем", eridResponsibility: "Платформа",
+      acceptanceCriteria: "Видео и Stories утверждены", eridResponsibility: "Платформа",
       cancellation: "Возврат 100% при отмене до начала работ",
     },
   },
 ];
 
-/* ─── Mock payment state ─── */
 const mockPayment = {
   total: 45000, reserved: 45000, released: 22500, commission: 4500, commissionPercent: 10,
   milestones: [
@@ -120,9 +116,9 @@ const mockPayment = {
 const paymentStatusLabels = { reserved: "Резерв", in_progress: "В работе", review: "На проверке", released: "Выплачено" };
 const paymentStatusColors = { reserved: "bg-warning/15 text-warning", in_progress: "bg-primary/15 text-primary", review: "bg-accent/15 text-accent", released: "bg-success/15 text-success" };
 
-/* ═══════════════════════════════════════════════════════════════
-   SIDEBAR
-   ═══════════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════
+   SIDEBAR — dense deal list
+   ═══════════════════════════════════════════════════════ */
 function DealSidebar({
   selectedId, onSelect, searchQuery, setSearchQuery, statusFilter, setStatusFilter,
 }: {
@@ -152,15 +148,14 @@ function DealSidebar({
   }, [searchQuery, statusFilter]);
 
   return (
-    <div className="w-[340px] border-r border-border bg-card flex flex-col shrink-0 h-full">
-      {/* Search */}
-      <div className="p-3 space-y-2 border-b border-border">
+    <div className="w-[320px] border-r border-border bg-card flex flex-col shrink-0 h-full">
+      <div className="p-2.5 space-y-2 border-b border-border">
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Поиск по сделкам..."
+            placeholder="Поиск сделок..."
             className="pl-8 h-8 text-[13px] bg-background"
           />
         </div>
@@ -170,7 +165,7 @@ function DealSidebar({
             { key: "active", label: "В работе" },
             { key: "pending", label: "Ожидание" },
             { key: "disputed", label: "Спор" },
-            { key: "completed", label: "Завершено" },
+            { key: "completed", label: "Готово" },
           ].map((f) => (
             <button
               key={f.key}
@@ -188,12 +183,10 @@ function DealSidebar({
         </div>
       </div>
 
-      {/* Deal list */}
       <div className="flex-1 overflow-y-auto">
         {filtered.map((deal) => {
           const completedMs = deal.milestones.filter((m) => m.completed).length;
           const totalMs = deal.milestones.length;
-          const progressPct = totalMs > 0 ? (completedMs / totalMs) * 100 : 0;
           const isSelected = selectedId === deal.id;
           const advScore = scores.get(deal.advertiserId);
 
@@ -202,36 +195,28 @@ function DealSidebar({
               key={deal.id}
               onClick={() => onSelect(deal)}
               className={cn(
-                "w-full text-left px-3 py-2.5 border-b border-border transition-colors",
-                isSelected ? "bg-primary/8 border-l-2 border-l-primary" : "hover:bg-muted/40"
+                "w-full text-left px-3 py-2 border-b border-border/50 transition-colors",
+                isSelected ? "bg-primary/10 border-l-2 border-l-primary" : "hover:bg-muted/30"
               )}
             >
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[13px] font-semibold text-card-foreground truncate">{deal.title}</span>
-                    {advScore?.isLowScore && (
-                      <AlertTriangle className="h-3 w-3 text-destructive shrink-0" />
-                    )}
-                  </div>
-                  <p className="text-[11px] text-muted-foreground truncate mt-0.5">
-                    {deal.advertiserName} → {deal.creatorName}
-                  </p>
-                </div>
-                <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded-md border whitespace-nowrap", statusColors[deal.status])}>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[13px] font-semibold text-card-foreground truncate flex-1">{deal.title}</span>
+                <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded border shrink-0", statusColors[deal.status])}>
                   {statusLabels[deal.status]}
                 </span>
               </div>
-              <div className="flex items-center justify-between mt-1.5 gap-2">
-                <span className="text-[12px] font-medium text-card-foreground">{deal.budget.toLocaleString()} ₽</span>
-                <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                  <Clock className="h-3 w-3" />
-                  <span>{new Date(deal.createdAt).toLocaleDateString("ru-RU", { day: "numeric", month: "short" })}</span>
-                </div>
+              <div className="flex items-center justify-between mt-1">
+                <span className="text-[11px] text-muted-foreground truncate">
+                  {deal.advertiserName} → {deal.creatorName}
+                  {advScore?.isLowScore && <AlertTriangle className="inline h-2.5 w-2.5 text-destructive ml-1" />}
+                </span>
+                <span className="text-[12px] font-medium text-card-foreground shrink-0">{deal.budget.toLocaleString()} ₽</span>
               </div>
               {totalMs > 0 && (
-                <div className="mt-1.5 flex items-center gap-2">
-                  <Progress value={progressPct} className="h-1 flex-1" />
+                <div className="flex items-center gap-1.5 mt-1">
+                  <div className="h-1 flex-1 bg-muted rounded-full overflow-hidden">
+                    <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${(completedMs / totalMs) * 100}%` }} />
+                  </div>
                   <span className="text-[10px] text-muted-foreground">{completedMs}/{totalMs}</span>
                 </div>
               )}
@@ -246,9 +231,9 @@ function DealSidebar({
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   CHAT TAB
-   ═══════════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════
+   CHAT TAB — centered, no duplicate summary
+   ═══════════════════════════════════════════════════════ */
 function ChatTab({ deal }: { deal: Deal }) {
   useRealtimeMessages(deal.id);
   const dealMessages = allMessages.filter((m) => m.dealId === deal.id);
@@ -256,47 +241,28 @@ function ChatTab({ deal }: { deal: Deal }) {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Pinned deal summary */}
-      <div className="px-4 py-2.5 bg-muted/30 border-b border-border">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4 text-[13px]">
-            <span className="text-muted-foreground">Формат: <span className="text-card-foreground font-medium">Видео-интеграция</span></span>
-            <Separator orientation="vertical" className="h-4" />
-            <span className="text-muted-foreground">Сумма: <span className="text-card-foreground font-medium">{deal.budget.toLocaleString()} ₽</span></span>
-            <Separator orientation="vertical" className="h-4" />
-            <span className="text-muted-foreground">Дедлайн: <span className="text-card-foreground font-medium">{deal.deadline ? new Date(deal.deadline).toLocaleDateString("ru-RU") : "—"}</span></span>
-            <Separator orientation="vertical" className="h-4" />
-            <span className="text-muted-foreground">Условия: <span className="text-success font-medium">v1 согласовано</span></span>
-          </div>
-          <Button variant="ghost" size="sm" className="text-[12px] h-7 text-primary">
-            Открыть условия
-          </Button>
-        </div>
-      </div>
-
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4">
-        <div className="max-w-2xl mx-auto space-y-3">
+      <div className="flex-1 overflow-y-auto py-4">
+        <div className="max-w-[820px] mx-auto px-4 space-y-2.5">
           {dealMessages.map((msg) => {
             const isMe = msg.senderId === "u1";
             return (
               <div key={msg.id} className={cn("flex", isMe ? "justify-end" : "justify-start")}>
                 <div
                   className={cn(
-                    "max-w-[75%] rounded-xl px-3.5 py-2.5",
+                    "max-w-[70%] rounded-2xl px-4 py-2.5",
                     isMe
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-secondary text-secondary-foreground"
+                      ? "bg-primary text-primary-foreground rounded-br-md"
+                      : "bg-secondary text-secondary-foreground rounded-bl-md"
                   )}
                 >
-                  <p className="text-[11px] font-medium mb-0.5 opacity-70">{msg.senderName}</p>
-                  <p className="text-[14px] leading-relaxed">{msg.content}</p>
+                  <p className="text-[11px] font-semibold mb-0.5 opacity-70">{msg.senderName}</p>
+                  <p className="text-[15px] leading-relaxed">{msg.content}</p>
                   {msg.attachment && (
-                    <div className="mt-2 flex items-center gap-2 text-[12px] opacity-80">
-                      <Paperclip className="h-3 w-3" />
-                      <span className="underline cursor-pointer">{msg.attachment}</span>
-                      <ExternalLink className="h-3 w-3 cursor-pointer" />
-                      <Download className="h-3 w-3 cursor-pointer" />
+                    <div className="mt-2 flex items-center gap-2 text-[13px]">
+                      <Paperclip className="h-3 w-3 opacity-60" />
+                      <a href="#" className="underline hover:no-underline">{msg.attachment}</a>
+                      <button className="opacity-60 hover:opacity-100"><Download className="h-3 w-3" /></button>
                     </div>
                   )}
                   <p className="text-[10px] opacity-50 mt-1 text-right">
@@ -307,14 +273,14 @@ function ChatTab({ deal }: { deal: Deal }) {
             );
           })}
           {dealMessages.length === 0 && (
-            <div className="text-center text-[13px] text-muted-foreground py-16">Нет сообщений</div>
+            <div className="text-center text-[14px] text-muted-foreground py-20">Нет сообщений</div>
           )}
         </div>
       </div>
 
       {/* Composer */}
       <div className="px-4 py-2.5 border-t border-border bg-card">
-        <div className="max-w-2xl mx-auto flex gap-2 items-center">
+        <div className="max-w-[820px] mx-auto flex gap-2 items-center">
           <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0">
             <Paperclip className="h-4 w-4" />
           </Button>
@@ -333,34 +299,34 @@ function ChatTab({ deal }: { deal: Deal }) {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════
    TERMS TAB
-   ═══════════════════════════════════════════════════════════════ */
+   ═══════════════════════════════════════════════════════ */
 function TermsTab() {
   const [selectedVersion, setSelectedVersion] = useState(mockTermsVersions.length - 1);
   const ver = mockTermsVersions[selectedVersion];
 
-  const statusLabel = ver.status === "accepted" ? "Согласовано обеими сторонами" : ver.status === "draft" ? "Черновик условий" : "Ожидает подтверждения";
+  const statusLabel = ver.status === "accepted" ? "Согласовано" : ver.status === "draft" ? "Черновик" : "Ожидает подтверждения";
   const statusColor = ver.status === "accepted" ? "bg-success/15 text-success border-success/30" : ver.status === "draft" ? "bg-muted text-muted-foreground border-muted-foreground/20" : "bg-warning/15 text-warning border-warning/30";
 
   const fieldLabels: Record<string, string> = {
-    deliverable: "Формат / Размещение", platform: "Платформа", format: "Тип контента",
+    deliverable: "Размещение", platform: "Платформа", format: "Формат",
     price: "Стоимость", deadline: "Дедлайн", paymentMilestones: "Этапы оплаты",
-    acceptanceCriteria: "Критерии приёмки", eridResponsibility: "Маркировка (ERID)",
-    cancellation: "Условия отмены",
+    acceptanceCriteria: "Критерии приёмки", eridResponsibility: "Маркировка",
+    cancellation: "Отмена",
   };
 
   return (
-    <div className="p-4 space-y-4 max-w-3xl mx-auto">
-      {/* Version selector */}
+    <div className="p-4 space-y-3 max-w-[820px] mx-auto">
+      {/* Version selector + status */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           {mockTermsVersions.map((v, i) => (
             <button
               key={v.version}
               onClick={() => setSelectedVersion(i)}
               className={cn(
-                "px-2.5 py-1 rounded-md text-[12px] font-medium transition-colors border",
+                "px-2 py-0.5 rounded text-[12px] font-medium transition-colors border",
                 selectedVersion === i
                   ? "bg-primary/15 text-primary border-primary/30"
                   : "text-muted-foreground border-border hover:text-foreground"
@@ -370,104 +336,93 @@ function TermsTab() {
             </button>
           ))}
         </div>
-        <span className={cn("text-[11px] font-medium px-2 py-0.5 rounded-md border", statusColor)}>
+        <span className={cn("text-[11px] font-medium px-2 py-0.5 rounded border", statusColor)}>
           {statusLabel}
         </span>
       </div>
 
-      {/* Terms card */}
+      {/* Terms fields */}
       <Card>
-        <CardContent className="p-4 space-y-0">
+        <CardContent className="p-3 space-y-0">
           {Object.entries(ver.fields).map(([key, value], i) => (
-            <div key={key} className={cn("flex items-start justify-between py-2.5", i > 0 && "border-t border-border")}>
-              <span className="text-[13px] text-muted-foreground flex-shrink-0 w-44">{fieldLabels[key] || key}</span>
+            <div key={key} className={cn("flex items-start justify-between py-2", i > 0 && "border-t border-border/50")}>
+              <span className="text-[13px] text-muted-foreground w-36 shrink-0">{fieldLabels[key] || key}</span>
               <span className="text-[13px] font-medium text-card-foreground text-right flex-1">{value}</span>
             </div>
           ))}
         </CardContent>
       </Card>
 
-      {/* Accepted by */}
       {ver.acceptedBy.length > 0 && (
-        <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
+        <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
           <CheckCircle2 className="h-3.5 w-3.5 text-success" />
           Подтвердили: {ver.acceptedBy.join(", ")}
         </div>
       )}
 
       {/* Actions */}
-      <div className="flex items-center gap-2">
-        {ver.status === "draft" && (
-          <>
-            <Button size="sm" className="text-[13px] h-8">
-              <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
-              Подтвердить условия
-            </Button>
-            <Button size="sm" variant="outline" className="text-[13px] h-8">
-              Предложить изменения
-            </Button>
-          </>
-        )}
-        {ver.status === "accepted" && (
-          <Button size="sm" variant="outline" className="text-[13px] h-8">
-            Предложить изменения (создать v{ver.version + 1})
+      {ver.status === "draft" && (
+        <div className="flex items-center gap-2">
+          <Button size="sm" className="text-[13px] h-8">
+            <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+            Подтвердить условия
           </Button>
-        )}
+          <Button size="sm" variant="outline" className="text-[13px] h-8">Предложить изменения</Button>
+        </div>
+      )}
+      {ver.status === "accepted" && (
+        <Button size="sm" variant="outline" className="text-[13px] h-8">
+          Предложить изменения (v{ver.version + 1})
+        </Button>
+      )}
+
+      {/* Contextual links */}
+      <div className="flex items-center gap-4 pt-1">
+        <button className="text-[12px] text-primary hover:underline flex items-center gap-1">
+          <Radio className="h-3 w-3" /> Маркировка (ОРД) →
+        </button>
+        <button className="text-[12px] text-primary hover:underline flex items-center gap-1">
+          <ScrollText className="h-3 w-3" /> Журнал действий →
+        </button>
       </div>
 
-      {/* Legal note */}
-      <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
-        Платформа фиксирует согласованные условия и подтверждения обеих сторон. Каждое изменение создаёт новую версию с историей.
+      <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
+        Платформа фиксирует согласованные условия и подтверждения обеих сторон. Каждое изменение создаёт новую версию.
       </p>
     </div>
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════
    FILES TAB
-   ═══════════════════════════════════════════════════════════════ */
+   ═══════════════════════════════════════════════════════ */
 function FilesTab() {
   return (
-    <div className="p-4 space-y-3 max-w-3xl mx-auto">
+    <div className="p-4 space-y-3 max-w-[820px] mx-auto">
       {(["Brief", "Draft", "Final", "Legal"] as const).map((type) => {
         const files = mockFiles.filter((f) => f.type === type);
         if (files.length === 0) return null;
         return (
           <div key={type}>
-            <p className="text-[12px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
               {fileTypeLabels[type]}
             </p>
-            <div className="space-y-1">
+            <div className="space-y-0.5">
               {files.map((file) => (
-                <div key={file.id} className="flex items-center gap-3 px-3 py-2 rounded-md bg-muted/30 hover:bg-muted/50 transition-colors">
-                  <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[13px] font-medium text-card-foreground truncate">{file.name}</span>
-                      {file.pinned && (
-                        <Pin className="h-3 w-3 text-primary shrink-0" />
-                      )}
-                      <span className={cn("text-[10px] px-1.5 py-0.5 rounded", fileTypeColors[file.type])}>
-                        {fileTypeLabels[file.type]}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-muted-foreground">{file.uploader} · {file.date}</p>
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <Button variant="ghost" size="icon" className="h-7 w-7">
-                      <ExternalLink className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7">
-                      <Download className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
+                <div key={file.id} className="flex items-center gap-2.5 px-2.5 py-1.5 rounded bg-muted/30 hover:bg-muted/50 transition-colors">
+                  <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <span className="text-[13px] font-medium text-card-foreground truncate flex-1">{file.name}</span>
+                  {file.pinned && <Pin className="h-3 w-3 text-primary shrink-0" />}
+                  <span className="text-[11px] text-muted-foreground shrink-0">{file.uploader} · {file.date}</span>
+                  <a href="#" className="text-muted-foreground hover:text-foreground"><ExternalLink className="h-3.5 w-3.5" /></a>
+                  <a href="#" className="text-muted-foreground hover:text-foreground"><Download className="h-3.5 w-3.5" /></a>
                 </div>
               ))}
             </div>
           </div>
         );
       })}
-      <Button variant="outline" size="sm" className="text-[13px] h-8 mt-2">
+      <Button variant="outline" size="sm" className="text-[13px] h-8">
         <Upload className="h-3.5 w-3.5 mr-1.5" />
         Загрузить файл
       </Button>
@@ -475,47 +430,34 @@ function FilesTab() {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════
    PAYMENT TAB
-   ═══════════════════════════════════════════════════════════════ */
+   ═══════════════════════════════════════════════════════ */
 function PaymentTab({ deal }: { deal: Deal }) {
   return (
-    <div className="p-4 space-y-4 max-w-3xl mx-auto">
-      {/* Overall status */}
-      <Card>
-        <CardContent className="p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <p className="text-[15px] font-semibold text-card-foreground">Безопасная сделка</p>
-            <div className="flex items-center gap-1.5 text-[12px] text-success font-medium">
-              <ShieldCheck className="h-4 w-4" />
-              Escrow / Защищено
-            </div>
+    <div className="p-4 space-y-3 max-w-[820px] mx-auto">
+      {/* Summary row */}
+      <div className="grid grid-cols-3 gap-2">
+        {[
+          { label: "Сумма", value: `${deal.budget.toLocaleString()} ₽`, color: "text-card-foreground" },
+          { label: "Зарезервировано", value: `${mockPayment.reserved.toLocaleString()} ₽`, color: "text-card-foreground" },
+          { label: "Выплачено", value: `${mockPayment.released.toLocaleString()} ₽`, color: "text-success" },
+        ].map((item) => (
+          <div key={item.label} className="p-2.5 rounded bg-muted/30">
+            <p className="text-[11px] text-muted-foreground">{item.label}</p>
+            <p className={cn("text-[16px] font-bold", item.color)}>{item.value}</p>
           </div>
-          <div className="grid grid-cols-3 gap-3">
-            <div className="p-2.5 rounded-md bg-muted/40">
-              <p className="text-[11px] text-muted-foreground">Сумма сделки</p>
-              <p className="text-[16px] font-bold text-card-foreground">{deal.budget.toLocaleString()} ₽</p>
-            </div>
-            <div className="p-2.5 rounded-md bg-muted/40">
-              <p className="text-[11px] text-muted-foreground">Зарезервировано</p>
-              <p className="text-[16px] font-bold text-card-foreground">{mockPayment.reserved.toLocaleString()} ₽</p>
-            </div>
-            <div className="p-2.5 rounded-md bg-muted/40">
-              <p className="text-[11px] text-muted-foreground">Выплачено</p>
-              <p className="text-[16px] font-bold text-success">{mockPayment.released.toLocaleString()} ₽</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+        ))}
+      </div>
 
       {/* Milestones */}
       <Card>
-        <CardContent className="p-4 space-y-0">
-          <p className="text-[14px] font-semibold text-card-foreground mb-2">Этапы оплаты</p>
+        <CardContent className="p-3 space-y-0">
+          <p className="text-[14px] font-semibold text-card-foreground mb-1.5">Этапы оплаты</p>
           {mockPayment.milestones.map((ms, i) => (
-            <div key={ms.id} className={cn("flex items-center justify-between py-2.5", i > 0 && "border-t border-border")}>
-              <div className="flex items-center gap-3">
-                <span className={cn("text-[11px] font-medium px-2 py-0.5 rounded-md", paymentStatusColors[ms.status])}>
+            <div key={ms.id} className={cn("flex items-center justify-between py-2", i > 0 && "border-t border-border/50")}>
+              <div className="flex items-center gap-2.5">
+                <span className={cn("text-[11px] font-medium px-1.5 py-0.5 rounded", paymentStatusColors[ms.status])}>
                   {paymentStatusLabels[ms.status]}
                 </span>
                 <span className="text-[13px] text-card-foreground">{ms.label}</span>
@@ -527,8 +469,8 @@ function PaymentTab({ deal }: { deal: Deal }) {
       </Card>
 
       {/* Commission */}
-      <div className="flex items-center justify-between px-3 py-2 rounded-md bg-muted/20 text-[12px]">
-        <span className="text-muted-foreground">Комиссия платформы ({mockPayment.commissionPercent}%)</span>
+      <div className="flex items-center justify-between px-3 py-1.5 rounded bg-muted/20 text-[12px]">
+        <span className="text-muted-foreground">Комиссия ({mockPayment.commissionPercent}%)</span>
         <span className="font-medium text-card-foreground">{mockPayment.commission.toLocaleString()} ₽</span>
       </div>
 
@@ -543,70 +485,60 @@ function PaymentTab({ deal }: { deal: Deal }) {
           Открыть спор
         </Button>
       </div>
+
+      {/* Contextual links */}
+      <button className="text-[12px] text-primary hover:underline flex items-center gap-1">
+        <Radio className="h-3 w-3" /> Маркировка (ОРД) →
+      </button>
     </div>
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   ORD / MARKING TAB
-   ═══════════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════
+   ORD TAB (accessed via "Ещё" menu)
+   ═══════════════════════════════════════════════════════ */
 function OrdTab() {
   const erid = "2SDnjek4fP1";
   return (
-    <div className="p-4 space-y-4 max-w-3xl mx-auto">
+    <div className="p-4 space-y-3 max-w-[820px] mx-auto">
       <Card>
-        <CardContent className="p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <p className="text-[15px] font-semibold text-card-foreground">Статус ОРД</p>
-            <div className="flex items-center gap-1.5 text-[12px] text-success font-medium">
-              <CheckCircle2 className="h-3.5 w-3.5" />
-              Подключено
+        <CardContent className="p-3 space-y-0">
+          <div className="flex items-center justify-between py-2">
+            <span className="text-[14px] font-semibold text-card-foreground">Статус ОРД</span>
+            <span className="flex items-center gap-1 text-[12px] text-success font-medium">
+              <CheckCircle2 className="h-3.5 w-3.5" /> Подключено
+            </span>
+          </div>
+          {[
+            { label: "ERID", value: erid, mono: true, copyable: true },
+            { label: "Синхронизация", value: "19.02.2026, 14:33" },
+            { label: "Условия", value: "v1 (согласовано)" },
+          ].map((row, i) => (
+            <div key={row.label} className="flex items-center justify-between py-2 border-t border-border/50">
+              <span className="text-[13px] text-muted-foreground">{row.label}</span>
+              <div className="flex items-center gap-1.5">
+                <span className={cn("text-[13px] text-card-foreground", row.mono && "font-mono font-semibold text-primary")}>{row.value}</span>
+                {row.copyable && (
+                  <button onClick={() => { navigator.clipboard.writeText(row.value); toast.success("ERID скопирован"); }}>
+                    <ClipboardCopy className="h-3 w-3 text-primary" />
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
-
-          <div className="flex items-center justify-between py-2 border-t border-border">
-            <span className="text-[13px] text-muted-foreground">ERID</span>
-            <div className="flex items-center gap-2">
-              <span className="text-[13px] font-mono font-semibold text-primary">{erid}</span>
-              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => {
-                navigator.clipboard.writeText(erid);
-                toast.success("ERID скопирован");
-              }}>
-                <ClipboardCopy className="h-3 w-3 text-primary" />
-              </Button>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between py-2 border-t border-border">
-            <span className="text-[13px] text-muted-foreground">Последняя синхронизация</span>
-            <span className="text-[13px] text-card-foreground">19.02.2026, 14:33</span>
-          </div>
-
-          <div className="flex items-center justify-between py-2 border-t border-border">
-            <span className="text-[13px] text-muted-foreground">Привязка к условиям</span>
-            <span className="text-[13px] text-card-foreground">v1 (согласовано)</span>
-          </div>
+          ))}
         </CardContent>
       </Card>
 
-      {/* Events log */}
-      <Card>
-        <CardContent className="p-4 space-y-0">
-          <p className="text-[14px] font-semibold text-card-foreground mb-2">Журнал ОРД</p>
-          {mockAudit.filter((e) => e.category === "ord").length === 0 ? (
-            <p className="text-[13px] text-muted-foreground py-3">Нет событий ОРД</p>
-          ) : (
-            mockAudit
-              .filter((e) => e.category === "ord")
-              .map((e) => (
-                <div key={e.id} className="flex items-center gap-3 py-2 border-t border-border first:border-t-0">
-                  <span className="text-[11px] text-muted-foreground w-32 shrink-0">{e.ts}</span>
-                  <span className="text-[13px] text-card-foreground">{e.action}</span>
-                </div>
-              ))
-          )}
-        </CardContent>
-      </Card>
+      {/* ORD events */}
+      <div className="space-y-1">
+        <p className="text-[12px] font-semibold text-muted-foreground uppercase tracking-wider">Журнал ОРД</p>
+        {mockAudit.filter((e) => e.category === "ord").map((e) => (
+          <div key={e.id} className="flex items-center gap-2 text-[12px] py-1">
+            <span className="text-muted-foreground w-24 shrink-0">{e.ts}</span>
+            <span className="text-card-foreground">{e.action}</span>
+          </div>
+        ))}
+      </div>
 
       <Button variant="outline" size="sm" className="text-[13px] h-8">
         <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
@@ -616,9 +548,9 @@ function OrdTab() {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   AUDIT TAB
-   ═══════════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════
+   AUDIT TAB (accessed via "Ещё" menu)
+   ═══════════════════════════════════════════════════════ */
 function AuditTab() {
   const [filter, setFilter] = useState<string>("all");
   const categories = [
@@ -628,25 +560,18 @@ function AuditTab() {
     { key: "payments", label: "Оплата" },
     { key: "ord", label: "ОРД" },
   ];
-
   const filtered = filter === "all" ? mockAudit : mockAudit.filter((e) => e.category === filter);
-
-  const categoryIcons: Record<string, any> = {
-    terms: ScrollText,
-    files: Files,
-    payments: CreditCard,
-    ord: Radio,
-  };
+  const categoryIcons: Record<string, any> = { terms: ScrollText, files: Files, payments: CreditCard, ord: Radio };
 
   return (
-    <div className="p-4 space-y-3 max-w-3xl mx-auto">
+    <div className="p-4 space-y-3 max-w-[820px] mx-auto">
       <div className="flex items-center gap-1">
         {categories.map((c) => (
           <button
             key={c.key}
             onClick={() => setFilter(c.key)}
             className={cn(
-              "px-2.5 py-1 rounded-md text-[12px] font-medium transition-colors",
+              "px-2 py-0.5 rounded text-[12px] font-medium transition-colors",
               filter === c.key ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground"
             )}
           >
@@ -660,24 +585,20 @@ function AuditTab() {
           {filtered.map((entry, i) => {
             const Icon = categoryIcons[entry.category] || ScrollText;
             return (
-              <div key={entry.id} className={cn("flex items-start gap-3 px-4 py-2.5", i > 0 && "border-t border-border")}>
+              <div key={entry.id} className={cn("flex items-start gap-2.5 px-3 py-2", i > 0 && "border-t border-border/50")}>
                 <Icon className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="text-[13px] text-card-foreground">{entry.action}</p>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-[11px] text-muted-foreground">{entry.who}</span>
-                    <span className="text-[11px] text-muted-foreground">·</span>
-                    <span className="text-[11px] text-muted-foreground">{entry.ts}</span>
-                  </div>
+                  <span className="text-[11px] text-muted-foreground">{entry.who} · {entry.ts}</span>
                   {entry.file && (
-                    <button className="text-[11px] text-primary underline mt-0.5">{entry.file}</button>
+                    <button className="block text-[11px] text-primary underline mt-0.5">{entry.file}</button>
                   )}
                 </div>
               </div>
             );
           })}
           {filtered.length === 0 && (
-            <div className="text-center py-8 text-[13px] text-muted-foreground">Нет записей</div>
+            <div className="text-center py-6 text-[13px] text-muted-foreground">Нет записей</div>
           )}
         </CardContent>
       </Card>
@@ -685,23 +606,35 @@ function AuditTab() {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════
    MAIN DEAL WORKSPACE
-   ═══════════════════════════════════════════════════════════════ */
+   ═══════════════════════════════════════════════════════ */
 export function DealWorkspace() {
   const [selectedDeal, setSelectedDeal] = useState<Deal>(deals[0]);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [activeSubTab, setActiveSubTab] = useState("chat");
-  const [showMobileList, setShowMobileList] = useState(false);
 
   const primaryAction = getPrimaryAction(selectedDeal.status);
   const completedMs = selectedDeal.milestones.filter((m) => m.completed).length;
   const totalMs = selectedDeal.milestones.length;
 
+  const coreTabs = [
+    { value: "chat", label: "Чат", icon: MessageCircle },
+    { value: "terms", label: "Условия", icon: ScrollText },
+    { value: "files", label: "Файлы", icon: Files },
+    { value: "payment", label: "Оплата", icon: CreditCard },
+  ];
+
+  const moreTabs = [
+    { value: "ord", label: "Маркировка (ОРД)" },
+    { value: "audit", label: "Аудит" },
+  ];
+
+  const isMoreTab = moreTabs.some((t) => t.value === activeSubTab);
+
   return (
     <div className="flex-1 flex h-full overflow-hidden">
-      {/* Sidebar */}
       <DealSidebar
         selectedId={selectedDeal.id}
         onSelect={(d) => { setSelectedDeal(d); setActiveSubTab("chat"); }}
@@ -711,93 +644,111 @@ export function DealWorkspace() {
         setStatusFilter={setStatusFilter}
       />
 
-      {/* Main workspace */}
+      {/* Main workspace — centered content */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Header */}
-        <div className="px-5 py-3 border-b border-border bg-card space-y-2">
-          {/* Row 1: title + status + actions */}
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3 min-w-0">
-              <h1 className="text-[18px] font-bold text-card-foreground truncate">{selectedDeal.title}</h1>
-              <span className={cn("text-[11px] font-medium px-2 py-0.5 rounded-md border whitespace-nowrap", statusColors[selectedDeal.status])}>
-                {statusLabels[selectedDeal.status]}
-              </span>
-              <span className="text-[14px] font-semibold text-card-foreground whitespace-nowrap">{selectedDeal.budget.toLocaleString()} ₽</span>
-              {selectedDeal.deadline && (
-                <span className="flex items-center gap-1 text-[12px] text-muted-foreground whitespace-nowrap">
-                  <CalendarDays className="h-3.5 w-3.5" />
-                  {new Date(selectedDeal.deadline).toLocaleDateString("ru-RU")}
+        {/* Header — single source of truth */}
+        <div className="px-5 py-2.5 border-b border-border bg-card">
+          <div className="max-w-[1100px]">
+            {/* Row 1: Title + status + primary action */}
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <h1 className="text-[17px] font-bold text-card-foreground truncate">{selectedDeal.title}</h1>
+                <span className={cn("text-[11px] font-medium px-1.5 py-0.5 rounded border shrink-0", statusColors[selectedDeal.status])}>
+                  {statusLabels[selectedDeal.status]}
                 </span>
-              )}
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              {primaryAction && (
-                <Button size="sm" className="text-[13px] h-8">
-                  <primaryAction.icon className="h-3.5 w-3.5 mr-1.5" />
-                  {primaryAction.label}
-                </Button>
-              )}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-8 w-8">
-                    <MoreVertical className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem><Download className="h-3.5 w-3.5 mr-2" /> Экспорт</DropdownMenuItem>
-                  <DropdownMenuItem><Copy className="h-3.5 w-3.5 mr-2" /> Дублировать</DropdownMenuItem>
-                  <DropdownMenuItem><Archive className="h-3.5 w-3.5 mr-2" /> Архивировать</DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </div>
+                <span className="text-[14px] font-semibold text-card-foreground shrink-0">{selectedDeal.budget.toLocaleString()} ₽</span>
+                {selectedDeal.deadline && (
+                  <span className="flex items-center gap-1 text-[12px] text-muted-foreground shrink-0">
+                    <CalendarDays className="h-3 w-3" />
+                    {new Date(selectedDeal.deadline).toLocaleDateString("ru-RU")}
+                  </span>
+                )}
+                <span className="flex items-center gap-1 text-[11px] text-success shrink-0">
+                  <ShieldCheck className="h-3 w-3" /> Безопасная сделка
+                </span>
+                {totalMs > 0 && (
+                  <span className="text-[11px] text-muted-foreground shrink-0">{completedMs}/{totalMs}</span>
+                )}
+              </div>
 
-          {/* Row 2: meta */}
-          <div className="flex items-center gap-4 text-[12px] text-muted-foreground">
-            <span>{selectedDeal.advertiserName} → {selectedDeal.creatorName}</span>
-            <button
-              className="flex items-center gap-1 hover:text-foreground transition-colors"
-              onClick={() => {
-                navigator.clipboard.writeText(selectedDeal.id);
-                toast.success("ID скопирован");
-              }}
-            >
-              <span className="font-mono text-[11px]">#{selectedDeal.id}</span>
-              <ClipboardCopy className="h-3 w-3" />
-            </button>
-            <div className="flex items-center gap-1 text-success">
-              <ShieldCheck className="h-3.5 w-3.5" />
-              <span className="font-medium">Безопасная сделка</span>
+              <div className="flex items-center gap-1.5 shrink-0">
+                {primaryAction && (
+                  <Button size="sm" className="text-[13px] h-8">
+                    <primaryAction.icon className="h-3.5 w-3.5 mr-1" />
+                    {primaryAction.label}
+                  </Button>
+                )}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem><Download className="h-3.5 w-3.5 mr-2" /> Экспорт</DropdownMenuItem>
+                    <DropdownMenuItem><Copy className="h-3.5 w-3.5 mr-2" /> Дублировать</DropdownMenuItem>
+                    <DropdownMenuItem><Archive className="h-3.5 w-3.5 mr-2" /> Архивировать</DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </div>
-            {totalMs > 0 && (
-              <span>Прогресс: {completedMs}/{totalMs}</span>
-            )}
+
+            {/* Row 2: participants + ID */}
+            <div className="flex items-center gap-3 mt-1 text-[12px] text-muted-foreground">
+              <span>{selectedDeal.advertiserName} → {selectedDeal.creatorName}</span>
+              <button
+                className="flex items-center gap-1 hover:text-foreground transition-colors font-mono text-[11px]"
+                onClick={() => { navigator.clipboard.writeText(selectedDeal.id); toast.success("ID скопирован"); }}
+              >
+                #{selectedDeal.id} <ClipboardCopy className="h-2.5 w-2.5" />
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Sub-tabs */}
+        {/* Sub-tabs: 4 core + "Ещё" dropdown */}
         <div className="border-b border-border bg-card px-5">
-          <Tabs value={activeSubTab} onValueChange={setActiveSubTab}>
-            <TabsList className="bg-transparent h-9 p-0 gap-0">
-              {[
-                { value: "chat", label: "Чат", icon: MessageCircle },
-                { value: "terms", label: "Условия", icon: ScrollText },
-                { value: "files", label: "Файлы", icon: Files },
-                { value: "payment", label: "Оплата", icon: CreditCard },
-                { value: "ord", label: "Маркировка", icon: Radio },
-                { value: "audit", label: "Аудит", icon: ScrollText },
-              ].map((tab) => (
-                <TabsTrigger
-                  key={tab.value}
-                  value={tab.value}
-                  className="text-[13px] gap-1.5 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-3 h-9"
+          <div className="flex items-center gap-0">
+            {coreTabs.map((tab) => (
+              <button
+                key={tab.value}
+                onClick={() => setActiveSubTab(tab.value)}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 h-9 text-[13px] font-medium border-b-2 transition-colors",
+                  activeSubTab === tab.value
+                    ? "border-primary text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <tab.icon className="h-3.5 w-3.5" />
+                {tab.label}
+              </button>
+            ))}
+
+            {/* "Ещё" dropdown for Маркировка & Аудит */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  className={cn(
+                    "flex items-center gap-1 px-3 h-9 text-[13px] font-medium border-b-2 transition-colors",
+                    isMoreTab
+                      ? "border-primary text-foreground"
+                      : "border-transparent text-muted-foreground hover:text-foreground"
+                  )}
                 >
-                  <tab.icon className="h-3.5 w-3.5" />
-                  {tab.label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
+                  Ещё
+                  <MoreVertical className="h-3 w-3" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                {moreTabs.map((tab) => (
+                  <DropdownMenuItem key={tab.value} onClick={() => setActiveSubTab(tab.value)}>
+                    {tab.label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
 
         {/* Tab content */}
