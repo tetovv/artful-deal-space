@@ -38,7 +38,8 @@ import { MusicEditor } from "@/components/studio/MusicEditor";
 import { PodcastEditor } from "@/components/studio/PodcastEditor";
 import { PostEditor } from "@/components/studio/PostEditor";
 import { TemplateEditor } from "@/components/studio/TemplateEditor";
-
+import { PromoCodesSection } from "@/components/studio/PromoCodesSection";
+import { StudioSettingsSection } from "@/components/studio/StudioSettingsSection";
 /* ── constants ── */
 const PIE_COLORS = [
   "hsl(var(--primary))", "hsl(var(--accent))", "hsl(var(--warning))",
@@ -952,60 +953,10 @@ const CreatorStudio = () => {
             )}
 
             {/* ═══ PROMOS ═══ */}
-            {section === "promos" && (
-              <>
-                <div className="space-y-1">
-                  <h1 className="text-xl font-bold text-foreground">Промокоды</h1>
-                  <p className="text-sm text-muted-foreground">Управление промокодами и скидками</p>
-                </div>
-
-                <Card>
-                  <CardContent className="p-8 text-center space-y-4">
-                    <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto">
-                      <Crown className="h-7 w-7 text-primary" />
-                    </div>
-                    <div className="space-y-1">
-                      <h3 className="text-base font-semibold">Создавайте промокоды</h3>
-                      <p className="text-sm text-muted-foreground max-w-md mx-auto">
-                        Создавайте промокоды для скидок на ваш платный контент, делитесь с аудиторией и отслеживайте использование.
-                      </p>
-                    </div>
-                    <Button size="sm" disabled>
-                      <Plus className="h-3.5 w-3.5 mr-1.5" /> Создать промокод
-                    </Button>
-                    <p className="text-xs text-muted-foreground">Скоро</p>
-                  </CardContent>
-                </Card>
-              </>
-            )}
+            {section === "promos" && <PromoCodesSection />}
 
             {/* ═══ STUDIO SETTINGS ═══ */}
-            {section === "studio-settings" && (
-              <>
-                <div className="space-y-1">
-                  <h1 className="text-xl font-bold text-foreground">Настройки студии</h1>
-                  <p className="text-sm text-muted-foreground">Персонализация и параметры вашей студии</p>
-                </div>
-
-                <Card>
-                  <CardContent className="p-8 text-center space-y-4">
-                    <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto">
-                      <Edit className="h-7 w-7 text-primary" />
-                    </div>
-                    <div className="space-y-1">
-                      <h3 className="text-base font-semibold">Настройте студию</h3>
-                      <p className="text-sm text-muted-foreground max-w-md mx-auto">
-                        Управляйте оформлением канала, настройками уведомлений и параметрами публикации контента.
-                      </p>
-                    </div>
-                    <Button size="sm" disabled>
-                      Настроить
-                    </Button>
-                    <p className="text-xs text-muted-foreground">Скоро</p>
-                  </CardContent>
-                </Card>
-              </>
-            )}
+            {section === "studio-settings" && <StudioSettingsSection />}
 
             {/* offers section removed — use header Предложения nav */}
           </motion.div>
