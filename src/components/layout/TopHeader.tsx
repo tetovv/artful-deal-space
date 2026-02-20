@@ -27,7 +27,7 @@ interface NavItem {
 const allNavItems: NavItem[] = [
   { title: "Главная", url: "/", icon: Home, roles: ["user"] },
   { title: "Главная", url: "/explore", icon: Home, roles: ["creator", "advertiser", "moderator"] },
-  { title: "Подписки", url: "/subscriptions", icon: Rss, roles: ["user"] },
+  { title: "Подписки", url: "/subscriptions", icon: Rss },
   { title: "Студия", url: "/creator-studio", icon: Palette, roles: ["creator", "moderator"] },
   { title: "Биржа", url: "/ad-studio", icon: Megaphone, roles: ["advertiser", "moderator"] },
   { title: "Предложения", url: "/marketplace", icon: Store, roles: ["creator", "moderator"] },
