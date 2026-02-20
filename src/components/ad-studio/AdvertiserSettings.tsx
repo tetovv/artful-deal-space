@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,13 +10,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Save, Building2, Landmark, ShieldCheck, CheckCircle2, Clock, Palette, Globe, Upload, X,
   Mail, Tag, Eye, EyeOff, Lock, Users, Loader2, AlertCircle, PlugZap, RefreshCw, Info,
-  Copy, HelpCircle,
+  Copy, HelpCircle, ChevronDown,
 } from "lucide-react";
 import { toast } from "sonner";
-
 // ─── Types ───
 interface AdvSettings {
   business_type: string | null;
@@ -379,457 +378,502 @@ export function AdvertiserSettings() {
     { status: ordStatus, label: "ОРД", hint: "Для маркировки рекламы" },
   ];
 
+  const [brandOpen, setBrandOpen] = useState(true);
+  const [legalOpen, setLegalOpen] = useState(true);
+  const [bankOpen, setBankOpen] = useState(false);
+  const [ordOpen, setOrdOpen] = useState(false);
+
+  // Auto-expand optional sections if they have data
+  useEffect(() => {
+    if (isBankFieldsValid(savedSnapshot) || isBankPartial(savedSnapshot)) setBankOpen(true);
+    if (savedSnapshot.ord_identifier || savedSnapshot.ord_token) setOrdOpen(true);
+  }, [savedSnapshot]);
+
   if (isLoading) {
     return <div className="p-8 text-center text-sm text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />Загрузка…</div>;
   }
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
+    <div className="flex-1 flex flex-col overflow-y-auto">
       {/* Sticky save bar */}
       {dirty && (
-        <div className="sticky top-0 z-20 bg-warning/10 border-b border-warning/20 px-6 py-2 flex items-center justify-between animate-fade-in">
-          <div className="flex items-center gap-2 text-xs text-warning">
-            <AlertCircle className="h-3.5 w-3.5" />
+        <div className="sticky top-0 z-20 bg-warning/10 border-b border-warning/20 px-6 py-2.5 flex items-center justify-center gap-4 animate-fade-in">
+          <div className="flex items-center gap-2 text-sm text-warning">
+            <AlertCircle className="h-4 w-4" />
             <span className="font-medium">Есть несохранённые изменения</span>
           </div>
-          <Button size="sm" disabled={save.isPending} onClick={() => save.mutate()} className="h-7 text-xs gap-1.5">
-            <Save className="h-3 w-3" />
+          <Button size="sm" disabled={save.isPending} onClick={() => save.mutate()} className="h-8 text-sm gap-1.5">
+            <Save className="h-3.5 w-3.5" />
             {save.isPending ? "Сохранение…" : "Сохранить"}
           </Button>
         </div>
       )}
 
-      {/* Header */}
-      <div className="flex items-center justify-between px-6 pt-3 pb-2">
-        <div>
-          <h2 className="text-base font-bold text-foreground">Настройки рекламодателя</h2>
-          <p className="text-xs text-muted-foreground">Верификация и данные бренда для размещения рекламы</p>
+      <div className="w-full max-w-[1040px] mx-auto px-6 py-6 space-y-5">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-foreground tracking-tight">Настройки рекламодателя</h2>
+            <p className="text-sm text-muted-foreground mt-0.5">Верификация и данные бренда для размещения рекламы</p>
+          </div>
+          <Button size="sm" disabled={!dirty || save.isPending} onClick={() => save.mutate()} className="h-9 text-sm gap-1.5">
+            <Save className="h-4 w-4" />
+            {save.isPending ? "Сохранение…" : "Сохранить"}
+          </Button>
         </div>
-        <Button size="sm" disabled={!dirty || save.isPending} onClick={() => save.mutate()}>
-          <Save className="h-3.5 w-3.5 mr-1.5" />
-          {save.isPending ? "Сохранение…" : "Сохранить"}
-        </Button>
-      </div>
 
-      {/* Readiness block — split mandatory / optional */}
-      <div className="px-6 pb-3 space-y-2">
-        {/* Mandatory for deals */}
-        <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+        {/* Readiness block */}
+        <div className="rounded-xl border border-border bg-card p-5 space-y-4">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-card-foreground">Готовность к сделкам</span>
-            <span className="text-xs text-muted-foreground">{mandatoryScore} / 2</span>
+            <span className="text-sm font-semibold text-card-foreground">Готовность к сделкам</span>
+            <span className="text-sm text-muted-foreground font-medium">{mandatoryScore} / 2</span>
           </div>
           <Progress value={(mandatoryScore / 2) * 100} className="h-1.5" />
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-0.5">
-              <SectionCheck status={brandStatus} label="Бренд" />
-              <p className="text-[10px] text-muted-foreground pl-5">Обязательно для сделок</p>
-            </div>
-            <div className="space-y-0.5">
-              <SectionCheck status={legalStatus} label="Реквизиты" />
-              <p className="text-[10px] text-muted-foreground pl-5">Обязательно для сделок</p>
-            </div>
-          </div>
-          {mandatoryReady && (
-            <p className="text-[10px] text-success flex items-center gap-1"><CheckCircle2 className="h-3 w-3" /> Вы можете создавать сделки</p>
-          )}
-        </div>
-        {/* Optional sections */}
-        <div className="rounded-xl border border-border bg-card p-3">
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <SectionCheck status={brandStatus} label="Бренд" />
+            <SectionCheck status={legalStatus} label="Реквизиты" />
             {optionalItems.map((item) => (
               <div key={item.label} className="flex items-center gap-2">
                 <SectionCheck status={item.status} label={item.label} />
-                <span className="text-[10px] text-muted-foreground">— {item.hint}</span>
+                <span className="text-xs text-muted-foreground hidden sm:inline">— {item.hint}</span>
               </div>
             ))}
           </div>
+          {mandatoryReady && (
+            <p className="text-xs text-success flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5" /> Вы можете создавать сделки</p>
+          )}
         </div>
-      </div>
 
-      {/* Cards grid */}
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-3 px-6 pb-4 min-h-0 overflow-y-auto">
-        {/* ──────── 1. Brand ──────── */}
-        <Card className="flex flex-col">
-          <CardHeader className="pb-1 pt-3 px-4">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <Palette className="h-4 w-4 text-primary" /> Бренд
-              {brandDirty && <Badge variant="outline" className="text-[9px] border-warning/30 text-warning bg-warning/10 ml-1">изменено</Badge>}
-              <PrivacyLabel isPublic />
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-3 space-y-2.5 flex-1">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs">Название бренда *</Label>
-                <Input value={form.brand_name} onChange={(e) => update("brand_name", e.target.value)}
-                  placeholder="Например: Яндекс" className="text-sm h-9" maxLength={100} />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs flex items-center gap-1"><Globe className="h-3 w-3" /> Сайт</Label>
-                <Input value={form.brand_website} onChange={(e) => update("brand_website", e.target.value)}
-                  placeholder="https://example.com" className="text-sm h-9" maxLength={200} type="url" />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs flex items-center gap-1"><Tag className="h-3 w-3" /> Категория бизнеса</Label>
-                <Select value={form.business_category || ""} onValueChange={(v) => update("business_category", v)}>
-                  <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Выберите" /></SelectTrigger>
-                  <SelectContent>
-                    {[["ecommerce","E-commerce"],["saas","SaaS / IT"],["finance","Финансы"],["education","Образование"],["health","Здоровье"],["food","Еда и напитки"],["fashion","Мода и красота"],["travel","Путешествия"],["entertainment","Развлечения"],["realestate","Недвижимость"],["auto","Авто"],["other","Другое"]].map(([v,l]) => (
-                      <SelectItem key={v} value={v}>{l}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs flex items-center gap-1"><Mail className="h-3 w-3" /> Email для авторов</Label>
-                <Input value={form.contact_email} onChange={(e) => update("contact_email", e.target.value)}
-                  placeholder="ads@company.com" className="text-sm h-9" maxLength={200} type="email" />
-              </div>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Описание бренда</Label>
-              <Textarea value={form.brand_description} onChange={(e) => update("brand_description", e.target.value)}
-                placeholder="Кратко о бренде и сфере деятельности…" className="text-sm min-h-[52px] resize-none" maxLength={500} />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Логотип</Label>
-              <div className="flex items-center gap-2">
-                {form.brand_logo_url ? (
-                  <div className="relative h-9 w-9 rounded border border-border overflow-hidden flex-shrink-0">
-                    <img src={form.brand_logo_url} alt="Logo" className="h-full w-full object-cover" />
-                    <button type="button" onClick={() => update("brand_logo_url", "")}
-                      className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center">
-                      <X className="h-2.5 w-2.5" />
-                    </button>
-                  </div>
-                ) : (
-                  <button type="button" onClick={() => fileInputRef.current?.click()}
-                    className="h-9 w-9 rounded border border-dashed border-border flex items-center justify-center flex-shrink-0 hover:border-primary/50 hover:bg-muted/30 transition-colors cursor-pointer"
-                    title="Загрузить логотип">
-                    <Upload className="h-3.5 w-3.5 text-muted-foreground" />
-                  </button>
-                )}
-                <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (!file || !user) return;
-                  setUploading(true);
-                  try {
-                    const ext = file.name.split(".").pop();
-                    const path = `${user.id}/${Date.now()}.${ext}`;
-                    const { error } = await supabase.storage.from("brand-logos").upload(path, file, { upsert: true });
-                    if (error) throw error;
-                    const { data: urlData } = supabase.storage.from("brand-logos").getPublicUrl(path);
-                    update("brand_logo_url", urlData.publicUrl);
-                    toast.success("Логотип загружен");
-                  } catch {
-                    toast.error("Ошибка загрузки");
-                  } finally { setUploading(false); }
-                }} />
-                <Button type="button" size="sm" variant="outline" className="h-9 text-xs gap-1.5" disabled={uploading}
-                  onClick={() => fileInputRef.current?.click()}>
-                  <Upload className="h-3.5 w-3.5" />
-                  {uploading ? "Загрузка…" : form.brand_logo_url ? "Заменить" : "Загрузить"}
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* ──────── 2. Legal ──────── */}
-        <Card className="flex flex-col">
-          <CardHeader className="pb-1 pt-3 px-4">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <Building2 className="h-4 w-4 text-primary" /> Реквизиты
-              <StatusBadge status={legalStatus} />
-              <PrivacyLabel isPublic={false} />
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-3 space-y-2.5 flex-1">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs flex items-center gap-1">
-                  Форма собственности *
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="max-w-[260px]">
-                      <p className="text-xs leading-relaxed">
-                        <strong>Самозанятый (НПД)</strong> — физлицо на налоге на профдоход. Нужны только ФИО и ИНН (12 цифр), ОГРНИП не требуется.<br />
-                        <strong>ИП</strong> — индивидуальный предприниматель. ФИО + ИНН (12) + ОГРНИП (15).<br />
-                        <strong>ООО</strong> — юрлицо. Наименование + ИНН (10) + ОГРН (13).
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </Label>
-                <Select value={form.business_type || ""} onValueChange={(v) => update("business_type", v)}>
-                  <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Выберите тип" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="self">Самозанятый (НПД)</SelectItem>
-                    <SelectItem value="ip">ИП</SelectItem>
-                    <SelectItem value="ooo">ООО</SelectItem>
-                    <SelectItem value="ul">Юр. лицо (иное)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {form.business_type && legalCfg.showName && (
-                <div className="space-y-1">
-                  <Label className="text-xs">{legalCfg.nameLabel}</Label>
-                  <Input value={form.business_name} onChange={(e) => update("business_name", e.target.value)}
-                    placeholder={legalCfg.namePlaceholder} className="text-sm h-9" maxLength={200} />
+        {/* ──────── 1. Brand (collapsible, default open) ──────── */}
+        <Collapsible open={brandOpen} onOpenChange={setBrandOpen}>
+          <div className="rounded-xl border border-border bg-card overflow-hidden">
+            <CollapsibleTrigger className="w-full flex items-center justify-between px-5 py-4 hover:bg-muted/30 transition-colors cursor-pointer">
+              <div className="flex items-center gap-3">
+                <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <Palette className="h-4 w-4 text-primary" />
                 </div>
-              )}
-            </div>
-            {form.business_type && (
-              <div className={`grid gap-3 ${legalCfg.showOgrn ? "grid-cols-2" : "grid-cols-1"}`}>
-                <div className="space-y-1">
-                  <Label className="text-xs">ИНН * <span className="text-muted-foreground font-normal">({legalCfg.innLen} цифр)</span></Label>
-                  <Input value={form.business_inn} onChange={(e) => update("business_inn", e.target.value.replace(/\D/g, "").slice(0, legalCfg.innLen))}
-                    placeholder={"0".repeat(legalCfg.innLen)} className="text-sm h-9 font-mono" maxLength={legalCfg.innLen} />
-                  {form.business_inn.length > 0 && form.business_inn.length !== legalCfg.innLen && (
-                    <p className="text-[10px] text-warning">{form.business_inn.length}/{legalCfg.innLen} цифр</p>
+                <div className="text-left">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-card-foreground">Бренд</span>
+                    {brandDirty && <Badge variant="outline" className="text-[10px] border-warning/30 text-warning bg-warning/10">изменено</Badge>}
+                    <PrivacyLabel isPublic />
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">Название, категория, описание и логотип</p>
+                </div>
+              </div>
+              <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${brandOpen ? "rotate-180" : ""}`} />
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="px-5 pb-5 pt-1 space-y-4 border-t border-border">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-sm font-medium">Название бренда *</Label>
+                    <Input value={form.brand_name} onChange={(e) => update("brand_name", e.target.value)}
+                      placeholder="Например: Яндекс" className="h-10" maxLength={100} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-sm font-medium flex items-center gap-1.5"><Globe className="h-3.5 w-3.5" /> Сайт</Label>
+                    <Input value={form.brand_website} onChange={(e) => update("brand_website", e.target.value)}
+                      placeholder="https://example.com" className="h-10" maxLength={200} type="url" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-sm font-medium flex items-center gap-1.5"><Tag className="h-3.5 w-3.5" /> Категория бизнеса</Label>
+                    <Select value={form.business_category || ""} onValueChange={(v) => update("business_category", v)}>
+                      <SelectTrigger className="h-10"><SelectValue placeholder="Выберите" /></SelectTrigger>
+                      <SelectContent>
+                        {[["ecommerce","E-commerce"],["saas","SaaS / IT"],["finance","Финансы"],["education","Образование"],["health","Здоровье"],["food","Еда и напитки"],["fashion","Мода и красота"],["travel","Путешествия"],["entertainment","Развлечения"],["realestate","Недвижимость"],["auto","Авто"],["other","Другое"]].map(([v,l]) => (
+                          <SelectItem key={v} value={v}>{l}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-sm font-medium flex items-center gap-1.5"><Mail className="h-3.5 w-3.5" /> Email для авторов</Label>
+                    <Input value={form.contact_email} onChange={(e) => update("contact_email", e.target.value)}
+                      placeholder="ads@company.com" className="h-10" maxLength={200} type="email" />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-sm font-medium">Описание бренда</Label>
+                  <Textarea value={form.brand_description} onChange={(e) => update("brand_description", e.target.value)}
+                    placeholder="Кратко о бренде и сфере деятельности…" className="min-h-[60px] resize-none" maxLength={500} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-sm font-medium">Логотип</Label>
+                  <div className="flex items-center gap-3">
+                    {form.brand_logo_url ? (
+                      <div className="relative h-10 w-10 rounded-lg border border-border overflow-hidden flex-shrink-0">
+                        <img src={form.brand_logo_url} alt="Logo" className="h-full w-full object-cover" />
+                        <button type="button" onClick={() => update("brand_logo_url", "")}
+                          className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center">
+                          <X className="h-2.5 w-2.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <button type="button" onClick={() => fileInputRef.current?.click()}
+                        className="h-10 w-10 rounded-lg border border-dashed border-border flex items-center justify-center flex-shrink-0 hover:border-primary/50 hover:bg-muted/30 transition-colors cursor-pointer">
+                        <Upload className="h-4 w-4 text-muted-foreground" />
+                      </button>
+                    )}
+                    <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file || !user) return;
+                      setUploading(true);
+                      try {
+                        const ext = file.name.split(".").pop();
+                        const path = `${user.id}/${Date.now()}.${ext}`;
+                        const { error } = await supabase.storage.from("brand-logos").upload(path, file, { upsert: true });
+                        if (error) throw error;
+                        const { data: urlData } = supabase.storage.from("brand-logos").getPublicUrl(path);
+                        update("brand_logo_url", urlData.publicUrl);
+                        toast.success("Логотип загружен");
+                      } catch {
+                        toast.error("Ошибка загрузки");
+                      } finally { setUploading(false); }
+                    }} />
+                    <Button type="button" size="sm" variant="outline" className="h-10 text-sm gap-1.5" disabled={uploading}
+                      onClick={() => fileInputRef.current?.click()}>
+                      <Upload className="h-4 w-4" />
+                      {uploading ? "Загрузка…" : form.brand_logo_url ? "Заменить" : "Загрузить"}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </CollapsibleContent>
+          </div>
+        </Collapsible>
+
+        {/* ──────── 2. Legal (collapsible, default open) ──────── */}
+        <Collapsible open={legalOpen} onOpenChange={setLegalOpen}>
+          <div className="rounded-xl border border-border bg-card overflow-hidden">
+            <CollapsibleTrigger className="w-full flex items-center justify-between px-5 py-4 hover:bg-muted/30 transition-colors cursor-pointer">
+              <div className="flex items-center gap-3">
+                <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <Building2 className="h-4 w-4 text-primary" />
+                </div>
+                <div className="text-left">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-card-foreground">Реквизиты</span>
+                    <StatusBadge status={legalStatus} />
+                    <PrivacyLabel isPublic={false} />
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">Форма собственности, ИНН, ОГРН</p>
+                </div>
+              </div>
+              <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${legalOpen ? "rotate-180" : ""}`} />
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="px-5 pb-5 pt-1 space-y-4 border-t border-border">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-sm font-medium flex items-center gap-1.5">
+                      Форма собственности *
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-[280px]">
+                          <p className="text-xs leading-relaxed">
+                            <strong>Самозанятый (НПД)</strong> — физлицо на налоге на профдоход. ФИО + ИНН (12 цифр), ОГРНИП не требуется.<br />
+                            <strong>ИП</strong> — индивидуальный предприниматель. ФИО + ИНН (12) + ОГРНИП (15).<br />
+                            <strong>ООО</strong> — юрлицо. Наименование + ИНН (10) + ОГРН (13).
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </Label>
+                    <Select value={form.business_type || ""} onValueChange={(v) => update("business_type", v)}>
+                      <SelectTrigger className="h-10"><SelectValue placeholder="Выберите тип" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="self">Самозанятый (НПД)</SelectItem>
+                        <SelectItem value="ip">ИП</SelectItem>
+                        <SelectItem value="ooo">ООО</SelectItem>
+                        <SelectItem value="ul">Юр. лицо (иное)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {form.business_type && legalCfg.showName && (
+                    <div className="space-y-1.5">
+                      <Label className="text-sm font-medium">{legalCfg.nameLabel}</Label>
+                      <Input value={form.business_name} onChange={(e) => update("business_name", e.target.value)}
+                        placeholder={legalCfg.namePlaceholder} className="h-10" maxLength={200} />
+                    </div>
                   )}
                 </div>
-                {legalCfg.showOgrn && (
-                  <div className="space-y-1">
-                    <Label className="text-xs">{legalCfg.ogrnLabel} * <span className="text-muted-foreground font-normal">({legalCfg.ogrnLen} цифр)</span></Label>
-                    <Input value={form.business_ogrn} onChange={(e) => update("business_ogrn", e.target.value.replace(/\D/g, "").slice(0, legalCfg.ogrnLen))}
-                      placeholder={"0".repeat(legalCfg.ogrnLen)} className="text-sm h-9 font-mono" maxLength={legalCfg.ogrnLen} />
-                    {form.business_ogrn.length > 0 && form.business_ogrn.length !== legalCfg.ogrnLen && (
-                      <p className="text-[10px] text-warning">{form.business_ogrn.length}/{legalCfg.ogrnLen} цифр</p>
+                {form.business_type && (
+                  <div className={`grid gap-4 ${legalCfg.showOgrn ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1 sm:grid-cols-2"}`}>
+                    <div className="space-y-1.5">
+                      <Label className="text-sm font-medium">ИНН * <span className="text-muted-foreground font-normal text-xs">({legalCfg.innLen} цифр)</span></Label>
+                      <Input value={form.business_inn} onChange={(e) => update("business_inn", e.target.value.replace(/\D/g, "").slice(0, legalCfg.innLen))}
+                        placeholder={"0".repeat(legalCfg.innLen)} className="h-10 font-mono" maxLength={legalCfg.innLen} />
+                      {form.business_inn.length > 0 && form.business_inn.length !== legalCfg.innLen && (
+                        <p className="text-xs text-warning">{form.business_inn.length}/{legalCfg.innLen} цифр</p>
+                      )}
+                    </div>
+                    {legalCfg.showOgrn && (
+                      <div className="space-y-1.5">
+                        <Label className="text-sm font-medium">{legalCfg.ogrnLabel} * <span className="text-muted-foreground font-normal text-xs">({legalCfg.ogrnLen} цифр)</span></Label>
+                        <Input value={form.business_ogrn} onChange={(e) => update("business_ogrn", e.target.value.replace(/\D/g, "").slice(0, legalCfg.ogrnLen))}
+                          placeholder={"0".repeat(legalCfg.ogrnLen)} className="h-10 font-mono" maxLength={legalCfg.ogrnLen} />
+                        {form.business_ogrn.length > 0 && form.business_ogrn.length !== legalCfg.ogrnLen && (
+                          <p className="text-xs text-warning">{form.business_ogrn.length}/{legalCfg.ogrnLen} цифр</p>
+                        )}
+                      </div>
                     )}
                   </div>
                 )}
-              </div>
-            )}
-            {!form.business_type && (
-              <p className="text-xs text-muted-foreground py-2">Выберите форму собственности, чтобы заполнить реквизиты</p>
-            )}
-            <VerifyResult state={verifyStates.business} successText="Реквизиты подтверждены" errorText="Проверьте заполнение полей" />
-            {isLegalFieldsValid(form) && !form.business_verified && verifyStates.business !== "success" && (
-              <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" onClick={() => mockVerify("business")} disabled={verifyStates.business === "loading"}>
-                <ShieldCheck className="h-3.5 w-3.5" />
-                {dirty ? "Сохранить и проверить" : "Проверить"}
-              </Button>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* ──────── 3. Banking ──────── */}
-        <Card className="flex flex-col">
-          <CardHeader className="pb-1 pt-3 px-4">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <Landmark className="h-4 w-4 text-primary" /> Банковские реквизиты
-              <StatusBadge status={bankStatus} />
-              <PrivacyLabel isPublic={false} />
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-3 space-y-2.5 flex-1">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs">БИК * <span className="text-muted-foreground font-normal">(9 цифр)</span></Label>
-                <div className="flex items-center gap-1.5">
-                  <Input value={form.bank_bik} onChange={(e) => handleBikChange(e.target.value)}
-                    placeholder="044525974" className="text-sm h-9 font-mono flex-1" maxLength={9} />
-                  {form.bank_bik.length === 9 && (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button type="button" size="sm" variant="ghost" className="h-9 w-9 p-0 flex-shrink-0"
-                          onClick={() => { navigator.clipboard.writeText(form.bank_bik); toast.success("БИК скопирован"); }}>
-                          <Copy className="h-3.5 w-3.5" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent><p className="text-xs">Копировать</p></TooltipContent>
-                    </Tooltip>
-                  )}
-                </div>
-                {form.bank_bik.length > 0 && form.bank_bik.length !== 9 && (
-                  <p className="text-[10px] text-warning">{form.bank_bik.length}/9 цифр</p>
+                {!form.business_type && (
+                  <p className="text-sm text-muted-foreground py-1">Выберите форму собственности, чтобы заполнить реквизиты</p>
                 )}
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Банк</Label>
-                <div className="relative">
-                  <Input value={form.bank_name} readOnly
-                    placeholder={bikLoading ? "Определяется…" : "Заполнится автоматически по БИК"}
-                    className="text-sm h-9 bg-muted/30 cursor-not-allowed" />
-                  {bikLoading && <Loader2 className="h-3.5 w-3.5 animate-spin absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />}
-                </div>
-                <p className="text-[10px] text-muted-foreground"><Info className="h-2.5 w-2.5 inline mr-0.5 -mt-px" />Определяется автоматически по БИК</p>
-              </div>
-            </div>
-
-            {/* Account numbers with show/hide toggle and copy */}
-            <div className="flex items-center gap-2 mb-1">
-              <Label className="text-xs text-muted-foreground">Номера счетов</Label>
-              <button type="button" onClick={() => setShowBankNumbers(!showBankNumbers)}
-                className="text-muted-foreground hover:text-foreground transition-colors">
-                {showBankNumbers ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
-              </button>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs">Расчётный счёт * <span className="text-muted-foreground font-normal">(20 цифр)</span></Label>
-                <div className="flex items-center gap-1.5">
-                  <Input
-                    value={showBankNumbers || !form.bank_account ? form.bank_account : form.bank_account.slice(0, 4) + " •••• •••• •••• " + form.bank_account.slice(-4)}
-                    onChange={showBankNumbers ? (e) => update("bank_account", e.target.value.replace(/\D/g, "").slice(0, 20)) : undefined}
-                    readOnly={!showBankNumbers}
-                    placeholder="40802810..."
-                    className={`text-sm h-9 font-mono flex-1 ${!showBankNumbers && form.bank_account ? "bg-muted/30 cursor-not-allowed" : ""}`}
-                    maxLength={20}
-                  />
-                  {form.bank_account.length === 20 && (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button type="button" size="sm" variant="ghost" className="h-9 w-9 p-0 flex-shrink-0"
-                          onClick={() => { navigator.clipboard.writeText(form.bank_account); toast.success("Счёт скопирован"); }}>
-                          <Copy className="h-3.5 w-3.5" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent><p className="text-xs">Копировать</p></TooltipContent>
-                    </Tooltip>
-                  )}
-                </div>
-                {showBankNumbers && form.bank_account.length > 0 && form.bank_account.length !== 20 && (
-                  <p className="text-[10px] text-warning">{form.bank_account.length}/20 цифр</p>
-                )}
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Корр. счёт <span className="text-muted-foreground font-normal">(20 цифр)</span></Label>
-                <div className="flex items-center gap-1.5">
-                  <Input
-                    value={showBankNumbers || !form.bank_corr_account ? form.bank_corr_account : form.bank_corr_account.slice(0, 4) + " •••• •••• •••• " + form.bank_corr_account.slice(-4)}
-                    onChange={showBankNumbers ? (e) => update("bank_corr_account", e.target.value.replace(/\D/g, "").slice(0, 20)) : undefined}
-                    readOnly={!showBankNumbers}
-                    placeholder="30101810..."
-                    className={`text-sm h-9 font-mono flex-1 ${!showBankNumbers && form.bank_corr_account ? "bg-muted/30 cursor-not-allowed" : ""}`}
-                    maxLength={20}
-                  />
-                  {form.bank_corr_account.length === 20 && (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button type="button" size="sm" variant="ghost" className="h-9 w-9 p-0 flex-shrink-0"
-                          onClick={() => { navigator.clipboard.writeText(form.bank_corr_account); toast.success("Корр. счёт скопирован"); }}>
-                          <Copy className="h-3.5 w-3.5" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent><p className="text-xs">Копировать</p></TooltipContent>
-                    </Tooltip>
-                  )}
-                </div>
-                {showBankNumbers && form.bank_corr_account.length > 0 && form.bank_corr_account.length !== 20 && (
-                  <p className="text-[10px] text-warning">{form.bank_corr_account.length}/20 цифр</p>
-                )}
-              </div>
-            </div>
-            <VerifyResult state={verifyStates.bank} successText="Банк подтверждён" errorText="Проверьте заполнение" />
-            {isBankFieldsValid(form) && !form.bank_verified && verifyStates.bank !== "success" && (
-              <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" onClick={() => mockVerify("bank")} disabled={verifyStates.bank === "loading"}>
-                <ShieldCheck className="h-3.5 w-3.5" />
-                {dirty ? "Сохранить и проверить" : "Проверить"}
-              </Button>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* ──────── 4. ORD ──────── */}
-        <Card className="flex flex-col">
-          <CardHeader className="pb-1 pt-3 px-4">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <ShieldCheck className="h-4 w-4 text-primary" /> ОРД — Маркировка рекламы
-              <StatusBadge status={ordStatus} />
-              <PrivacyLabel isPublic={false} />
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-3 space-y-3 flex-1">
-            {!form.ord_verified && verifyStates.ord !== "success" ? (
-              <>
-                <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2">
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    <span className="font-medium text-card-foreground">ОРД (Оператор рекламных данных)</span> — обязательная система маркировки рекламы в РФ.
-                    Выберите провайдера и подключитесь.
-                  </p>
-                </div>
-                {/* Provider selection as radio-like chips */}
-                <div className="space-y-1">
-                  <Label className="text-xs">Провайдер ОРД *</Label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {ORD_PROVIDERS.map((p) => {
-                      const selected = form.ord_identifier === p.id;
-                      return (
-                        <button key={p.id} type="button"
-                          onClick={() => update("ord_identifier", p.id)}
-                          className={`text-[11px] px-2.5 py-1 rounded-md border transition-colors ${
-                            selected
-                              ? "border-primary bg-primary/15 text-primary font-medium"
-                              : "border-border bg-muted/20 text-muted-foreground hover:border-primary/40 hover:text-foreground"
-                          }`}>
-                          {selected && <CheckCircle2 className="h-3 w-3 inline mr-1 -mt-px" />}
-                          {p.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {/* Or custom input */}
-                  {form.ord_identifier && !ORD_PROVIDERS.some((p) => p.id === form.ord_identifier) && (
-                    <p className="text-[10px] text-muted-foreground">Пользовательский: {form.ord_identifier}</p>
-                  )}
-                  <div className="pt-1">
-                    <Input value={ORD_PROVIDERS.some((p) => p.id === form.ord_identifier) ? "" : form.ord_identifier}
-                      onChange={(e) => update("ord_identifier", e.target.value)}
-                      placeholder="Или введите идентификатор вручную" className="text-sm h-8 bg-background" maxLength={100} />
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Токен доступа</Label>
-                  <div className="relative">
-                    <Input value={form.ord_token} onChange={(e) => update("ord_token", e.target.value)}
-                      placeholder="••••••••" className="text-sm h-9 pr-9" maxLength={500}
-                      type={showOrdToken ? "text" : "password"} />
-                    <button type="button" onClick={() => setShowOrdToken(!showOrdToken)}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
-                      {showOrdToken ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                    </button>
-                  </div>
-                </div>
-                <VerifyResult state={verifyStates.ord} successText="ОРД подключён" errorText="Проверьте идентификатор" />
-                <Button size="sm" className="gap-1.5 h-9 text-xs" onClick={() => mockVerify("ord")}
-                  disabled={verifyStates.ord === "loading" || !form.ord_identifier}>
-                  <PlugZap className="h-3.5 w-3.5" />
-                  {dirty ? "Сохранить и подключить" : "Подключить ОРД"}
-                </Button>
-              </>
-            ) : (
-              <>
-                <div className="rounded-lg border border-success/20 bg-success/5 p-3 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-success" />
-                      <span className="text-xs font-medium text-card-foreground">ОРД подключён</span>
-                    </div>
-                    <Badge variant="outline" className="text-[9px] border-success/30 text-success bg-success/10">Активен</Badge>
-                  </div>
-                  <div className="text-xs text-muted-foreground space-y-1">
-                    <p>Провайдер: <span className="text-card-foreground">{ORD_PROVIDERS.find((p) => p.id === form.ord_identifier)?.label || form.ord_identifier || "—"}</span></p>
-                    <p>Токен: <span className="font-mono text-card-foreground">{"•".repeat(12)}</span></p>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" onClick={() => {
-                    setForm((f) => ({ ...f, ord_verified: false }));
-                    setVerifyStates((s) => ({ ...s, ord: "idle" }));
-                  }}>
-                    <RefreshCw className="h-3 w-3" /> Переподключить
+                <VerifyResult state={verifyStates.business} successText="Реквизиты подтверждены" errorText="Проверьте заполнение полей" />
+                {isLegalFieldsValid(form) && !form.business_verified && verifyStates.business !== "success" && (
+                  <Button size="sm" variant="outline" className="gap-1.5 h-9 text-sm" onClick={() => mockVerify("business")} disabled={verifyStates.business === "loading"}>
+                    <ShieldCheck className="h-4 w-4" />
+                    {dirty ? "Сохранить и проверить" : "Проверить"}
                   </Button>
+                )}
+              </div>
+            </CollapsibleContent>
+          </div>
+        </Collapsible>
+
+        {/* ──────── 3. Banking (collapsible, default collapsed) ──────── */}
+        <Collapsible open={bankOpen} onOpenChange={setBankOpen}>
+          <div className="rounded-xl border border-border bg-card overflow-hidden">
+            <CollapsibleTrigger className="w-full flex items-center justify-between px-5 py-4 hover:bg-muted/30 transition-colors cursor-pointer">
+              <div className="flex items-center gap-3">
+                <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <Landmark className="h-4 w-4 text-primary" />
                 </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
+                <div className="text-left">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-card-foreground">Банковские реквизиты</span>
+                    <StatusBadge status={bankStatus} />
+                    <Badge variant="outline" className="text-[10px] border-muted-foreground/20 text-muted-foreground">Опционально</Badge>
+                    <PrivacyLabel isPublic={false} />
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">Для получения выплат за рекламные интеграции</p>
+                </div>
+              </div>
+              <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${bankOpen ? "rotate-180" : ""}`} />
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="px-5 pb-5 pt-1 space-y-4 border-t border-border">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-sm font-medium">БИК * <span className="text-muted-foreground font-normal text-xs">(9 цифр)</span></Label>
+                    <div className="flex items-center gap-1.5">
+                      <Input value={form.bank_bik} onChange={(e) => handleBikChange(e.target.value)}
+                        placeholder="044525974" className="h-10 font-mono flex-1" maxLength={9} />
+                      {form.bank_bik.length === 9 && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button type="button" size="sm" variant="ghost" className="h-10 w-10 p-0 flex-shrink-0"
+                              onClick={() => { navigator.clipboard.writeText(form.bank_bik); toast.success("БИК скопирован"); }}>
+                              <Copy className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent><p className="text-xs">Копировать</p></TooltipContent>
+                        </Tooltip>
+                      )}
+                    </div>
+                    {form.bank_bik.length > 0 && form.bank_bik.length !== 9 && (
+                      <p className="text-xs text-warning">{form.bank_bik.length}/9 цифр</p>
+                    )}
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-sm font-medium">Банк</Label>
+                    <div className="relative">
+                      <Input value={form.bank_name} readOnly
+                        placeholder={bikLoading ? "Определяется…" : "Заполнится по БИК"}
+                        className="h-10 bg-muted/30 cursor-not-allowed" />
+                      {bikLoading && <Loader2 className="h-4 w-4 animate-spin absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" />}
+                    </div>
+                    <p className="text-xs text-muted-foreground flex items-center gap-1"><Info className="h-3 w-3" />Определяется автоматически по БИК</p>
+                  </div>
+                </div>
+
+                {/* Account numbers with show/hide + copy */}
+                <div className="flex items-center gap-2">
+                  <Label className="text-sm font-medium text-muted-foreground">Номера счетов</Label>
+                  <button type="button" onClick={() => setShowBankNumbers(!showBankNumbers)}
+                    className="text-muted-foreground hover:text-foreground transition-colors">
+                    {showBankNumbers ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-sm font-medium">Расчётный счёт * <span className="text-muted-foreground font-normal text-xs">(20 цифр)</span></Label>
+                    <div className="flex items-center gap-1.5">
+                      <Input
+                        value={showBankNumbers || !form.bank_account ? form.bank_account : form.bank_account.slice(0, 4) + " •••• •••• •••• " + form.bank_account.slice(-4)}
+                        onChange={showBankNumbers ? (e) => update("bank_account", e.target.value.replace(/\D/g, "").slice(0, 20)) : undefined}
+                        readOnly={!showBankNumbers}
+                        placeholder="40802810..."
+                        className={`h-10 font-mono flex-1 ${!showBankNumbers && form.bank_account ? "bg-muted/30 cursor-not-allowed" : ""}`}
+                        maxLength={20}
+                      />
+                      {form.bank_account.length === 20 && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button type="button" size="sm" variant="ghost" className="h-10 w-10 p-0 flex-shrink-0"
+                              onClick={() => { navigator.clipboard.writeText(form.bank_account); toast.success("Счёт скопирован"); }}>
+                              <Copy className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent><p className="text-xs">Копировать</p></TooltipContent>
+                        </Tooltip>
+                      )}
+                    </div>
+                    {showBankNumbers && form.bank_account.length > 0 && form.bank_account.length !== 20 && (
+                      <p className="text-xs text-warning">{form.bank_account.length}/20 цифр</p>
+                    )}
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-sm font-medium">Корр. счёт <span className="text-muted-foreground font-normal text-xs">(20 цифр)</span></Label>
+                    <div className="flex items-center gap-1.5">
+                      <Input
+                        value={showBankNumbers || !form.bank_corr_account ? form.bank_corr_account : form.bank_corr_account.slice(0, 4) + " •••• •••• •••• " + form.bank_corr_account.slice(-4)}
+                        onChange={showBankNumbers ? (e) => update("bank_corr_account", e.target.value.replace(/\D/g, "").slice(0, 20)) : undefined}
+                        readOnly={!showBankNumbers}
+                        placeholder="30101810..."
+                        className={`h-10 font-mono flex-1 ${!showBankNumbers && form.bank_corr_account ? "bg-muted/30 cursor-not-allowed" : ""}`}
+                        maxLength={20}
+                      />
+                      {form.bank_corr_account.length === 20 && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button type="button" size="sm" variant="ghost" className="h-10 w-10 p-0 flex-shrink-0"
+                              onClick={() => { navigator.clipboard.writeText(form.bank_corr_account); toast.success("Корр. счёт скопирован"); }}>
+                              <Copy className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent><p className="text-xs">Копировать</p></TooltipContent>
+                        </Tooltip>
+                      )}
+                    </div>
+                    {showBankNumbers && form.bank_corr_account.length > 0 && form.bank_corr_account.length !== 20 && (
+                      <p className="text-xs text-warning">{form.bank_corr_account.length}/20 цифр</p>
+                    )}
+                  </div>
+                </div>
+                <VerifyResult state={verifyStates.bank} successText="Банк подтверждён" errorText="Проверьте заполнение" />
+                {isBankFieldsValid(form) && !form.bank_verified && verifyStates.bank !== "success" && (
+                  <Button size="sm" variant="outline" className="gap-1.5 h-9 text-sm" onClick={() => mockVerify("bank")} disabled={verifyStates.bank === "loading"}>
+                    <ShieldCheck className="h-4 w-4" />
+                    {dirty ? "Сохранить и проверить" : "Проверить"}
+                  </Button>
+                )}
+              </div>
+            </CollapsibleContent>
+          </div>
+        </Collapsible>
+
+        {/* ──────── 4. ORD (collapsible, default collapsed) ──────── */}
+        <Collapsible open={ordOpen} onOpenChange={setOrdOpen}>
+          <div className="rounded-xl border border-border bg-card overflow-hidden">
+            <CollapsibleTrigger className="w-full flex items-center justify-between px-5 py-4 hover:bg-muted/30 transition-colors cursor-pointer">
+              <div className="flex items-center gap-3">
+                <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <ShieldCheck className="h-4 w-4 text-primary" />
+                </div>
+                <div className="text-left">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-card-foreground">ОРД — Маркировка рекламы</span>
+                    <StatusBadge status={ordStatus} />
+                    <Badge variant="outline" className="text-[10px] border-muted-foreground/20 text-muted-foreground">Опционально</Badge>
+                    <PrivacyLabel isPublic={false} />
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">Оператор рекламных данных для маркировки</p>
+                </div>
+              </div>
+              <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${ordOpen ? "rotate-180" : ""}`} />
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="px-5 pb-5 pt-1 space-y-4 border-t border-border">
+                {!form.ord_verified && verifyStates.ord !== "success" ? (
+                  <>
+                    <div className="rounded-lg border border-border bg-muted/20 p-3">
+                      <p className="text-sm text-muted-foreground leading-relaxed">
+                        <span className="font-medium text-card-foreground">ОРД (Оператор рекламных данных)</span> — обязательная система маркировки рекламы в РФ.
+                        Выберите провайдера и подключитесь.
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">Провайдер ОРД *</Label>
+                      <div className="flex flex-wrap gap-2">
+                        {ORD_PROVIDERS.map((p) => {
+                          const selected = form.ord_identifier === p.id;
+                          return (
+                            <button key={p.id} type="button"
+                              onClick={() => update("ord_identifier", p.id)}
+                              className={`text-sm px-3 py-1.5 rounded-lg border transition-colors ${
+                                selected
+                                  ? "border-primary bg-primary/15 text-primary font-medium"
+                                  : "border-border bg-muted/20 text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                              }`}>
+                              {selected && <CheckCircle2 className="h-3.5 w-3.5 inline mr-1.5 -mt-px" />}
+                              {p.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {form.ord_identifier && !ORD_PROVIDERS.some((p) => p.id === form.ord_identifier) && (
+                        <p className="text-xs text-muted-foreground">Пользовательский: {form.ord_identifier}</p>
+                      )}
+                      <div className="pt-1">
+                        <Input value={ORD_PROVIDERS.some((p) => p.id === form.ord_identifier) ? "" : form.ord_identifier}
+                          onChange={(e) => update("ord_identifier", e.target.value)}
+                          placeholder="Или введите идентификатор вручную" className="h-10" maxLength={100} />
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-sm font-medium">Токен доступа</Label>
+                      <div className="relative">
+                        <Input value={form.ord_token} onChange={(e) => update("ord_token", e.target.value)}
+                          placeholder="••••••••" className="h-10 pr-10" maxLength={500}
+                          type={showOrdToken ? "text" : "password"} />
+                        <button type="button" onClick={() => setShowOrdToken(!showOrdToken)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                          {showOrdToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
+                    </div>
+                    <VerifyResult state={verifyStates.ord} successText="ОРД подключён" errorText="Проверьте идентификатор" />
+                    <Button size="sm" className="gap-1.5 h-10 text-sm" onClick={() => mockVerify("ord")}
+                      disabled={verifyStates.ord === "loading" || !form.ord_identifier}>
+                      <PlugZap className="h-4 w-4" />
+                      {dirty ? "Сохранить и подключить" : "Подключить ОРД"}
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <div className="rounded-lg border border-success/20 bg-success/5 p-4 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="h-4 w-4 text-success" />
+                          <span className="text-sm font-medium text-card-foreground">ОРД подключён</span>
+                        </div>
+                        <Badge variant="outline" className="text-[10px] border-success/30 text-success bg-success/10">Активен</Badge>
+                      </div>
+                      <div className="text-sm text-muted-foreground space-y-1">
+                        <p>Провайдер: <span className="text-card-foreground">{ORD_PROVIDERS.find((p) => p.id === form.ord_identifier)?.label || form.ord_identifier || "—"}</span></p>
+                        <p>Токен: <span className="font-mono text-card-foreground">{"•".repeat(12)}</span></p>
+                      </div>
+                    </div>
+                    <Button size="sm" variant="outline" className="gap-1.5 h-9 text-sm" onClick={() => {
+                      setForm((f) => ({ ...f, ord_verified: false }));
+                      setVerifyStates((s) => ({ ...s, ord: "idle" }));
+                    }}>
+                      <RefreshCw className="h-3.5 w-3.5" /> Переподключить
+                    </Button>
+                  </>
+                )}
+              </div>
+            </CollapsibleContent>
+          </div>
+        </Collapsible>
       </div>
     </div>
   );
