@@ -31,6 +31,12 @@ const BUSINESS_CATEGORIES: Record<string, string> = {
   entertainment: "Развлечения", realty: "Недвижимость", auto: "Авто", other: "Другое",
 };
 
+const OFFER_TYPE_LABELS: Record<string, string> = {
+  video: "Видео-интеграция",
+  post: "Пост",
+  podcast: "Подкаст",
+};
+
 const SORT_OPTIONS = [
   { value: "recommended", label: "Рекомендовано" },
   { value: "cheapest", label: "По цене (↑)" },
@@ -50,6 +56,32 @@ interface ProfileRow {
   geo: string | null;
   verified: boolean | null;
   content_count: number | null;
+  response_hours: number | null;
+  safe_deal: boolean | null;
+  deals_count: number | null;
+}
+
+interface OfferRow {
+  creator_id: string;
+  offer_type: string;
+  price: number;
+  turnaround_days: number;
+}
+
+interface PlatformRow {
+  creator_id: string;
+  platform_name: string;
+  subscriber_count: number;
+  avg_views: number | null;
+}
+
+interface CreatorMeta {
+  responseHours: number;
+  dealsCount: number;
+  safeDeal: boolean;
+  offers: { type: string; price: number; turnaroundDays: number }[];
+  minPrice: number | null;
+  platforms: { name: string; metric: string }[];
 }
 
 interface FilterState {
@@ -90,28 +122,33 @@ const fmt = (n: number | null) => {
   return String(n);
 };
 
-// Simulated data helpers (would come from DB in production)
-function getCreatorMeta(userId: string) {
-  const hash = userId.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
-  const responseHours = [2, 4, 6, 8, 12, 24][(hash) % 6];
-  const dealsCount = (hash % 20);
-  const safeDeal = hash % 3 !== 0;
+/** Build creator meta from real DB data */
+function buildCreatorMeta(
+  profile: ProfileRow,
+  offersMap: Map<string, OfferRow[]>,
+  platformsMap: Map<string, PlatformRow[]>,
+): CreatorMeta {
+  const offers = (offersMap.get(profile.user_id) || []).map((o) => ({
+    type: OFFER_TYPE_LABELS[o.offer_type] || o.offer_type,
+    price: o.price,
+    turnaroundDays: o.turnaround_days,
+  }));
 
-  // Only 3 offer types: Video integration, Post, Podcast
-  const offers: { type: string; price: number; turnaroundDays: number }[] = [];
-  const priceBase = [5000, 10000, 15000, 25000, 50000][(hash) % 5];
-  if (hash % 3 !== 0) offers.push({ type: "Видео-интеграция", price: priceBase, turnaroundDays: [5, 7, 10, 14][(hash) % 4] });
-  if (hash % 4 !== 0) offers.push({ type: "Пост", price: Math.round(priceBase * 0.4), turnaroundDays: [1, 2, 3, 5][(hash) % 4] });
-  if (hash % 5 === 0) offers.push({ type: "Подкаст", price: Math.round(priceBase * 0.7), turnaroundDays: [7, 10, 14][(hash) % 3] });
+  const platforms = (platformsMap.get(profile.user_id) || []).map((p) => ({
+    name: p.platform_name,
+    metric: fmt(p.subscriber_count) || "0",
+  }));
 
   const minPrice = offers.length > 0 ? Math.min(...offers.map((o) => o.price)) : null;
 
-  const platforms: { name: string; metric: string }[] = [];
-  if (hash % 3 !== 0) platforms.push({ name: "TG", metric: fmt(((hash * 137) % 50000) + 1000) || "1K" });
-  if (hash % 4 !== 0) platforms.push({ name: "YT", metric: fmt(((hash * 89) % 100000) + 500) || "500" });
-  if (hash % 5 === 0) platforms.push({ name: "Подкаст", metric: fmt(((hash * 53) % 30000) + 2000) || "2K" });
-
-  return { responseHours, dealsCount, safeDeal, offers, minPrice, platforms: platforms.slice(0, 3) };
+  return {
+    responseHours: profile.response_hours || 24,
+    dealsCount: profile.deals_count || 0,
+    safeDeal: profile.safe_deal || false,
+    offers,
+    minPrice,
+    platforms: platforms.slice(0, 3),
+  };
 }
 
 /* ── Verification Banner ── */
@@ -198,35 +235,29 @@ function FilterDrawerContent({ filters, setFilters, onApply, onReset }: {
 }
 
 /* ── Quick View Modal ── */
-function QuickViewModal({ creator, open, onClose, isVerified, categoryLabel, onPropose }: {
-  creator: ProfileRow; open: boolean; onClose: () => void; isVerified: boolean; categoryLabel?: string;
+function QuickViewModal({ creator, meta, open, onClose, isVerified, categoryLabel, onPropose }: {
+  creator: ProfileRow; meta: CreatorMeta; open: boolean; onClose: () => void; isVerified: boolean; categoryLabel?: string;
   onPropose: () => void;
 }) {
-  const meta = getCreatorMeta(creator.user_id);
-
-  // Build metrics that have data
   const metrics: { icon: React.ReactNode; label: string; value: string }[] = [];
-  const tgPlatform = meta.platforms.find((p) => p.name === "TG");
-  const ytPlatform = meta.platforms.find((p) => p.name === "YT");
+  const tgPlatform = meta.platforms.find((p) => p.name === "TG" || p.name === "Telegram");
+  const ytPlatform = meta.platforms.find((p) => p.name === "YT" || p.name === "YouTube");
   if (tgPlatform) metrics.push({ icon: <Users className="h-4 w-4" />, label: "TG подписчики", value: tgPlatform.metric });
   if (ytPlatform) metrics.push({ icon: <Eye className="h-4 w-4" />, label: "YT avg views", value: ytPlatform.metric });
   if (meta.dealsCount > 0) metrics.push({ icon: <Handshake className="h-4 w-4" />, label: "Сделки завершены", value: String(meta.dealsCount) });
   if (meta.responseHours > 0) metrics.push({ icon: <Clock className="h-4 w-4" />, label: "Среднее время ответа", value: `~${meta.responseHours} ч` });
 
-  // Turnaround from offer data
   const turnaroundMap = new Map<string, string>();
   for (const o of meta.offers) {
     turnaroundMap.set(o.type, `${o.turnaroundDays} дн`);
   }
 
-  // Best fit line from niches
   const niches = (creator.niche || []).slice(0, 4);
   const bestFitLine = niches.length > 0 ? `Подходит для: ${niches.join(" / ")}` : null;
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-[760px]">
-        {/* 1) Header */}
         <DialogHeader>
           <DialogTitle className="flex items-center gap-3">
             <img
@@ -260,7 +291,6 @@ function QuickViewModal({ creator, open, onClose, isVerified, categoryLabel, onP
         </DialogHeader>
 
         <div className="space-y-5 mt-3">
-          {/* 2) Metrics grid — only cells with data */}
           {metrics.length > 0 ? (
             <div className="grid grid-cols-2 gap-2.5">
               {metrics.map((m) => (
@@ -277,7 +307,6 @@ function QuickViewModal({ creator, open, onClose, isVerified, categoryLabel, onP
             <p className="text-[13px] text-muted-foreground/60 italic">Аналитика не подключена</p>
           )}
 
-          {/* 3) Offers preview — Video / Post / Podcast only */}
           <div className="space-y-2">
             <p className="text-[12px] font-semibold text-muted-foreground uppercase tracking-wider">Размещения</p>
             {meta.offers.length > 0 ? (
@@ -301,12 +330,10 @@ function QuickViewModal({ creator, open, onClose, isVerified, categoryLabel, onP
             )}
           </div>
 
-          {/* 4) Best fit line */}
           {bestFitLine && (
             <p className="text-[13px] text-muted-foreground italic">{bestFitLine}</p>
           )}
 
-          {/* Footer actions */}
           <div className="flex gap-3 pt-3 border-t border-border">
             <Button className="flex-1 h-10 text-[15px]" disabled={!isVerified} onClick={() => { onClose(); onPropose(); }}>
               <MessageSquarePlus className="h-4 w-4 mr-2" />Предложить сделку
@@ -334,19 +361,17 @@ function MetricCell({ icon, label, value }: { icon: React.ReactNode; label: stri
 }
 
 /* ── Creator Card ── */
-function CreatorCard({ creator, isVerified, categoryLabel, matchReasons }: {
-  creator: ProfileRow; isVerified: boolean; categoryLabel?: string; matchReasons?: string[];
+function CreatorCard({ creator, meta, isVerified, categoryLabel, matchReasons }: {
+  creator: ProfileRow; meta: CreatorMeta; isVerified: boolean; categoryLabel?: string; matchReasons?: string[];
 }) {
   const [quickView, setQuickView] = useState(false);
   const [proposalOpen, setProposalOpen] = useState(false);
-  const meta = getCreatorMeta(creator.user_id);
   const hasNiche = (creator.niche || []).length > 0;
 
   return (
     <>
       <Card className="overflow-hidden hover:border-primary/30 transition-colors group">
         <CardContent className="p-3.5 space-y-2.5">
-          {/* Header: Avatar + Name + Response time */}
           <div className="flex items-start gap-3">
             <img
               src={creator.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${creator.user_id}`}
@@ -369,7 +394,6 @@ function CreatorCard({ creator, isVerified, categoryLabel, matchReasons }: {
             )}
           </div>
 
-          {/* Badges: Safe deal + Platform-only + niche tags */}
           <div className="flex flex-wrap gap-1">
             <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 gap-0.5 border-primary/40 text-primary">
               <Lock className="h-2.5 w-2.5" />Platform-only
@@ -385,7 +409,6 @@ function CreatorCard({ creator, isVerified, categoryLabel, matchReasons }: {
             {categoryLabel && <Badge variant="outline" className="text-[11px] px-1.5 py-0 h-5">{categoryLabel}</Badge>}
           </div>
 
-          {/* Platforms mini-row */}
           {meta.platforms.length > 0 ? (
             <div className="flex gap-2">
               {meta.platforms.map((p) => (
@@ -399,7 +422,6 @@ function CreatorCard({ creator, isVerified, categoryLabel, matchReasons }: {
             <p className="text-[12px] text-muted-foreground/60 italic">Аналитика не подключена</p>
           )}
 
-          {/* Offers row (only Video / Post / Podcast) */}
           {meta.offers.length > 0 ? (
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
               {meta.offers.map((o) => (
@@ -413,7 +435,6 @@ function CreatorCard({ creator, isVerified, categoryLabel, matchReasons }: {
             <p className="text-[13px] text-muted-foreground">Цена по запросу</p>
           )}
 
-          {/* Reliability signals (no rating) */}
           {(meta.dealsCount > 0 || meta.responseHours > 0) && (
             <div className="flex items-center gap-3 text-[12px] text-muted-foreground">
               {meta.dealsCount > 0 && (
@@ -422,7 +443,6 @@ function CreatorCard({ creator, isVerified, categoryLabel, matchReasons }: {
             </div>
           )}
 
-          {/* Match reasons (brief results mode) */}
           {matchReasons && matchReasons.length > 0 && (
             <div className="bg-primary/5 border border-primary/20 rounded-md px-3 py-2 space-y-0.5">
               {matchReasons.map((reason, i) => (
@@ -433,7 +453,6 @@ function CreatorCard({ creator, isVerified, categoryLabel, matchReasons }: {
             </div>
           )}
 
-          {/* Footer actions */}
           <div className="flex items-center justify-between pt-1.5 border-t border-border/50">
             <div className="flex items-center gap-1.5">
               <Button size="sm" variant="ghost" className="text-[12px] h-7 px-2" asChild>
@@ -457,7 +476,7 @@ function CreatorCard({ creator, isVerified, categoryLabel, matchReasons }: {
         </CardContent>
       </Card>
 
-      <QuickViewModal creator={creator} open={quickView} onClose={() => setQuickView(false)}
+      <QuickViewModal creator={creator} meta={meta} open={quickView} onClose={() => setQuickView(false)}
         isVerified={isVerified} categoryLabel={categoryLabel} onPropose={() => setProposalOpen(true)} />
 
       <DealProposalForm
@@ -482,12 +501,10 @@ const PLACEMENT_TYPE_MAP: Record<string, string> = {
   podcast: "Подкаст",
 };
 
-function getMatchReasons(creator: ProfileRow, brief: BriefData): string[] {
-  const meta = getCreatorMeta(creator.user_id);
+function getMatchReasons(creator: ProfileRow, brief: BriefData, meta: CreatorMeta): string[] {
   const reasons: string[] = [];
   const targetType = PLACEMENT_TYPE_MAP[brief.placementType];
 
-  // Check if creator has the requested offer type within budget
   const matchingOffer = meta.offers.find((o) => o.type === targetType);
   if (matchingOffer) {
     if (brief.budgetMax > 0 && matchingOffer.price <= brief.budgetMax) {
@@ -497,56 +514,45 @@ function getMatchReasons(creator: ProfileRow, brief: BriefData): string[] {
     }
   }
 
-  // Niche match
   if (brief.niches.length > 0) {
     const matching = (creator.niche || []).filter((n) => brief.niches.includes(n));
     if (matching.length > 0) reasons.push(`Ниша совпадает: ${matching.slice(0, 2).join(", ")}`);
   }
 
-  // Geo match
   if (brief.geos.length > 0 && creator.geo && brief.geos.includes(creator.geo)) {
     reasons.push(`Регион: ${creator.geo}`);
   }
 
-  // Response time match
   if (brief.turnaroundDays > 0 && meta.responseHours <= brief.turnaroundDays * 24) {
     if (meta.responseHours <= 12) reasons.push(`Быстрый ответ (~${meta.responseHours} ч)`);
   }
 
-  return reasons.slice(0, 2); // max 2 reasons
+  return reasons.slice(0, 2);
 }
 
-function matchesBrief(creator: ProfileRow, brief: BriefData): boolean {
-  const meta = getCreatorMeta(creator.user_id);
+function matchesBrief(creator: ProfileRow, brief: BriefData, meta: CreatorMeta): boolean {
   const targetType = PLACEMENT_TYPE_MAP[brief.placementType];
 
-  // Must have the requested offer type
   const hasOffer = meta.offers.some((o) => o.type === targetType);
-  if (!hasOffer && meta.offers.length > 0) return false; // has offers but not the right type — skip
-  // If no offers at all, still include (price on request)
+  if (!hasOffer && meta.offers.length > 0) return false;
 
-  // Budget filter
   if (brief.budgetMax > 0 && brief.budgetMax < 500000) {
     const matchingOffer = meta.offers.find((o) => o.type === targetType);
     if (matchingOffer && matchingOffer.price > brief.budgetMax) return false;
   }
 
-  // Niche filter
   if (brief.niches.length > 0) {
     const match = (creator.niche || []).some((n) => brief.niches.includes(n));
     if (!match) return false;
   }
 
-  // Geo filter
   if (brief.geos.length > 0) {
     if (!creator.geo || !brief.geos.includes(creator.geo)) return false;
   }
 
-  // Audience size
   if (brief.audienceMin > 0 && (creator.followers || 0) < brief.audienceMin) return false;
   if (brief.audienceMax < 1000000 && (creator.followers || 0) > brief.audienceMax) return false;
 
-  // Exclude no analytics
   if (brief.excludeNoAnalytics && meta.platforms.length === 0) return false;
 
   return true;
@@ -563,20 +569,52 @@ export function BirzhaTab({ isVerified, onGoToSettings }: { isVerified: boolean;
   const [appliedFilters, setAppliedFilters] = useState<FilterState>({ ...defaultFilters });
   const [drawerOpen, setDrawerOpen] = useState(false);
 
+  // Real data from DB
+  const [offersMap, setOffersMap] = useState<Map<string, OfferRow[]>>(new Map());
+  const [platformsMap, setPlatformsMap] = useState<Map<string, PlatformRow[]>>(new Map());
+
   // Brief wizard state
   const [briefOpen, setBriefOpen] = useState(false);
   const [activeBrief, setActiveBrief] = useState<BriefData | null>(null);
 
   useEffect(() => {
-    const fetchProfiles = async () => {
+    const fetchAll = async () => {
       setLoading(true);
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("user_id, display_name, bio, avatar_url, niche, followers, reach, geo, verified, content_count");
-      if (!error && data) setProfiles(data as ProfileRow[]);
+
+      // Fetch profiles, offers, platforms in parallel
+      const [profilesRes, offersRes, platformsRes] = await Promise.all([
+        supabase.from("profiles").select("user_id, display_name, bio, avatar_url, niche, followers, reach, geo, verified, content_count, response_hours, safe_deal, deals_count"),
+        supabase.from("creator_offers").select("creator_id, offer_type, price, turnaround_days").eq("is_active", true),
+        supabase.from("creator_platforms").select("creator_id, platform_name, subscriber_count, avg_views"),
+      ]);
+
+      if (profilesRes.data) setProfiles(profilesRes.data as ProfileRow[]);
+
+      // Build offers map
+      const oMap = new Map<string, OfferRow[]>();
+      if (offersRes.data) {
+        for (const row of offersRes.data) {
+          const arr = oMap.get(row.creator_id) || [];
+          arr.push(row as OfferRow);
+          oMap.set(row.creator_id, arr);
+        }
+      }
+      setOffersMap(oMap);
+
+      // Build platforms map
+      const pMap = new Map<string, PlatformRow[]>();
+      if (platformsRes.data) {
+        for (const row of platformsRes.data) {
+          const arr = pMap.get(row.creator_id) || [];
+          arr.push(row as PlatformRow);
+          pMap.set(row.creator_id, arr);
+        }
+      }
+      setPlatformsMap(pMap);
+
       setLoading(false);
     };
-    fetchProfiles();
+    fetchAll();
   }, []);
 
   useEffect(() => {
@@ -593,6 +631,11 @@ export function BirzhaTab({ isVerified, onGoToSettings }: { isVerified: boolean;
     };
     fetchCategories();
   }, [profiles]);
+
+  /** Get meta for a creator using real data */
+  const getMeta = (profile: ProfileRow): CreatorMeta => {
+    return buildCreatorMeta(profile, offersMap, platformsMap);
+  };
 
   const applyFilters = () => { setAppliedFilters({ ...filters }); setDrawerOpen(false); };
   const resetFilters = () => { setFilters({ ...defaultFilters }); setAppliedFilters({ ...defaultFilters }); };
@@ -639,15 +682,15 @@ export function BirzhaTab({ isVerified, onGoToSettings }: { isVerified: boolean;
 
     result.sort((a, b) => {
       if (sortBy === "cheapest") {
-        const pa = getCreatorMeta(a.user_id).minPrice || Infinity;
-        const pb = getCreatorMeta(b.user_id).minPrice || Infinity;
+        const pa = getMeta(a).minPrice || Infinity;
+        const pb = getMeta(b).minPrice || Infinity;
         return pa - pb;
       }
       if (sortBy === "response") {
-        return getCreatorMeta(a.user_id).responseHours - getCreatorMeta(b.user_id).responseHours;
+        return (a.response_hours || 24) - (b.response_hours || 24);
       }
       if (sortBy === "deals") {
-        return getCreatorMeta(b.user_id).dealsCount - getCreatorMeta(a.user_id).dealsCount;
+        return (b.deals_count || 0) - (a.deals_count || 0);
       }
       if (sortBy === "audience") {
         return (b.followers || 0) - (a.followers || 0);
@@ -655,18 +698,17 @@ export function BirzhaTab({ isVerified, onGoToSettings }: { isVerified: boolean;
       return (b.reach || 0) - (a.reach || 0);
     });
     return result;
-  }, [searchQuery, appliedFilters, sortBy, profiles, brandCategories]);
+  }, [searchQuery, appliedFilters, sortBy, profiles, brandCategories, offersMap, platformsMap]);
 
   // Brief-matched list
   const briefResults = useMemo(() => {
     if (!activeBrief) return [];
     return profiles
-      .filter((c) => matchesBrief(c, activeBrief))
+      .filter((c) => matchesBrief(c, activeBrief, getMeta(c)))
       .sort((a, b) => {
-        // Sort by number of match reasons (most relevant first)
-        return getMatchReasons(b, activeBrief!).length - getMatchReasons(a, activeBrief!).length;
+        return getMatchReasons(b, activeBrief!, getMeta(b)).length - getMatchReasons(a, activeBrief!, getMeta(a)).length;
       });
-  }, [activeBrief, profiles]);
+  }, [activeBrief, profiles, offersMap, platformsMap]);
 
   const activeChips = getActiveChips(appliedFilters);
   const filtersActive = hasActiveFilters(appliedFilters);
@@ -679,7 +721,6 @@ export function BirzhaTab({ isVerified, onGoToSettings }: { isVerified: boolean;
       <div className="max-w-[1200px] mx-auto px-4 py-4 space-y-3">
         {!isVerified && <VerificationBanner onGoToSettings={onGoToSettings} />}
 
-        {/* Brief results header */}
         {showBriefResults ? (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
@@ -710,7 +751,6 @@ export function BirzhaTab({ isVerified, onGoToSettings }: { isVerified: boolean;
               </div>
             </div>
 
-            {/* Brief results grid */}
             {briefResults.length === 0 ? (
               <div className="text-center py-20 space-y-3">
                 <p className="text-sm text-muted-foreground">Авторы не найдены по вашему брифу.</p>
@@ -724,9 +764,10 @@ export function BirzhaTab({ isVerified, onGoToSettings }: { isVerified: boolean;
                   <CreatorCard
                     key={creator.user_id}
                     creator={creator}
+                    meta={getMeta(creator)}
                     isVerified={isVerified}
                     categoryLabel={brandCategories[creator.user_id] ? BUSINESS_CATEGORIES[brandCategories[creator.user_id]] || brandCategories[creator.user_id] : undefined}
-                    matchReasons={getMatchReasons(creator, activeBrief)}
+                    matchReasons={getMatchReasons(creator, activeBrief, getMeta(creator))}
                   />
                 ))}
               </div>
@@ -734,7 +775,6 @@ export function BirzhaTab({ isVerified, onGoToSettings }: { isVerified: boolean;
           </div>
         ) : (
           <>
-            {/* Search bar */}
             <div className="flex items-center gap-3">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -768,7 +808,6 @@ export function BirzhaTab({ isVerified, onGoToSettings }: { isVerified: boolean;
               </Sheet>
             </div>
 
-            {/* Result count + chips */}
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-[13px] text-muted-foreground">
                 Найдено: <span className="font-medium text-foreground">{filtered.length}</span>
@@ -784,7 +823,6 @@ export function BirzhaTab({ isVerified, onGoToSettings }: { isVerified: boolean;
               )}
             </div>
 
-            {/* Grid */}
             {loading ? (
               <div className="text-center py-20 flex flex-col items-center gap-2 text-muted-foreground">
                 <Loader2 className="h-6 w-6 animate-spin" /><span className="text-sm">Загрузка авторов...</span>
@@ -801,7 +839,7 @@ export function BirzhaTab({ isVerified, onGoToSettings }: { isVerified: boolean;
             ) : (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                 {filtered.map((creator) => (
-                  <CreatorCard key={creator.user_id} creator={creator} isVerified={isVerified}
+                  <CreatorCard key={creator.user_id} creator={creator} meta={getMeta(creator)} isVerified={isVerified}
                     categoryLabel={brandCategories[creator.user_id] ? BUSINESS_CATEGORIES[brandCategories[creator.user_id]] || brandCategories[creator.user_id] : undefined} />
                 ))}
               </div>
