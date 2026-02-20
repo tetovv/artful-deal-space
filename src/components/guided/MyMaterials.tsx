@@ -84,7 +84,7 @@ export const MyMaterials = ({ onResume, onNewProject }: MyMaterialsProps) => {
       return data || [];
     },
     enabled: !!user,
-    refetchInterval: false,
+    refetchInterval: 5000, // Poll for status changes
   });
 
   const handleDelete = async (id: string) => {
@@ -209,9 +209,16 @@ export const MyMaterials = ({ onResume, onNewProject }: MyMaterialsProps) => {
                 )}
 
                 {status === "generating" && (
-                  <div className="flex items-center gap-2 text-[12px] text-primary">
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                    <span>Генерация…</span>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2 text-[12px] text-primary">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      <span>Генерация… {(proj as any).ingest_progress > 0 ? `${(proj as any).ingest_progress}%` : ""}</span>
+                    </div>
+                    {(proj as any).ingest_progress > 0 && (
+                      <div className="h-1 rounded-full bg-muted overflow-hidden">
+                        <div className="h-full bg-primary transition-all" style={{ width: `${(proj as any).ingest_progress}%` }} />
+                      </div>
+                    )}
                   </div>
                 )}
 
