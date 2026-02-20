@@ -8,9 +8,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { Plus, Trash2, Copy, Crown, Calendar, Hash, Percent } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Plus, Trash2, Copy, Crown, Calendar, Hash, Percent, BarChart3 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { PromoAnalytics } from "./PromoAnalytics";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -114,6 +116,18 @@ export function PromoCodesSection() {
           <Plus className="h-3.5 w-3.5 mr-1.5" /> Создать
         </Button>
       </div>
+
+      <Tabs defaultValue="list" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="list"><Crown className="h-3.5 w-3.5 mr-1.5" />Промокоды</TabsTrigger>
+          <TabsTrigger value="analytics"><BarChart3 className="h-3.5 w-3.5 mr-1.5" />Аналитика</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="analytics" className="mt-0">
+          <PromoAnalytics promos={promos} />
+        </TabsContent>
+
+        <TabsContent value="list" className="mt-0 space-y-4">
 
       {/* Create form */}
       {showForm && (
@@ -232,6 +246,8 @@ export function PromoCodesSection() {
           })}
         </div>
       )}
+        </TabsContent>
+      </Tabs>
     </>
   );
 }
