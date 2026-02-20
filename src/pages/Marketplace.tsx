@@ -9,7 +9,8 @@ import { creators } from "@/data/mockData";
 import {
   Search, MapPin, Users, Star, CheckCircle, Clock, Briefcase, ShieldAlert,
   Check, X, SlidersHorizontal, Shield, AlertTriangle, Eye, EyeOff,
-  ChevronDown, ChevronUp, Send, RefreshCw, FileText, MessageSquare, Handshake, Filter,
+  ChevronDown, ChevronUp, ChevronRight, Send, RefreshCw, FileText, MessageSquare, Handshake, Filter,
+  CalendarDays,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -291,6 +292,41 @@ function RateAdvertiser({ unratedDeals, completedDeals }: { unratedDeals: any[];
 /* ═══════════════════════════════════════════════════
    Creator view: Offers + Rating in tabs
    ═══════════════════════════════════════════════════ */
+/* ─── Placement type from deal title ─── */
+const placementFromTitle = (title: string): string | null => {
+  const t = title.toLowerCase();
+  if (t.includes("видео") || t.includes("video")) return "Видео";
+  if (t.includes("пост") || t.includes("post")) return "Пост";
+  if (t.includes("подкаст") || t.includes("podcast")) return "Подкаст";
+  return null;
+};
+
+/* ─── Deal status config for creator view ─── */
+type ProposalStatus = "new" | "active" | "archived";
+const getProposalStatus = (dbStatus: string): ProposalStatus => {
+  if (dbStatus === "pending") return "new";
+  if (["briefing", "in_progress", "review", "needs_changes", "accepted"].includes(dbStatus)) return "active";
+  return "archived";
+};
+const proposalStatusConfig: Record<ProposalStatus, { label: string; cls: string }> = {
+  new: { label: "Новое", cls: "bg-warning/15 text-warning border-warning/30" },
+  active: { label: "Активно", cls: "bg-primary/15 text-primary border-primary/30" },
+  archived: { label: "В архиве", cls: "bg-muted text-muted-foreground border-muted-foreground/20" },
+};
+
+/* ─── Time ago helper ─── */
+const timeAgo = (dateStr: string): string => {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "только что";
+  if (mins < 60) return `${mins} мин назад`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} ч назад`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days} дн назад`;
+  return new Date(dateStr).toLocaleDateString("ru-RU");
+};
+
 function CreatorOffers() {
   const { user, profile } = useAuth();
   const navigate = useNavigate();
@@ -298,7 +334,7 @@ function CreatorOffers() {
   const { scores: advScoresMap } = useAdvertiserScores();
   const rating = useRatingData();
 
-  const [filter, setFilter] = useState<"all" | "pending" | "active">("all");
+  const [filter, setFilter] = useState<"all" | "new" | "active" | "archived">("all");
   const [showFilters, setShowFilters] = useState(false);
   const [minBudget, setMinBudget] = useState(0);
   const [minPartnerScore, setMinPartnerScore] = useState(0);
@@ -319,10 +355,31 @@ function CreatorOffers() {
   });
   const offerProfileMap = useMemo(() => { const m = new Map<string, { display_name: string; avatar_url: string | null }>(); for (const p of offerProfiles) m.set(p.user_id, p); return m; }, [offerProfiles]);
 
+  /* Fetch brand info for advertisers */
+  const { data: brandData = [] } = useQuery({
+    queryKey: ["advertiser-brands-offers", advertiserIds],
+    queryFn: async () => {
+      if (!advertiserIds.length) return [];
+      const results = [];
+      for (const id of advertiserIds) {
+        const { data } = await supabase.rpc("get_advertiser_brand", { p_user_id: id });
+        if (data && data.length > 0) results.push(data[0]);
+      }
+      return results;
+    },
+    enabled: advertiserIds.length > 0,
+  });
+  const brandMap = useMemo(() => {
+    const m = new Map<string, { brand_name: string; brand_logo_url: string; business_verified: boolean; business_category: string }>();
+    for (const b of brandData) m.set(b.user_id, b);
+    return m;
+  }, [brandData]);
+
   const filteredDeals = useMemo(() => {
     let result = deals;
-    if (filter === "pending") result = deals.filter((d) => d.status === "pending" || d.status === "briefing");
-    if (filter === "active") result = deals.filter((d) => d.status === "in_progress" || d.status === "review");
+    if (filter === "new") result = deals.filter((d) => getProposalStatus(d.status) === "new");
+    if (filter === "active") result = deals.filter((d) => getProposalStatus(d.status) === "active");
+    if (filter === "archived") result = deals.filter((d) => getProposalStatus(d.status) === "archived");
     if (minBudget > 0) result = result.filter((d) => (d.budget || 0) >= minBudget);
     if (minPartnerScore > 0) result = result.filter((d) => { const score = advScoresMap.get(d.advertiser_id || ""); if (!score || score.partnerScore === 0) return true; return score.partnerScore >= minPartnerScore; });
     return [...result].sort((a, b) => {
@@ -357,7 +414,8 @@ function CreatorOffers() {
     setActionLoading(null);
   };
 
-  const pendingCount = deals.filter((d) => d.status === "pending").length;
+  const newCount = deals.filter((d) => d.status === "pending").length;
+  const activeCount = deals.filter((d) => getProposalStatus(d.status) === "active").length;
 
   return (
     <PageTransition>
@@ -375,7 +433,7 @@ function CreatorOffers() {
             <TabsTrigger value="offers" className="gap-1.5">
               <Briefcase className="h-3.5 w-3.5" />
               Предложения
-              {pendingCount > 0 && <Badge variant="destructive" className="ml-1 text-[10px] h-4 px-1">{pendingCount}</Badge>}
+              {newCount > 0 && <Badge variant="destructive" className="ml-1 text-[10px] h-4 px-1">{newCount}</Badge>}
             </TabsTrigger>
             <TabsTrigger value="rating" className="gap-1.5">
               <Shield className="h-3.5 w-3.5" /> Индекс партнёра
@@ -395,8 +453,16 @@ function CreatorOffers() {
           {/* ── Offers tab ── */}
           <TabsContent value="offers" className="space-y-4">
             <div className="flex items-center gap-2 flex-wrap">
-              {([{ key: "all", label: "Все" }, { key: "pending", label: "Новые" }, { key: "active", label: "Активные" }] as const).map((f) => (
-                <button key={f.key} onClick={() => setFilter(f.key)} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${filter === f.key ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground hover:bg-accent"}`}>{f.label}</button>
+              {([
+                { key: "all" as const, label: "Все", count: deals.length },
+                { key: "new" as const, label: "Новые", count: newCount },
+                { key: "active" as const, label: "Активные", count: activeCount },
+                { key: "archived" as const, label: "Архив", count: deals.filter((d) => getProposalStatus(d.status) === "archived").length },
+              ]).map((f) => (
+                <button key={f.key} onClick={() => setFilter(f.key)} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${filter === f.key ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground hover:bg-accent"}`}>
+                  {f.label}
+                  {f.count > 0 && <span className="ml-1 opacity-70">({f.count})</span>}
+                </button>
               ))}
               <button onClick={() => setShowFilters(!showFilters)} className={`ml-auto px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors ${showFilters ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground hover:bg-accent"}`}>
                 <SlidersHorizontal className="h-3.5 w-3.5" /> Фильтры
@@ -422,51 +488,143 @@ function CreatorOffers() {
             {isLoading ? (
               <div className="text-center py-12 text-muted-foreground animate-pulse">Загрузка...</div>
             ) : filteredDeals.length === 0 ? (
-              <Card><CardContent className="py-12 text-center text-muted-foreground"><Briefcase className="h-10 w-10 mx-auto mb-3 opacity-30" /><p>Пока нет предложений.</p><p className="text-xs mt-1">Когда рекламодатели захотят сотрудничать, их предложения появятся здесь.</p></CardContent></Card>
+              <Card>
+                <CardContent className="py-12 text-center space-y-3">
+                  <Briefcase className="h-10 w-10 mx-auto text-muted-foreground/30" />
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Пока нет предложений</p>
+                    <p className="text-xs text-muted-foreground mt-1">Когда рекламодатели захотят сотрудничать, их предложения появятся здесь.</p>
+                  </div>
+                  <div className="rounded-lg bg-muted/50 border border-border px-4 py-3 max-w-sm mx-auto">
+                    <p className="text-xs text-muted-foreground">
+                      💡 <span className="font-medium text-foreground">Совет:</span> Заполните свои офферы (Видео / Пост / Подкаст) в настройках студии, чтобы получать более точные предложения.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-2.5">
                 {filteredDeals.map((deal) => {
                   const advScore = advScoresMap.get(deal.advertiser_id || "");
                   const isLow = advScore?.isLowScore;
                   const advProfile = offerProfileMap.get(deal.advertiser_id || "");
-                  const isPending = deal.status === "pending";
+                  const brand = brandMap.get(deal.advertiser_id || "");
+                  const pStatus = getProposalStatus(deal.status);
+                  const statusCfg = proposalStatusConfig[pStatus];
+                  const placement = placementFromTitle(deal.title);
                   const isActioning = actionLoading === deal.id;
+
                   return (
-                    <motion.div key={deal.id} whileHover={{ y: -2 }} className={`rounded-xl border bg-card p-5 transition-all ${isLow ? "opacity-60 border-destructive/20" : "border-border hover:border-primary/30"}`}>
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer" onClick={() => navigate("/ad-studio")}>
-                          <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden border border-border shrink-0">
-                            {advProfile?.avatar_url ? <img src={advProfile.avatar_url} alt="" className="h-full w-full object-cover" /> : <Briefcase className="h-4 w-4 text-primary" />}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
-                              <h3 className="text-sm font-semibold text-card-foreground truncate">{deal.title}</h3>
-                              {isLow && <Tooltip><TooltipTrigger><ShieldAlert className="h-3.5 w-3.5 text-destructive shrink-0" /></TooltipTrigger><TooltipContent><p className="text-xs">Низкий Partner Score: {advScore!.partnerScore.toFixed(1)}</p></TooltipContent></Tooltip>}
+                    <Card
+                      key={deal.id}
+                      className={`overflow-hidden transition-all hover:shadow-md ${isLow ? "opacity-60 border-destructive/20" : "hover:border-primary/30"}`}
+                    >
+                      <CardContent className="p-4">
+                        {/* Row 1: Advertiser + status pill */}
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                            <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden border border-border shrink-0">
+                              {brand?.brand_logo_url
+                                ? <img src={brand.brand_logo_url} alt="" className="h-full w-full object-cover" />
+                                : advProfile?.avatar_url
+                                  ? <img src={advProfile.avatar_url} alt="" className="h-full w-full object-cover" />
+                                  : <Briefcase className="h-4 w-4 text-primary" />}
                             </div>
-                            <p className="text-xs text-muted-foreground">{advProfile?.display_name || deal.advertiser_name}{advScore && advScore.partnerScore > 0 && !isLow && <span className="ml-2 text-primary">⭐ {advScore.partnerScore.toFixed(1)}</span>}</p>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-sm font-semibold text-card-foreground truncate">
+                                  {advProfile?.display_name || deal.advertiser_name}
+                                </span>
+                                {brand?.business_verified && (
+                                  <CheckCircle className="h-3.5 w-3.5 text-primary shrink-0" />
+                                )}
+                                {isLow && (
+                                  <Tooltip><TooltipTrigger><ShieldAlert className="h-3.5 w-3.5 text-destructive shrink-0" /></TooltipTrigger><TooltipContent><p className="text-xs">Низкий Partner Score: {advScore!.partnerScore.toFixed(1)}</p></TooltipContent></Tooltip>
+                                )}
+                              </div>
+                              {brand?.brand_name && (
+                                <p className="text-[11px] text-muted-foreground truncate">{brand.brand_name}</p>
+                              )}
+                            </div>
                           </div>
+                          <Badge variant="outline" className={`text-[10px] shrink-0 border ${statusCfg.cls}`}>
+                            {statusCfg.label}
+                          </Badge>
                         </div>
-                        <div className="flex items-center gap-3 shrink-0">
-                          <div className="text-right">
-                            <p className="text-sm font-bold text-card-foreground">{(deal.budget || 0).toLocaleString()} ₽</p>
-                            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${statusColors[deal.status] || "bg-muted text-muted-foreground"}`}>{statusLabels[deal.status] || deal.status}</span>
-                          </div>
+
+                        {/* Row 2: Summary line — placement + budget + deadline */}
+                        <div className="flex items-center gap-3 mt-2.5 text-sm">
+                          {placement && (
+                            <span className="font-medium text-card-foreground">{placement}</span>
+                          )}
+                          <span className="font-bold text-card-foreground">{(deal.budget || 0).toLocaleString()} ₽</span>
+                          {deal.deadline && (
+                            <>
+                              <span className="text-muted-foreground">·</span>
+                              <span className="text-muted-foreground text-xs flex items-center gap-1">
+                                <CalendarDays className="h-3 w-3" />
+                                до {new Date(deal.deadline).toLocaleDateString("ru-RU")}
+                              </span>
+                            </>
+                          )}
                         </div>
-                      </div>
-                      {deal.description && <p className="text-xs text-muted-foreground mt-3 line-clamp-2">{deal.description}</p>}
-                      <div className="flex items-center justify-between mt-3">
-                        <div className="flex items-center gap-4 text-[11px] text-muted-foreground">
-                          <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{new Date(deal.created_at).toLocaleDateString("ru-RU")}</span>
-                          {deal.deadline && <span>Дедлайн: {new Date(deal.deadline).toLocaleDateString("ru-RU")}</span>}
+
+                        {/* Row 3: Chips — category, platform, partner score */}
+                        <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                          {brand?.business_category && (
+                            <span className="inline-flex items-center rounded-md bg-secondary px-2 py-0.5 text-[10px] font-medium text-secondary-foreground">
+                              {brand.business_category}
+                            </span>
+                          )}
+                          {advScore && advScore.partnerScore > 0 && !isLow && (
+                            <span className="inline-flex items-center rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                              ⭐ {advScore.partnerScore.toFixed(1)}
+                            </span>
+                          )}
                         </div>
-                        {isPending && (
-                          <div className="flex items-center gap-2">
-                            <Button size="sm" variant="outline" className="h-8 text-destructive border-destructive/30 hover:bg-destructive/10" disabled={isActioning} onClick={(e) => handleReject(deal.id, e)}><X className="h-3.5 w-3.5 mr-1" />Отклонить</Button>
-                            <Button size="sm" className="h-8" disabled={isActioning} onClick={(e) => handleAccept(deal.id, e)}><Check className="h-3.5 w-3.5 mr-1" />Принять</Button>
-                          </div>
-                        )}
-                      </div>
-                    </motion.div>
+
+                        {/* Row 4: Last activity + primary action */}
+                        <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-border">
+                          <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            {timeAgo(deal.created_at)}
+                          </span>
+
+                          {pStatus === "new" ? (
+                            <div className="flex items-center gap-2">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                                disabled={isActioning}
+                                onClick={(e) => handleReject(deal.id, e)}
+                              >
+                                <X className="h-3 w-3 mr-1" />
+                                Отклонить
+                              </Button>
+                              <Button
+                                size="sm"
+                                className="h-7 text-xs"
+                                disabled={isActioning}
+                                onClick={(e) => handleAccept(deal.id, e)}
+                              >
+                                Открыть предложение
+                              </Button>
+                            </div>
+                          ) : pStatus === "active" ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs"
+                              onClick={() => navigate("/ad-studio")}
+                            >
+                              Продолжить
+                              <ChevronRight className="h-3 w-3 ml-1" />
+                            </Button>
+                          ) : null}
+                        </div>
+                      </CardContent>
+                    </Card>
                   );
                 })}
               </div>
