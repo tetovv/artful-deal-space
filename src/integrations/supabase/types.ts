@@ -1100,20 +1100,36 @@ export type Database = {
         }
         Returns: boolean
       }
-      match_chunks_fts: {
-        Args: {
-          p_fts_config?: string
-          p_limit?: number
-          p_project_id: string
-          p_query: string
-        }
-        Returns: {
-          content: string
-          id: string
-          metadata: Json
-          score: number
-        }[]
-      }
+      match_chunks_fts:
+        | {
+            Args: {
+              p_fts_config?: string
+              p_limit?: number
+              p_project_id: string
+              p_query: string
+            }
+            Returns: {
+              content: string
+              id: string
+              metadata: Json
+              score: number
+            }[]
+          }
+        | {
+            Args: {
+              p_fts_config?: string
+              p_limit?: number
+              p_project_id: string
+              p_query: string
+              p_user_id?: string
+            }
+            Returns: {
+              content: string
+              id: string
+              metadata: Json
+              score: number
+            }[]
+          }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
     }
