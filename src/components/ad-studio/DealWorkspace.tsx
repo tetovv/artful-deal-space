@@ -754,112 +754,88 @@ function PaymentTab() {
   );
 }
 /* ═══════════════════════════════════════════════════════
-   ORD TAB
+   MORE TAB — 2 accordion sections, no nested tabs
    ═══════════════════════════════════════════════════════ */
-function OrdTab() {
+function MoreTab() {
   const erid = "2SDnjek4fP1";
-  return (
-    <div className="p-4 space-y-3 max-w-[820px] mx-auto">
-      <Card>
-        <CardContent className="p-3 space-y-0">
-          <div className="flex items-center justify-between py-1.5">
-            <span className="text-[14px] font-semibold text-card-foreground">Статус ОРД</span>
-            <span className="flex items-center gap-1 text-[12px] text-success font-medium">
-              <CheckCircle2 className="h-3.5 w-3.5" /> Подключено
-            </span>
-          </div>
-          {[
-            { label: "ERID", value: erid, mono: true, copyable: true },
-            { label: "Синхронизация", value: "19.02.2026, 14:33" },
-            { label: "Условия", value: "v1 (согласовано)" },
-          ].map((row) => (
-            <div key={row.label} className="flex items-center justify-between py-1.5 border-t border-border/50">
-              <span className="text-[13px] text-muted-foreground">{row.label}</span>
-              <div className="flex items-center gap-1.5">
-                <span className={cn("text-[13px] text-card-foreground", row.mono && "font-mono font-semibold text-primary")}>{row.value}</span>
-                {row.copyable && (
-                  <button onClick={() => { navigator.clipboard.writeText(row.value); toast.success("ERID скопирован"); }}>
-                    <ClipboardCopy className="h-3 w-3 text-primary" />
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-
-      <div className="space-y-1">
-        <p className="text-[12px] font-semibold text-muted-foreground uppercase tracking-wider">Журнал ОРД</p>
-        {mockAudit.filter((e) => e.category === "ord").map((e) => (
-          <div key={e.id} className="flex items-center gap-2 text-[12px] py-1">
-            <span className="text-muted-foreground w-24 shrink-0">{e.ts}</span>
-            <span className="text-card-foreground">{e.action}</span>
-          </div>
-        ))}
-      </div>
-
-      <Button variant="outline" size="sm" className="text-[13px] h-8">
-        <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
-        Повторить синхронизацию
-      </Button>
-    </div>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════
-   AUDIT TAB
-   ═══════════════════════════════════════════════════════ */
-function AuditTab() {
-  const [filter, setFilter] = useState<string>("all");
-  const categories = [
-    { key: "all", label: "Все" },
-    { key: "terms", label: "Условия" },
-    { key: "files", label: "Файлы" },
-    { key: "payments", label: "Оплата" },
-    { key: "ord", label: "ОРД" },
-  ];
-  const filtered = filter === "all" ? mockAudit : mockAudit.filter((e) => e.category === filter);
+  const ordStatus: "ok" | "error" = "ok";
+  const recentAudit = mockAudit.slice(0, 10);
   const categoryIcons: Record<string, any> = { terms: ScrollText, files: Files, payments: CreditCard, ord: Radio };
 
   return (
-    <div className="p-4 space-y-3 max-w-[820px] mx-auto">
-      <div className="flex items-center gap-1">
-        {categories.map((c) => (
-          <button
-            key={c.key}
-            onClick={() => setFilter(c.key)}
-            className={cn(
-              "px-2 py-0.5 rounded text-[12px] font-medium transition-colors",
-              filter === c.key ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            {c.label}
-          </button>
-        ))}
-      </div>
-
-      <Card>
-        <CardContent className="p-0">
-          {filtered.map((entry, i) => {
-            const Icon = categoryIcons[entry.category] || ScrollText;
-            return (
-              <div key={entry.id} className={cn("flex items-start gap-2.5 px-3 py-1.5", i > 0 && "border-t border-border/50")}>
-                <Icon className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-[13px] text-card-foreground">{entry.action}</p>
-                  <span className="text-[11px] text-muted-foreground">{entry.who} · {entry.ts}</span>
-                  {entry.file && (
-                    <button className="block text-[11px] text-primary underline mt-0.5">{entry.file}</button>
-                  )}
+    <div className="p-4 space-y-0 max-w-[820px] mx-auto">
+      <Accordion type="multiple" defaultValue={["ord", "audit"]}>
+        <AccordionItem value="ord" className="border-border/50">
+          <AccordionTrigger className="py-2.5 text-[15px] font-semibold text-card-foreground hover:no-underline">
+            Маркировка (ОРД)
+          </AccordionTrigger>
+          <AccordionContent className="pb-3">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-[14px]">
+                <span className="text-muted-foreground">Статус</span>
+                {ordStatus === "ok" ? (
+                  <span className="flex items-center gap-1 text-success font-medium text-[13px]">
+                    <CheckCircle2 className="h-3.5 w-3.5" /> Активно
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1 text-destructive font-medium text-[13px]">
+                    <AlertTriangle className="h-3.5 w-3.5" /> Ошибка
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center justify-between text-[14px]">
+                <span className="text-muted-foreground">ERID</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-mono font-semibold text-primary text-[13px]">{erid}</span>
+                  <button onClick={() => { navigator.clipboard.writeText(erid); toast.success("ERID скопирован"); }}>
+                    <ClipboardCopy className="h-3 w-3 text-primary" />
+                  </button>
                 </div>
               </div>
-            );
-          })}
-          {filtered.length === 0 && (
-            <div className="text-center py-6 text-[13px] text-muted-foreground">Нет записей</div>
-          )}
-        </CardContent>
-      </Card>
+              <div className="flex items-center justify-between text-[14px]">
+                <span className="text-muted-foreground">Последняя синхронизация</span>
+                <span className="text-[13px] text-card-foreground">19.02.2026, 14:33</span>
+              </div>
+              {(ordStatus as string) === "error" && (
+                <Button variant="outline" size="sm" className="text-[13px] h-7 mt-1">
+                  <RefreshCw className="h-3 w-3 mr-1.5" />
+                  Повторить синхронизацию
+                </Button>
+              )}
+            </div>
+          </AccordionContent>
+        </AccordionItem>
+
+        <AccordionItem value="audit" className="border-border/50">
+          <AccordionTrigger className="py-2.5 text-[15px] font-semibold text-card-foreground hover:no-underline">
+            Журнал действий
+          </AccordionTrigger>
+          <AccordionContent className="pb-3">
+            <div className="space-y-0">
+              {recentAudit.map((entry, i) => {
+                const Icon = categoryIcons[entry.category] || ScrollText;
+                return (
+                  <div key={entry.id} className={cn("flex items-start gap-2.5 py-1.5", i > 0 && "border-t border-border/30")}>
+                    <Icon className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[14px] text-card-foreground">{entry.action}</p>
+                      <span className="text-[12px] text-muted-foreground">{entry.who} · {entry.ts}</span>
+                      {entry.file && (
+                        <a href="#" className="block text-[12px] text-primary underline hover:no-underline mt-0.5">{entry.file}</a>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {mockAudit.length > 10 && (
+              <button className="text-[12px] text-primary hover:underline mt-2 flex items-center gap-1">
+                Показать полный журнал <ChevronRight className="h-3 w-3" />
+              </button>
+            )}
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
     </div>
   );
 }
@@ -885,12 +861,7 @@ export function DealWorkspace() {
     { value: "payment", label: "Оплата", icon: CreditCard },
   ];
 
-  const moreTabs = [
-    { value: "ord", label: "Маркировка (ОРД)" },
-    { value: "audit", label: "Аудит" },
-  ];
-
-  const isMoreTab = moreTabs.some((t) => t.value === activeSubTab);
+  const isMoreTab = activeSubTab === "more";
 
   return (
     <div className="flex-1 flex h-full overflow-hidden">
@@ -1017,28 +988,17 @@ export function DealWorkspace() {
               </button>
             ))}
 
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  className={cn(
-                    "flex items-center gap-1 px-3 h-9 text-[14px] font-medium border-b-2 transition-colors",
-                    isMoreTab
-                      ? "border-primary text-foreground"
-                      : "border-transparent text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  Ещё
-                  <ChevronDown className="h-3 w-3" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
-                {moreTabs.map((tab) => (
-                  <DropdownMenuItem key={tab.value} onClick={() => setActiveSubTab(tab.value)}>
-                    {tab.label}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <button
+              onClick={() => setActiveSubTab("more")}
+              className={cn(
+                "flex items-center gap-1 px-3 h-9 text-[14px] font-medium border-b-2 transition-colors",
+                isMoreTab
+                  ? "border-primary text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Ещё
+            </button>
           </div>
         </div>
 
@@ -1048,8 +1008,7 @@ export function DealWorkspace() {
           {activeSubTab === "terms" && <TermsTab />}
           {activeSubTab === "files" && <FilesTab />}
           {activeSubTab === "payment" && <PaymentTab />}
-          {activeSubTab === "ord" && <OrdTab />}
-          {activeSubTab === "audit" && <AuditTab />}
+          {activeSubTab === "more" && <MoreTab />}
         </div>
       </div>
     </div>
