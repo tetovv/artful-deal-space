@@ -1,6 +1,9 @@
 /**
  * Client-side text extraction for PDF, DOCX, and text files.
- * ALL heavy parsing runs in a Web Worker — the main thread is NEVER blocked.
+ * 
+ * KEY DESIGN: Libraries (pdfjs-dist, mammoth) are loaded via dynamic import()
+ * only when actually needed. This prevents them from blocking page load.
+ * PDF extraction yields to the UI after EVERY page to prevent freezing.
  * Supports AbortSignal for cancellation and progress callbacks.
  */
 
@@ -17,152 +20,86 @@ export interface ExtractProgress {
   stage?: string;
 }
 
-/** Singleton worker — created lazily, reused across calls */
-let _worker: Worker | null = null;
-let _workerFailed = false;
+/** Yield to the browser event loop so the UI doesn't freeze */
+const yieldToUI = () => new Promise<void>(r => setTimeout(r, 0));
 
-function getWorker(): Worker | null {
-  if (_workerFailed) return null;
-  if (_worker) return _worker;
-  try {
-    _worker = new Worker(new URL("./extractWorker.ts", import.meta.url), { type: "module" });
-    _worker.onerror = () => {
-      console.warn("[clientExtract] Web Worker failed to load, falling back to main thread");
-      _workerFailed = true;
-      _worker = null;
-    };
-    return _worker;
-  } catch (e) {
-    console.warn("[clientExtract] Web Worker unavailable:", e);
-    _workerFailed = true;
-    return null;
-  }
-}
-
-let _msgId = 0;
-
-/** Extract text using the Web Worker (off main thread) */
-function extractViaWorker(
-  file: File,
+/** Extract text from a PDF file — dynamic import, yields EVERY page */
+async function extractPdfText(
+  buffer: ArrayBuffer,
   signal?: AbortSignal,
   onProgress?: (p: ExtractProgress) => void,
 ): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const worker = getWorker();
-    if (!worker) {
-      reject(new Error("WORKER_UNAVAILABLE"));
-      return;
-    }
-
-    const id = String(++_msgId);
-    let settled = false;
-
-    const cleanup = () => {
-      settled = true;
-      worker.removeEventListener("message", onMsg);
-      signal?.removeEventListener("abort", onAbort);
-    };
-
-    const onMsg = (e: MessageEvent) => {
-      if (e.data.id !== id || settled) return;
-
-      if (e.data.type === "progress") {
-        onProgress?.({
-          page: e.data.page,
-          totalPages: e.data.totalPages,
-          file: e.data.file,
-          stage: "extracting",
-        });
-        return;
-      }
-
-      if (e.data.type === "result") {
-        cleanup();
-        if (e.data.truncated) {
-          console.warn(`[clientExtract] Text truncated to ${MAX_TEXT_CHARS} chars`);
-        }
-        resolve(e.data.text);
-        return;
-      }
-
-      if (e.data.type === "error") {
-        cleanup();
-        reject(new Error(e.data.error));
-        return;
-      }
-    };
-
-    const onAbort = () => {
-      if (settled) return;
-      cleanup();
-      reject(new DOMException("Aborted", "AbortError"));
-    };
-
-    worker.addEventListener("message", onMsg);
-    signal?.addEventListener("abort", onAbort);
-
-    // Send the file buffer to the worker (transferable for zero-copy)
-    file.arrayBuffer().then(
-      (buffer) => {
-        if (settled) return;
-        worker.postMessage({ id, buffer, fileName: file.name }, [buffer]);
-      },
-      (err) => {
-        if (settled) return;
-        cleanup();
-        reject(err);
-      }
-    );
-  });
-}
-
-/** Fallback: main-thread extraction with aggressive yielding */
-async function extractOnMainThread(
-  file: File,
-  signal?: AbortSignal,
-  onProgress?: (p: ExtractProgress) => void,
-): Promise<string> {
-  // Dynamic imports to avoid loading heavy libs unless needed
-  const ext = file.name.toLowerCase().split(".").pop() || "";
-  const buffer = await file.arrayBuffer();
-
   if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
 
-  if (ext === "pdf") {
-    const pdfjsLib = await import("pdfjs-dist");
-    try {
-      pdfjsLib.GlobalWorkerOptions.workerSrc =
-        `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
-    } catch (_) { /* ignore */ }
+  // Dynamic import — pdfjs-dist is NOT loaded at page load
+  const pdfjsLib = await import("pdfjs-dist");
 
+  // Configure worker — use CDN so PDF parsing runs in a pdfjs Web Worker
+  // If this fails, pdfjs falls back to main thread but we yield every page
+  try {
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+  } catch (e) {
+    console.warn("[clientExtract] Failed to set PDF.js worker URL:", e);
+  }
+
+  try {
     const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
     const numPages = Math.min(doc.numPages, MAX_PDF_PAGES);
-    const pages: string[] = [];
+    console.log(`[clientExtract] PDF: ${doc.numPages} pages, processing ${numPages}`);
 
+    if (doc.numPages > MAX_PDF_PAGES) {
+      console.warn(`[clientExtract] PDF truncated: ${doc.numPages} → ${MAX_PDF_PAGES}`);
+    }
+
+    const pages: string[] = [];
     for (let i = 1; i <= numPages; i++) {
       if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+
       const page = await doc.getPage(i);
       const content = await page.getTextContent();
       pages.push(content.items.map((item: any) => item.str).join(" "));
+
       onProgress?.({ page: i, totalPages: numPages, stage: "extracting" });
-      // Yield EVERY page to prevent freeze
-      await new Promise<void>(r => setTimeout(r, 0));
+
+      // Yield EVERY page — prevents UI freeze even if pdfjs worker isn't loading
+      await yieldToUI();
     }
 
     let text = pages.join("\n\n");
-    if (text.length > MAX_TEXT_CHARS) text = text.slice(0, MAX_TEXT_CHARS);
+    if (text.length > MAX_TEXT_CHARS) {
+      console.warn(`[clientExtract] Text truncated: ${text.length} → ${MAX_TEXT_CHARS}`);
+      text = text.slice(0, MAX_TEXT_CHARS);
+    }
+
+    console.log(`[clientExtract] PDF extracted: ${text.length} chars`);
     return text;
+  } catch (e: any) {
+    if (e.name === "AbortError") throw e;
+    console.error("[clientExtract] PDF extraction failed:", e);
+    throw new Error(`PDF extraction failed: ${e.message || e}. Убедитесь, что PDF содержит текстовый слой.`);
   }
+}
 
-  if (ext === "docx") {
-    const mammoth = await import("mammoth");
+/** Extract text from a DOCX file — dynamic import */
+async function extractDocxText(
+  buffer: ArrayBuffer,
+  signal?: AbortSignal,
+): Promise<string> {
+  if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+
+  // Dynamic import — mammoth is NOT loaded at page load
+  const mammoth = await import("mammoth");
+
+  try {
     const result = await mammoth.default.extractRawText({ arrayBuffer: buffer });
+    console.log(`[clientExtract] DOCX extracted: ${result.value.length} chars`);
     return result.value.slice(0, MAX_TEXT_CHARS);
+  } catch (e: any) {
+    if (e.name === "AbortError") throw e;
+    console.error("[clientExtract] DOCX extraction failed:", e);
+    throw new Error(`DOCX extraction failed: ${e.message || e}`);
   }
-
-  // Plain text
-  const text = new TextDecoder().decode(new Uint8Array(buffer));
-  return text.slice(0, MAX_TEXT_CHARS);
 }
 
 /** Check if a file extension is supported */
@@ -171,11 +108,7 @@ export function isSupportedExtension(fileName: string): boolean {
   return SUPPORTED_EXTENSIONS.has(ext);
 }
 
-/**
- * Extract text from any supported file.
- * Uses Web Worker by default (zero UI blocking).
- * Falls back to main-thread extraction if Worker is unavailable.
- */
+/** Extract text from any supported file with abort support */
 export async function extractTextFromFile(
   file: File,
   signal?: AbortSignal,
@@ -190,26 +123,19 @@ export async function extractTextFromFile(
   if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
 
   console.log(`[clientExtract] Processing "${file.name}" (${(file.size / 1024).toFixed(1)} KB, ext: ${ext})`);
+  const buffer = await file.arrayBuffer();
 
-  try {
-    // Try Web Worker first (main thread stays free)
-    const text = await extractViaWorker(file, signal, onProgress);
-    console.log(`[clientExtract] Worker extracted: ${text.length} chars`);
-    return text;
-  } catch (e: any) {
-    // Re-throw abort
-    if (e.name === "AbortError") throw e;
-
-    // If worker failed, fall back to main thread
-    if (e.message === "WORKER_UNAVAILABLE" || _workerFailed) {
-      console.warn("[clientExtract] Falling back to main-thread extraction");
-      const text = await extractOnMainThread(file, signal, onProgress);
-      console.log(`[clientExtract] Main-thread extracted: ${text.length} chars`);
-      return text;
-    }
-
-    throw e;
+  if (ext === "pdf") {
+    return extractPdfText(buffer, signal, onProgress);
   }
+  if (ext === "docx") {
+    return extractDocxText(buffer, signal);
+  }
+
+  // txt, md, csv, json, xml, html, etc.
+  const text = new TextDecoder().decode(new Uint8Array(buffer));
+  console.log(`[clientExtract] Text file extracted: ${text.length} chars`);
+  return text.slice(0, MAX_TEXT_CHARS);
 }
 
 /** Chunk text with overlap */
