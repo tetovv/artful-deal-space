@@ -528,20 +528,24 @@ export function SelectTabPrompt({ onSelectType }: { onSelectType?: (type: Conten
               initial={{ opacity: 0, scale: 0 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: 0.15 + i * 0.08, duration: 0.4, type: "spring", stiffness: 200 }}
-              className="absolute"
+              className="absolute z-10"
               style={{ left: `calc(50% + ${x}px - 20px)`, top: `calc(50% + ${y}px - 20px)` }}
             >
-              <motion.div
+              <motion.button
+                type="button"
                 animate={{ y: [0, -4, 0] }}
                 transition={{ duration: 2.5, repeat: Infinity, delay: i * 0.3, ease: "easeInOut" }}
                 whileHover={{ scale: 1.2 }}
                 whileTap={{ scale: 0.95 }}
-                onClick={() => onSelectType?.(type)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelectType?.(type);
+                }}
                 className={cn("h-10 w-10 rounded-xl flex items-center justify-center shadow-sm border border-border cursor-pointer hover:shadow-md transition-shadow", bg)}
                 title={label}
               >
                 <Icon className={cn("h-5 w-5", color)} />
-              </motion.div>
+              </motion.button>
             </motion.div>
           );
         })}
