@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BriefWizard, type BriefData } from "./BriefWizard";
+import { DealProposalForm } from "./DealProposalForm";
 
 const NICHES = ["Образование", "Технологии", "Дизайн", "Фото", "Музыка", "Подкасты", "Бизнес", "Видео", "Motion"];
 const GEOS = ["Россия", "Беларусь", "Казахстан", "Украина"];
@@ -197,8 +198,9 @@ function FilterDrawerContent({ filters, setFilters, onApply, onReset }: {
 }
 
 /* ── Quick View Modal ── */
-function QuickViewModal({ creator, open, onClose, isVerified, categoryLabel }: {
+function QuickViewModal({ creator, open, onClose, isVerified, categoryLabel, onPropose }: {
   creator: ProfileRow; open: boolean; onClose: () => void; isVerified: boolean; categoryLabel?: string;
+  onPropose: () => void;
 }) {
   const meta = getCreatorMeta(creator.user_id);
 
@@ -307,7 +309,7 @@ function QuickViewModal({ creator, open, onClose, isVerified, categoryLabel }: {
 
           {/* Footer actions */}
           <div className="flex gap-3 pt-3 border-t border-border">
-            <Button className="flex-1 h-10 text-[15px]" disabled={!isVerified}>
+            <Button className="flex-1 h-10 text-[15px]" disabled={!isVerified} onClick={() => { onClose(); onPropose(); }}>
               <MessageSquarePlus className="h-4 w-4 mr-2" />Предложить сделку
             </Button>
             <Button variant="outline" className="flex-1 h-10 text-[15px]" asChild>
@@ -337,6 +339,7 @@ function CreatorCard({ creator, isVerified, categoryLabel, matchReasons }: {
   creator: ProfileRow; isVerified: boolean; categoryLabel?: string; matchReasons?: string[];
 }) {
   const [quickView, setQuickView] = useState(false);
+  const [proposalOpen, setProposalOpen] = useState(false);
   const meta = getCreatorMeta(creator.user_id);
   const hasNiche = (creator.niche || []).length > 0;
 
@@ -444,7 +447,7 @@ function CreatorCard({ creator, isVerified, categoryLabel, matchReasons }: {
             <Tooltip>
               <TooltipTrigger asChild>
                 <span>
-                  <Button size="sm" className="text-[12px] h-7" disabled={!isVerified}>
+                  <Button size="sm" className="text-[12px] h-7" disabled={!isVerified} onClick={() => setProposalOpen(true)}>
                     <MessageSquarePlus className="h-3.5 w-3.5 mr-1" />Предложить сделку
                   </Button>
                 </span>
@@ -456,7 +459,19 @@ function CreatorCard({ creator, isVerified, categoryLabel, matchReasons }: {
       </Card>
 
       <QuickViewModal creator={creator} open={quickView} onClose={() => setQuickView(false)}
-        isVerified={isVerified} categoryLabel={categoryLabel} />
+        isVerified={isVerified} categoryLabel={categoryLabel} onPropose={() => setProposalOpen(true)} />
+
+      <DealProposalForm
+        open={proposalOpen}
+        onClose={() => setProposalOpen(false)}
+        creator={{
+          userId: creator.user_id,
+          displayName: creator.display_name,
+          avatarUrl: creator.avatar_url,
+          offers: meta.offers,
+          platforms: meta.platforms,
+        }}
+      />
     </>
   );
 }
