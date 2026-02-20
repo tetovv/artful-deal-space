@@ -1,5 +1,6 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -18,7 +19,7 @@ import {
   MoreVertical, Copy, Archive, Ban, CalendarDays, AlertTriangle, CheckCircle2,
   ImagePlus, ExternalLink, RefreshCw, Send, Info, Globe, Link2, Save,
   Lock, PlusCircle, XCircle, ShieldCheck, ClipboardCopy, Loader2, Download, StopCircle,
-  FileText, History, User, Upload, FilePlus, ArrowUpRight,
+  FileText, History, User, Upload, FilePlus, ArrowUpRight, ArrowRight,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -811,66 +812,274 @@ function ContractBadge({ campaign }: { campaign: Campaign }) {
   );
 }
 
-// ─── Addendum Upload Dialog ───
+// ─── Diff Item ───
+interface DiffField {
+  label: string;
+  oldValue: string;
+  newValue: string;
+  changed: boolean;
+}
+
+function DiffView({ diffs, onConfirm, onCancel }: {
+  diffs: DiffField[];
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const changedCount = diffs.filter((d) => d.changed).length;
+  return (
+    <Card className="border-primary/30">
+      <CardContent className="p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <ArrowUpRight className="h-4 w-4 text-primary" />
+          <p className="text-sm font-semibold text-card-foreground">Изменения из доп. соглашения</p>
+          <Badge variant="outline" className="text-[10px] border-primary/30 text-primary ml-auto">
+            {changedCount} изменений
+          </Badge>
+        </div>
+
+        <div className="space-y-2">
+          {diffs.map((d, i) => (
+            <div key={i} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border ${
+              d.changed ? "border-primary/30 bg-primary/5" : "border-border bg-muted/10"
+            }`}>
+              <span className="text-xs text-muted-foreground w-36 flex-shrink-0">{d.label}</span>
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                {d.changed ? (
+                  <>
+                    <span className="text-xs text-destructive line-through bg-destructive/10 rounded px-1.5 py-0.5 truncate max-w-[180px]">
+                      {d.oldValue || "—"}
+                    </span>
+                    <ArrowRight className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                    <span className="text-xs text-success font-medium bg-success/10 rounded px-1.5 py-0.5 truncate max-w-[180px]">
+                      {d.newValue || "—"}
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-xs text-muted-foreground">{d.oldValue}</span>
+                )}
+              </div>
+              {d.changed && (
+                <Badge variant="outline" className="text-[9px] border-primary/20 text-primary flex-shrink-0">
+                  Изменено
+                </Badge>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div className="flex items-center justify-between pt-2">
+          <p className="text-[10px] text-muted-foreground">Подтвердите изменения для обновления кампании</p>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="ghost" className="h-8 text-sm" onClick={onCancel}>Отмена</Button>
+            <Button size="sm" className="h-8 text-sm gap-1.5" onClick={onConfirm}>
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Подтвердить изменения
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Addendum Upload with Diff ───
 function AddendumSection({ campaign }: { campaign: Campaign }) {
   const [uploading, setUploading] = useState(false);
+  const [extractingAddendum, setExtractingAddendum] = useState(false);
+  const [diffData, setDiffData] = useState<DiffField[] | null>(null);
   const addenda = campaign.addenda || [
     { id: 1, title: "Доп. соглашение №1", fileName: "addendum_01.pdf", date: "2026-02-18", budgetDelta: 50000, status: "confirmed" as const },
   ];
 
+  const handleAddendumUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    setExtractingAddendum(true);
+
+    try {
+      // Extract text from the addendum file
+      let text = "";
+      if (file.name.endsWith(".docx")) {
+        const mammoth = await import("mammoth");
+        const ab = await file.arrayBuffer();
+        const result = await mammoth.extractRawText({ arrayBuffer: ab });
+        text = result.value;
+      } else if (file.type === "application/pdf") {
+        const pdfjs = await import("pdfjs-dist");
+        pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
+        const ab = await file.arrayBuffer();
+        const pdf = await pdfjs.getDocument({ data: ab }).promise;
+        const pages: string[] = [];
+        for (let i = 1; i <= Math.min(pdf.numPages, 15); i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          pages.push(content.items.map((item: any) => item.str).join(" "));
+        }
+        text = pages.join("\n\n");
+      }
+
+      if (!text || text.trim().length < 20) {
+        toast.error("Не удалось извлечь текст из документа");
+        setUploading(false);
+        setExtractingAddendum(false);
+        return;
+      }
+
+      // Call AI to extract addendum fields
+      const { data, error } = await supabase.functions.invoke("extract-contract", {
+        body: { text, redactSensitive: true },
+      });
+
+      if (error || data?.error) {
+        toast.error(data?.error || error?.message || "Ошибка извлечения данных");
+        setUploading(false);
+        setExtractingAddendum(false);
+        return;
+      }
+
+      const newFields = data.fields;
+
+      // Build diff between original campaign and addendum
+      const diffItems: DiffField[] = [
+        {
+          label: "Бюджет",
+          oldValue: `${formatNum(campaign.budget)} ₽`,
+          newValue: newFields.budget?.value ? `${Number(newFields.budget.value).toLocaleString("ru-RU")} ₽` : "",
+          changed: !!newFields.budget?.value && Number(newFields.budget.value) !== campaign.budget,
+        },
+        {
+          label: "Дата начала",
+          oldValue: campaign.startDate,
+          newValue: newFields.startDate?.value || "",
+          changed: !!newFields.startDate?.value && newFields.startDate.value !== campaign.startDate,
+        },
+        {
+          label: "Дата окончания",
+          oldValue: campaign.endDate,
+          newValue: newFields.endDate?.value || "",
+          changed: !!newFields.endDate?.value && newFields.endDate.value !== campaign.endDate,
+        },
+        {
+          label: "Тип контента",
+          oldValue: placementLabels[campaign.placement] || campaign.placement,
+          newValue: newFields.contentType?.value || "",
+          changed: !!newFields.contentType?.value,
+        },
+        {
+          label: "Условия оплаты",
+          oldValue: campaign.contractParty || "—",
+          newValue: newFields.paymentTerms?.value || "",
+          changed: !!newFields.paymentTerms?.value,
+        },
+        {
+          label: "Условия расторжения",
+          oldValue: "—",
+          newValue: newFields.cancellationClause?.value || "",
+          changed: !!newFields.cancellationClause?.value,
+        },
+      ].filter((d) => d.newValue); // Only show fields that have values in addendum
+
+      setDiffData(diffItems);
+      setExtractingAddendum(false);
+      setUploading(false);
+      toast.success("Изменения из доп. соглашения извлечены");
+    } catch (err: any) {
+      console.error("Addendum extraction error:", err);
+      toast.error("Ошибка обработки доп. соглашения");
+      setUploading(false);
+      setExtractingAddendum(false);
+    }
+  }, [campaign]);
+
   return (
-    <Card>
-      <CardContent className="p-5 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <FilePlus className="h-4 w-4 text-muted-foreground" />
-            <p className="text-sm font-semibold text-card-foreground">Дополнительные соглашения</p>
+    <div className="space-y-4">
+      {/* Extracting banner */}
+      {extractingAddendum && (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <Loader2 className="h-5 w-5 text-primary animate-spin flex-shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-card-foreground">Извлекаем данные из доп. соглашения…</p>
+                <p className="text-xs text-muted-foreground">AI анализирует документ и ищет изменения</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Diff view */}
+      {diffData && (
+        <DiffView
+          diffs={diffData}
+          onConfirm={() => {
+            toast.success("Изменения из доп. соглашения применены");
+            setDiffData(null);
+          }}
+          onCancel={() => setDiffData(null)}
+        />
+      )}
+
+      <Card>
+        <CardContent className="p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <FilePlus className="h-4 w-4 text-muted-foreground" />
+              <p className="text-sm font-semibold text-card-foreground">Дополнительные соглашения</p>
+            </div>
+            <label>
+              <input
+                type="file"
+                accept=".pdf,.docx"
+                className="hidden"
+                onChange={handleAddendumUpload}
+                disabled={uploading}
+              />
+              <Button size="sm" variant="outline" className="h-8 text-sm gap-1.5 cursor-pointer" asChild disabled={uploading}>
+                <span>
+                  {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                  Загрузить доп. соглашение
+                </span>
+              </Button>
+            </label>
           </div>
-          <Button size="sm" variant="outline" className="h-8 text-sm gap-1.5" onClick={() => {
-            setUploading(true);
-            setTimeout(() => {
-              setUploading(false);
-              toast.success("Доп. соглашение загружено. AI извлекает изменения…");
-            }, 1500);
-          }}>
-            {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
-            Загрузить доп. соглашение
-          </Button>
-        </div>
-        {addenda.length > 0 ? (
-          <div className="space-y-2">
-            {addenda.map((a) => (
-              <div key={a.id} className="flex items-center justify-between gap-3 text-sm py-2 px-3 rounded-lg border border-border bg-muted/10">
-                <div className="flex items-center gap-3 min-w-0">
-                  <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                  <div className="min-w-0">
-                    <p className="text-xs font-medium text-card-foreground truncate">{a.title}</p>
-                    <p className="text-[10px] text-muted-foreground">{a.fileName} · {a.date}</p>
+          {addenda.length > 0 ? (
+            <div className="space-y-2">
+              {addenda.map((a) => (
+                <div key={a.id} className="flex items-center justify-between gap-3 text-sm py-2 px-3 rounded-lg border border-border bg-muted/10">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-card-foreground truncate">{a.title}</p>
+                      <p className="text-[10px] text-muted-foreground">{a.fileName} · {a.date}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {a.budgetDelta > 0 && (
+                      <Badge variant="outline" className="text-[10px] border-success/30 text-success bg-success/10">
+                        +{formatNum(a.budgetDelta)} ₽
+                      </Badge>
+                    )}
+                    <Badge variant="outline" className={`text-[10px] ${
+                      a.status === "confirmed" ? "border-success/30 text-success" : "border-warning/30 text-warning"
+                    }`}>
+                      {a.status === "confirmed" ? "Подтверждено" : "На проверке"}
+                    </Badge>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  {a.budgetDelta > 0 && (
-                    <Badge variant="outline" className="text-[10px] border-success/30 text-success bg-success/10">
-                      +{formatNum(a.budgetDelta)} ₽
-                    </Badge>
-                  )}
-                  <Badge variant="outline" className={`text-[10px] ${
-                    a.status === "confirmed" ? "border-success/30 text-success" : "border-warning/30 text-warning"
-                  }`}>
-                    {a.status === "confirmed" ? "Подтверждено" : "На проверке"}
-                  </Badge>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-xs text-muted-foreground">Дополнительных соглашений нет</p>
-        )}
-        <p className="text-[10px] text-muted-foreground">
-          Изменение бюджета или сроков по договорной кампании возможно только через доп. соглашение.
-        </p>
-      </CardContent>
-    </Card>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">Дополнительных соглашений нет</p>
+          )}
+          <p className="text-[10px] text-muted-foreground">
+            Изменение бюджета или сроков по договорной кампании возможно только через доп. соглашение.
+          </p>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 

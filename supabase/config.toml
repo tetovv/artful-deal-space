@@ -26,3 +26,6 @@ verify_jwt = false
 
 [functions.bik-lookup]
 verify_jwt = false
+
+[functions.extract-contract]
+verify_jwt = false
