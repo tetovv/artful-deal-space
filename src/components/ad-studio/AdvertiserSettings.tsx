@@ -383,11 +383,7 @@ export function AdvertiserSettings() {
   const [bankOpen, setBankOpen] = useState(false);
   const [ordOpen, setOrdOpen] = useState(false);
 
-  // Auto-expand optional sections if they have data
-  useEffect(() => {
-    if (isBankFieldsValid(savedSnapshot) || isBankPartial(savedSnapshot)) setBankOpen(true);
-    if (savedSnapshot.ord_identifier || savedSnapshot.ord_token) setOrdOpen(true);
-  }, [savedSnapshot]);
+  // Removed auto-expand: all sections stay collapsed by default
 
   if (isLoading) {
     return <div className="p-8 text-center text-sm text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />Загрузка…</div>;
