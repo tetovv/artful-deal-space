@@ -378,8 +378,8 @@ export function AdvertiserSettings() {
     { status: ordStatus, label: "ОРД", hint: "Для маркировки рекламы" },
   ];
 
-  const [brandOpen, setBrandOpen] = useState(true);
-  const [legalOpen, setLegalOpen] = useState(true);
+  const [brandOpen, setBrandOpen] = useState(false);
+  const [legalOpen, setLegalOpen] = useState(false);
   const [bankOpen, setBankOpen] = useState(false);
   const [ordOpen, setOrdOpen] = useState(false);
 
