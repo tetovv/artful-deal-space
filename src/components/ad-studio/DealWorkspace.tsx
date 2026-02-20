@@ -63,13 +63,26 @@ const filterStatusMap: Record<string, DealStatus[]> = {
   completed: ["completed"],
 };
 
-/* ─── Primary action per status ─── */
-function getPrimaryAction(status: DealStatus): { label: string; icon: any } | null {
+/* ─── State-specific primary CTA — explicit next step, not generic ─── */
+function getPrimaryAction(status: DealStatus, _role?: string): { label: string; icon: any } | null {
   switch (status) {
     case "pending": return { label: "Подтвердить условия", icon: CheckCircle2 };
-    case "briefing": return { label: "Отправить бриф", icon: Send };
-    case "in_progress": return { label: "Отправить на проверку", icon: Upload };
-    case "review": return { label: "Подтвердить выполнение", icon: CheckCircle2 };
+    case "briefing": return { label: "Отправить черновик на проверку", icon: Send };
+    case "in_progress": return { label: "Отправить черновик на проверку", icon: Upload };
+    case "review": return { label: "Принять черновик", icon: CheckCircle2 };
+    default: return null; // completed / disputed — hide CTA
+  }
+}
+
+/* ─── Next-step hint text (non-interactive) ─── */
+function getNextStepHint(status: DealStatus): string | null {
+  switch (status) {
+    case "pending": return "Следующий шаг: Подтвердить условия обеими сторонами";
+    case "briefing": return "Следующий шаг: Отправить черновик интеграции на проверку";
+    case "in_progress": return "Следующий шаг: Загрузить черновик и отправить на проверку";
+    case "review": return "Следующий шаг: Принять или запросить правки черновика";
+    case "completed": return null;
+    case "disputed": return "Ожидаем решения: спор на рассмотрении";
     default: return null;
   }
 }
@@ -91,7 +104,7 @@ const mockFiles = [
   { id: "f4", name: "договор_оферты.pdf", type: "Legal" as const, uploader: "Система", date: "01.12.24", pinned: false },
 ];
 
-const fileTypeLabels = { Brief: "Бриф", Draft: "Черновик", Final: "Финальный", Legal: "Юридический" };
+const fileTypeLabels: Record<string, string> = { Brief: "Бриф", Draft: "Черновик", Final: "Финальный", Legal: "Юридический", brief: "Бриф", draft: "Черновик", final: "Финальный", legal: "Юридический" };
 const fileTypeColors = { Brief: "bg-info/15 text-info", Draft: "bg-warning/15 text-warning", Final: "bg-success/15 text-success", Legal: "bg-muted text-muted-foreground" };
 
 const mockTermsVersions = [
@@ -125,8 +138,12 @@ const mockPayment = {
   ],
 };
 
-const paymentStatusLabels = { reserved: "Резерв", in_progress: "В работе", review: "На проверке", released: "Выплачено" };
-const paymentStatusColors = { reserved: "bg-warning/15 text-warning", in_progress: "bg-primary/15 text-primary", review: "bg-accent/15 text-accent", released: "bg-success/15 text-success" };
+const paymentStatusLabels: Record<string, string> = { reserved: "Резерв", in_progress: "В работе", review: "На проверке", released: "Выплачено" };
+const paymentStatusColors: Record<string, string> = { reserved: "bg-warning/15 text-warning", in_progress: "bg-primary/15 text-primary", review: "bg-accent/15 text-accent", released: "bg-success/15 text-success" };
+
+const fileSizeMock: Record<string, string> = {
+  "f1": "PDF · 1.2 MB", "f2": "MP4 · 84 MB", "f3": "MP4 · 112 MB", "f4": "PDF · 340 KB",
+};
 
 /* ═══════════════════════════════════════════════════════
    SIDEBAR
@@ -206,21 +223,21 @@ function DealSidebar({
               key={deal.id}
               onClick={() => onSelect(deal)}
               className={cn(
-                "w-full text-left px-3 py-2 border-b border-border/50 transition-colors",
+                "w-full text-left px-3 py-2.5 border-b border-border/50 transition-colors",
                 isSelected ? "bg-primary/10 border-l-2 border-l-primary" : "hover:bg-muted/30"
               )}
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[13px] font-semibold text-card-foreground truncate flex-1">{deal.title}</span>
+                <span className="text-[14px] font-semibold text-card-foreground truncate flex-1">{deal.title}</span>
                 <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded border shrink-0", statusColors[deal.status])}>
                   {statusLabels[deal.status]}
                 </span>
               </div>
               <div className="flex items-center justify-between mt-0.5">
-                <span className="text-[11px] text-muted-foreground truncate">
+                <span className="text-[12px] text-muted-foreground truncate">
                   {deal.advertiserName} → {deal.creatorName}
                 </span>
-                <span className="text-[12px] font-medium text-card-foreground shrink-0">{deal.budget.toLocaleString()} ₽</span>
+                <span className="text-[13px] font-medium text-card-foreground shrink-0">{deal.budget.toLocaleString()} ₽</span>
               </div>
               {totalMs > 0 && (
                 <div className="flex items-center gap-1.5 mt-1">
@@ -242,7 +259,7 @@ function DealSidebar({
 }
 
 /* ═══════════════════════════════════════════════════════
-   CHAT TAB — grouped messages, date separators, summary bar
+   CHAT TAB — no summary strip, clean centered chat
    ═══════════════════════════════════════════════════════ */
 
 function formatDateSeparator(dateStr: string): string {
@@ -256,70 +273,24 @@ function formatDateSeparator(dateStr: string): string {
   return d.toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" });
 }
 
-function ChatTab({ deal, onOpenTerms }: { deal: Deal; onOpenTerms?: () => void }) {
+function ChatTab({ deal }: { deal: Deal }) {
   useRealtimeMessages(deal.id);
   const dealMessages = allMessages.filter((m) => m.dealId === deal.id);
   const [newMsg, setNewMsg] = useState("");
-  const [summaryOpen, setSummaryOpen] = useState(true);
-
-  const latestTerms = mockTermsVersions[mockTermsVersions.length - 1];
-  const termsStatusText = latestTerms.status === "accepted" ? "согласовано" : latestTerms.status === "draft" ? "черновик" : "ожидает";
 
   return (
     <div className="flex flex-col h-full">
-      {/* Pinned summary bar (collapsible) */}
-      <Collapsible open={summaryOpen} onOpenChange={setSummaryOpen}>
-        <div className="border-b border-border/50 bg-card">
-          <div className="max-w-[820px] mx-auto px-4">
-            <CollapsibleTrigger className="w-full flex items-center justify-between py-1.5 text-[12px] text-muted-foreground hover:text-foreground transition-colors">
-              <span className="flex items-center gap-1.5">
-                {summaryOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-                Сводка сделки
-              </span>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <div className="flex items-center gap-3 pb-2 text-[13px] flex-wrap">
-                <span className="text-muted-foreground">
-                  Этап: <span className="text-card-foreground font-medium">{statusLabels[deal.status]}</span>
-                </span>
-                <span className="text-border">·</span>
-                {deal.deadline && (
-                  <>
-                    <span className="text-muted-foreground">
-                      Дедлайн: <span className="text-card-foreground font-medium">{new Date(deal.deadline).toLocaleDateString("ru-RU")}</span>
-                    </span>
-                    <span className="text-border">·</span>
-                  </>
-                )}
-                <span className="text-muted-foreground">
-                  Условия v{latestTerms.version} — <span className="text-card-foreground font-medium">{termsStatusText}</span>
-                </span>
-                {onOpenTerms && (
-                  <button
-                    onClick={onOpenTerms}
-                    className="text-primary hover:underline text-[12px] flex items-center gap-1 ml-auto"
-                  >
-                    Открыть условия <ChevronRight className="h-3 w-3" />
-                  </button>
-                )}
-              </div>
-            </CollapsibleContent>
-          </div>
-        </div>
-      </Collapsible>
-
-      {/* Messages with grouping and date separators */}
+      {/* Messages with grouping and date separators — NO summary strip */}
       <div className="flex-1 overflow-y-auto py-3">
         <div className="max-w-[820px] mx-auto px-4">
           {dealMessages.length === 0 && (
-            <div className="text-center text-[14px] text-muted-foreground py-16">Нет сообщений</div>
+            <div className="text-center text-[15px] text-muted-foreground py-16">Нет сообщений</div>
           )}
           {dealMessages.map((msg, i) => {
             const isMe = msg.senderId === "u1";
             const prev = i > 0 ? dealMessages[i - 1] : null;
             const isSameSender = prev?.senderId === msg.senderId;
 
-            // Date separator
             const msgDate = new Date(msg.timestamp).toDateString();
             const prevDate = prev ? new Date(prev.timestamp).toDateString() : null;
             const showDateSep = msgDate !== prevDate;
@@ -329,28 +300,26 @@ function ChatTab({ deal, onOpenTerms }: { deal: Deal; onOpenTerms?: () => void }
                 {showDateSep && (
                   <div className="flex items-center gap-3 my-3">
                     <div className="flex-1 h-px bg-border/50" />
-                    <span className="text-[12px] text-muted-foreground font-medium">{formatDateSeparator(msg.timestamp)}</span>
+                    <span className="text-[13px] text-muted-foreground font-medium">{formatDateSeparator(msg.timestamp)}</span>
                     <div className="flex-1 h-px bg-border/50" />
                   </div>
                 )}
                 <div className={cn(
                   "flex",
                   isMe ? "justify-end" : "justify-start",
-                  isSameSender && !showDateSep ? "mt-0.5" : "mt-2"
+                  isSameSender && !showDateSep ? "mt-0.5" : "mt-2.5"
                 )}>
                   <div
                     className={cn(
-                      "max-w-[63%] px-3.5 py-2",
+                      "max-w-[63%] px-3.5 py-2.5",
                       isMe
                         ? "bg-primary text-primary-foreground"
                         : "bg-secondary text-secondary-foreground",
-                      // Rounded corners: full rounding, but flatten adjacent corners for grouped messages
                       isSameSender && !showDateSep
                         ? isMe ? "rounded-2xl rounded-tr-md rounded-br-md" : "rounded-2xl rounded-tl-md rounded-bl-md"
                         : isMe ? "rounded-2xl rounded-br-md" : "rounded-2xl rounded-bl-md"
                     )}
                   >
-                    {/* Sender name: only show on first of a group */}
                     {(!isSameSender || showDateSep) && (
                       <p className={cn(
                         "text-[13px] font-semibold mb-0.5",
@@ -358,22 +327,13 @@ function ChatTab({ deal, onOpenTerms }: { deal: Deal; onOpenTerms?: () => void }
                       )}>{msg.senderName}</p>
                     )}
                     <p className="text-[15px] leading-relaxed">{msg.content}</p>
-                    {/* Attachment: compact file chip */}
                     {msg.attachment && (
                       <div className="mt-1.5 flex items-center gap-1.5 px-2 py-1 rounded-md bg-background/10 max-w-fit">
                         <FileText className="h-3.5 w-3.5 shrink-0 opacity-70" />
-                        <a
-                          href="#"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-[13px] font-medium underline hover:no-underline truncate max-w-[180px]"
-                        >
+                        <a href="#" className="text-[13px] font-medium underline hover:no-underline truncate max-w-[180px]">
                           {msg.attachment}
                         </a>
-                        <button
-                          className="opacity-60 hover:opacity-100 shrink-0 ml-1"
-                          title="Скачать"
-                        >
+                        <button className="opacity-60 hover:opacity-100 shrink-0 ml-1" title="Скачать">
                           <Download className="h-3.5 w-3.5" />
                         </button>
                       </div>
@@ -393,18 +353,18 @@ function ChatTab({ deal, onOpenTerms }: { deal: Deal; onOpenTerms?: () => void }
       </div>
 
       {/* Composer */}
-      <div className="px-4 py-2 border-t border-border bg-card">
+      <div className="px-4 py-2.5 border-t border-border bg-card">
         <div className="max-w-[820px] mx-auto flex gap-2 items-center">
-          <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0">
+          <Button size="icon" variant="ghost" className="h-9 w-9 shrink-0">
             <Paperclip className="h-4 w-4" />
           </Button>
           <Input
             value={newMsg}
             onChange={(e) => setNewMsg(e.target.value)}
             placeholder="Написать сообщение..."
-            className="flex-1 h-9 text-[15px] bg-background"
+            className="flex-1 h-10 text-[15px] bg-background"
           />
-          <Button size="icon" className="h-8 w-8 shrink-0">
+          <Button size="icon" className="h-9 w-9 shrink-0">
             <Send className="h-4 w-4" />
           </Button>
         </div>
@@ -414,7 +374,7 @@ function ChatTab({ deal, onOpenTerms }: { deal: Deal; onOpenTerms?: () => void }
 }
 
 /* ═══════════════════════════════════════════════════════
-   TERMS TAB — versioned, accordion sections, minimal noise
+   TERMS TAB — first section expanded, rest collapsed
    ═══════════════════════════════════════════════════════ */
 
 type TermFieldRow = { label: string; key: string };
@@ -430,9 +390,7 @@ const termsSections: { title: string; fields: TermFieldRow[] }[] = [
   },
   {
     title: "Сроки и доставка",
-    fields: [
-      { label: "Дедлайн", key: "deadline" },
-    ],
+    fields: [{ label: "Дедлайн", key: "deadline" }],
   },
   {
     title: "Оплата",
@@ -443,20 +401,13 @@ const termsSections: { title: string; fields: TermFieldRow[] }[] = [
   },
   {
     title: "Приёмка и правки",
-    fields: [
-      { label: "Критерии", key: "acceptanceCriteria" },
-    ],
+    fields: [{ label: "Критерии", key: "acceptanceCriteria" }],
   },
   {
-    title: "Отмена и споры",
+    title: "Отмена и маркировка",
     fields: [
-      { label: "Правила", key: "cancellation" },
-    ],
-  },
-  {
-    title: "Маркировка",
-    fields: [
-      { label: "Ответственность", key: "eridResponsibility" },
+      { label: "Правила отмены", key: "cancellation" },
+      { label: "Ответственность за ERID", key: "eridResponsibility" },
     ],
   },
 ];
@@ -466,7 +417,6 @@ function TermsTab({ dealId }: { dealId: string }) {
   const { data: dbTerms = [] } = useDealTerms(dealId);
   const acceptTerms = useAcceptTerms();
 
-  // Use DB terms if available, fallback to mock
   const termsVersions = dbTerms.length > 0
     ? dbTerms.map((t: any) => ({
         id: t.id,
@@ -484,7 +434,7 @@ function TermsTab({ dealId }: { dealId: string }) {
   const ver = termsVersions[Math.min(selectedVersion, termsVersions.length - 1)];
   const prevVer = selectedVersion > 0 ? termsVersions[selectedVersion - 1] : null;
 
-  const statusLabel = ver.status === "accepted" ? "Согласовано" : ver.status === "draft" ? "Черновик" : "Ожидает подтверждения";
+  const statusLabel = ver.status === "accepted" ? "Согласовано" : ver.status === "draft" ? "Черновик" : "Ожидает";
   const statusColor = ver.status === "accepted"
     ? "bg-success/15 text-success border-success/30"
     : ver.status === "draft"
@@ -510,51 +460,50 @@ function TermsTab({ dealId }: { dealId: string }) {
   };
 
   return (
-    <div className="p-4 space-y-3 max-w-[820px] mx-auto">
-      <Card>
-        <CardContent className="p-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-[13px] text-muted-foreground">Версия:</span>
-              <Select
-                value={String(selectedVersion)}
-                onValueChange={(v) => { setSelectedVersion(Number(v)); setShowChanges(false); }}
-              >
-                <SelectTrigger className="h-7 w-20 text-[13px] bg-background border-border">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {termsVersions.map((v, i) => (
-                    <SelectItem key={v.version} value={String(i)}>v{v.version}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <span className={cn("text-[11px] font-medium px-2 py-0.5 rounded border", statusColor)}>
-                {statusLabel}
-              </span>
-            </div>
-            {prevVer && changedKeys.size > 0 && (
-              <button
-                onClick={() => setShowChanges(!showChanges)}
-                className={cn(
-                  "text-[12px] font-medium transition-colors",
-                  showChanges ? "text-primary" : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {showChanges ? "Все поля" : "Показать изменения"}
-              </button>
+    <div className="p-5 space-y-4 max-w-[820px] mx-auto">
+      {/* Version selector — compact */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <span className="text-[14px] text-muted-foreground">Версия:</span>
+          <Select
+            value={String(selectedVersion)}
+            onValueChange={(v) => { setSelectedVersion(Number(v)); setShowChanges(false); }}
+          >
+            <SelectTrigger className="h-8 w-20 text-[14px] bg-background border-border">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {termsVersions.map((v, i) => (
+                <SelectItem key={v.version} value={String(i)}>v{v.version}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <span className={cn("text-[12px] font-medium px-2 py-0.5 rounded border", statusColor)}>
+            {statusLabel}
+          </span>
+        </div>
+        {prevVer && changedKeys.size > 0 && (
+          <button
+            onClick={() => setShowChanges(!showChanges)}
+            className={cn(
+              "text-[13px] font-medium transition-colors",
+              showChanges ? "text-primary" : "text-muted-foreground hover:text-foreground"
             )}
-          </div>
-          {ver.acceptedBy.length > 0 && (
-            <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground mt-2">
-              <CheckCircle2 className="h-3.5 w-3.5 text-success" />
-              Подтвердили: {ver.acceptedBy.join(", ")} · {ver.date}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+          >
+            {showChanges ? "Все поля" : "Показать изменения"}
+          </button>
+        )}
+      </div>
 
-      <Accordion type="multiple" defaultValue={termsSections.map((_, i) => `s${i}`)}>
+      {ver.acceptedBy.length > 0 && (
+        <div className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
+          <CheckCircle2 className="h-3.5 w-3.5 text-success" />
+          Подтвердили: {ver.acceptedBy.join(", ")} · {ver.date}
+        </div>
+      )}
+
+      {/* Accordion sections — only first expanded by default */}
+      <Accordion type="multiple" defaultValue={["s0"]}>
         {termsSections.map((section, si) => {
           const visibleFields = showChanges
             ? section.fields.filter((f) => changedKeys.has(f.key))
@@ -563,10 +512,10 @@ function TermsTab({ dealId }: { dealId: string }) {
 
           return (
             <AccordionItem key={si} value={`s${si}`} className="border-border/50">
-              <AccordionTrigger className="py-2 px-1 text-[14px] font-semibold text-card-foreground hover:no-underline">
+              <AccordionTrigger className="py-2.5 px-1 text-[15px] font-semibold text-card-foreground hover:no-underline">
                 {section.title}
               </AccordionTrigger>
-              <AccordionContent className="pb-2 px-1">
+              <AccordionContent className="pb-3 px-1">
                 <div className="space-y-0">
                   {visibleFields.map((field, fi) => {
                     const value = (ver.fields as any)[field.key] || "—";
@@ -575,12 +524,12 @@ function TermsTab({ dealId }: { dealId: string }) {
                       <div
                         key={field.key}
                         className={cn(
-                          "flex items-start justify-between py-1.5",
+                          "flex items-start justify-between py-2",
                           fi > 0 && "border-t border-border/30",
                           changed && showChanges && "bg-primary/5 -mx-1 px-1 rounded"
                         )}
                       >
-                        <span className="text-[13px] text-muted-foreground w-32 shrink-0">{field.label}</span>
+                        <span className="text-[14px] text-muted-foreground w-36 shrink-0">{field.label}</span>
                         <span className="text-[15px] font-medium text-card-foreground text-right flex-1">{value}</span>
                       </div>
                     );
@@ -592,47 +541,25 @@ function TermsTab({ dealId }: { dealId: string }) {
         })}
       </Accordion>
 
+      {/* Max 2 buttons */}
       <div className="flex items-center gap-2 pt-1">
         {canAccept && (
-          <Button size="sm" className="text-[13px] h-8" onClick={handleAccept} disabled={acceptTerms.isPending}>
-            <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+          <Button size="sm" className="text-[14px] h-9" onClick={handleAccept} disabled={acceptTerms.isPending}>
+            <CheckCircle2 className="h-4 w-4 mr-1.5" />
             {acceptTerms.isPending ? "Подтверждение…" : "Подтвердить условия"}
           </Button>
         )}
-        <Button size="sm" variant="outline" className="text-[13px] h-8">
+        <Button size="sm" variant="outline" className="text-[14px] h-9">
           Предложить изменения{hasAcceptedAndNoDraft ? ` (v${ver.version + 1})` : ""}
         </Button>
       </div>
-
-      <Collapsible>
-        <CollapsibleTrigger className="flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground transition-colors">
-          <ChevronRight className="h-3 w-3" />
-          Дополнительно
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <div className="flex items-center gap-4 pt-1.5 pl-4">
-            <button className="text-[12px] text-primary hover:underline flex items-center gap-1">
-              <Radio className="h-3 w-3" /> Маркировка (ОРД) →
-            </button>
-            <button className="text-[12px] text-primary hover:underline flex items-center gap-1">
-              <ScrollText className="h-3 w-3" /> Журнал действий →
-            </button>
-          </div>
-        </CollapsibleContent>
-      </Collapsible>
-
-      <p className="text-[11px] text-muted-foreground/40 leading-relaxed">
-        Платформа фиксирует версионные условия и подтверждения сторон.
-      </p>
     </div>
   );
 }
+
 /* ═══════════════════════════════════════════════════════
-   FILES TAB — dense table, strict actions
+   FILES TAB — deduplicated, one row per file
    ═══════════════════════════════════════════════════════ */
-const fileSizeMock: Record<string, string> = {
-  "f1": "PDF · 1.2 MB", "f2": "MP4 · 84 MB", "f3": "MP4 · 112 MB", "f4": "PDF · 340 KB",
-};
 
 function FilesTab({ dealId }: { dealId: string }) {
   const { data: dbFiles = [], isLoading } = useDealFiles(dealId);
@@ -643,18 +570,22 @@ function FilesTab({ dealId }: { dealId: string }) {
 
   const displayFiles = dbFiles.length > 0
     ? dbFiles.map((f) => ({
-        id: f.id, name: f.file_name, type: f.category as any,
+        id: f.id, name: f.file_name, type: f.category as string,
         uploader: "Вы", date: new Date(f.created_at).toLocaleDateString("ru-RU"),
         pinned: f.pinned ?? false, storagePath: f.storage_path,
         sizeMeta: `${(f.file_type || "").split("/").pop()?.toUpperCase() || "—"} · ${((f.file_size || 0) / 1024).toFixed(0)} KB`,
       }))
     : mockFiles.map((f) => ({ ...f, storagePath: "", sizeMeta: fileSizeMock[f.id] || "—" }));
 
-  const sortedFiles = useMemo(() => {
-    return [...displayFiles].sort((a, b) => (a.pinned && !b.pinned ? -1 : !a.pinned && b.pinned ? 1 : 0));
+  // Deduplicate by file name — keep latest (last in array)
+  const deduped = useMemo(() => {
+    const seen = new Map<string, typeof displayFiles[0]>();
+    for (const f of displayFiles) {
+      seen.set(f.name, f);
+    }
+    const arr = Array.from(seen.values());
+    return arr.sort((a, b) => (a.pinned && !b.pinned ? -1 : !a.pinned && b.pinned ? 1 : 0));
   }, [displayFiles]);
-
-
 
   const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -664,12 +595,12 @@ function FilesTab({ dealId }: { dealId: string }) {
   };
 
   return (
-    <div className="p-4 space-y-3 max-w-[820px] mx-auto">
+    <div className="p-5 space-y-4 max-w-[820px] mx-auto">
       <div className="flex items-center justify-between">
-        <p className="text-[14px] font-semibold text-card-foreground">Файлы сделки</p>
+        <p className="text-[15px] font-semibold text-card-foreground">Файлы сделки</p>
         <div className="flex items-center gap-2">
           <Select value={uploadCategory} onValueChange={setUploadCategory}>
-            <SelectTrigger className="h-7 w-28 text-[12px]"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-8 w-28 text-[13px]"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="brief">Бриф</SelectItem>
               <SelectItem value="draft">Черновик</SelectItem>
@@ -677,69 +608,72 @@ function FilesTab({ dealId }: { dealId: string }) {
               <SelectItem value="legal">Юридический</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" size="sm" className="text-[13px] h-8" onClick={() => fileInputRef.current?.click()} disabled={uploadFile.isPending}>
-            <Upload className="h-3.5 w-3.5 mr-1.5" />
+          <Button variant="outline" size="sm" className="text-[14px] h-9" onClick={() => fileInputRef.current?.click()} disabled={uploadFile.isPending}>
+            <Upload className="h-4 w-4 mr-1.5" />
             {uploadFile.isPending ? "Загрузка…" : "Загрузить"}
           </Button>
           <input ref={fileInputRef} type="file" className="hidden" onChange={handleUpload} />
         </div>
       </div>
 
-      <div className="grid grid-cols-[100px_1fr_120px_80px_72px] gap-2 px-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-        <span>Категория</span><span>Файл</span><span>Автор</span><span>Дата</span><span className="text-right">Действия</span>
-      </div>
-
       {isLoading ? (
-        <div className="text-center py-8 text-[13px] text-muted-foreground">Загрузка…</div>
+        <div className="text-center py-8 text-[14px] text-muted-foreground">Загрузка…</div>
+      ) : deduped.length === 0 ? (
+        <div className="text-center py-12 text-[14px] text-muted-foreground">Нет файлов</div>
       ) : (
-        (["brief", "draft", "final", "legal", "Brief", "Draft", "Final", "Legal"] as const).map((type) => {
-          const files = sortedFiles.filter((f) => f.type.toLowerCase() === type.toLowerCase());
-          if (files.length === 0) return null;
-          const label = fileTypeLabels[type as keyof typeof fileTypeLabels] || (type.charAt(0).toUpperCase() + type.slice(1));
-          return files.map((file, fi) => (
+        <div className="space-y-1">
+          {deduped.map((file) => (
             <div
               key={file.id}
               className={cn(
-                "grid grid-cols-[100px_1fr_120px_80px_72px] gap-2 items-center px-2 py-1.5 rounded transition-colors hover:bg-muted/30",
+                "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors hover:bg-muted/30",
                 file.pinned && "bg-primary/5 border border-primary/20"
               )}
             >
-              <span className="text-[12px] text-muted-foreground">{fi === 0 ? label : ""}</span>
-              <div className="min-w-0">
-                <div className="flex items-center gap-1.5">
-                  {file.pinned && <Pin className="h-3 w-3 text-primary shrink-0" />}
-                  <span className="text-[14px] font-medium text-card-foreground truncate">{file.name}</span>
-                </div>
-                <p className="text-[11px] text-muted-foreground/60">{file.sizeMeta}</p>
+              {file.pinned && <Pin className="h-3.5 w-3.5 text-primary shrink-0" />}
+              <div className="flex-1 min-w-0">
+                <span className="text-[15px] font-medium text-card-foreground truncate block">
+                  {file.storagePath ? (
+                    <button
+                      onClick={() => downloadFile.mutate(file.storagePath)}
+                      className="hover:underline text-left"
+                    >
+                      {file.name}
+                    </button>
+                  ) : (
+                    file.name
+                  )}
+                </span>
+                <span className="text-[13px] text-muted-foreground">
+                  {fileTypeLabels[file.type] || file.type} · {file.sizeMeta} · {file.uploader} · {file.date}
+                </span>
               </div>
-              <span className="text-[13px] text-muted-foreground truncate">{file.uploader}</span>
-              <span className="text-[12px] text-muted-foreground">{file.date}</span>
-              <div className="flex items-center justify-end">
-                {file.storagePath ? (
-                  <button onClick={() => downloadFile.mutate(file.storagePath)} title="Скачать" className="text-muted-foreground hover:text-foreground transition-colors">
-                    <Download className="h-4 w-4" />
-                  </button>
-                ) : (
-                  <Download className="h-4 w-4 text-muted-foreground/40" />
+              <button
+                onClick={() => file.storagePath && downloadFile.mutate(file.storagePath)}
+                title="Скачать"
+                className={cn(
+                  "shrink-0 transition-colors",
+                  file.storagePath ? "text-muted-foreground hover:text-foreground" : "text-muted-foreground/30"
                 )}
-              </div>
+                disabled={!file.storagePath}
+              >
+                <Download className="h-4 w-4" />
+              </button>
             </div>
-          ));
-        })
+          ))}
+        </div>
       )}
     </div>
   );
 }
 
 /* ═══════════════════════════════════════════════════════
-   PAYMENT TAB — simplified, single summary line
+   PAYMENT TAB — dispute hidden in collapsible
    ═══════════════════════════════════════════════════════ */
 function PaymentTab({ dealId }: { dealId: string }) {
   const { data: escrowItems = [] } = useDealEscrow(dealId);
   const releaseEscrow = useReleaseEscrow();
-  const logEvent = useLogDealEvent();
 
-  // Use DB data if available, fallback to mock
   const milestones = escrowItems.length > 0
     ? escrowItems.map((e: any) => ({ id: e.id, label: e.label, amount: e.amount, status: e.status as string }))
     : mockPayment.milestones;
@@ -750,13 +684,9 @@ function PaymentTab({ dealId }: { dealId: string }) {
   const remaining = total - released;
   const commission = Math.round(total * 0.1);
 
-  const handleRelease = (escrowId: string) => {
-    releaseEscrow.mutate({ escrowId, dealId });
-  };
-
   return (
-    <div className="p-4 space-y-3 max-w-[820px] mx-auto">
-      <div className="flex items-center gap-3 flex-wrap text-[14px]">
+    <div className="p-5 space-y-4 max-w-[820px] mx-auto">
+      <div className="flex items-center gap-3 flex-wrap text-[15px]">
         <span className="text-muted-foreground">Итого: <span className="font-semibold text-card-foreground">{total.toLocaleString()} ₽</span></span>
         <span className="text-border">·</span>
         <span className="text-muted-foreground">Резерв: <span className="font-semibold text-card-foreground">{reserved.toLocaleString()} ₽</span></span>
@@ -767,50 +697,44 @@ function PaymentTab({ dealId }: { dealId: string }) {
       </div>
 
       <Card>
-        <CardContent className="p-3 space-y-0">
-          <p className="text-[14px] font-semibold text-card-foreground mb-1">Этапы оплаты</p>
+        <CardContent className="p-4 space-y-0">
+          <p className="text-[15px] font-semibold text-card-foreground mb-2">Этапы оплаты</p>
           {milestones.map((ms: any, i: number) => (
-            <div key={ms.id} className={cn("flex items-center justify-between py-1.5", i > 0 && "border-t border-border/50")}>
-              <div className="flex items-center gap-2">
-                <span className={cn("text-[11px] font-medium px-1.5 py-0.5 rounded", paymentStatusColors[ms.status as keyof typeof paymentStatusColors] || "bg-muted text-muted-foreground")}>
-                  {paymentStatusLabels[ms.status as keyof typeof paymentStatusLabels] || ms.status}
+            <div key={ms.id} className={cn("flex items-center justify-between py-2", i > 0 && "border-t border-border/50")}>
+              <div className="flex items-center gap-2.5">
+                <span className={cn("text-[12px] font-medium px-1.5 py-0.5 rounded", paymentStatusColors[ms.status] || "bg-muted text-muted-foreground")}>
+                  {paymentStatusLabels[ms.status] || ms.status}
                 </span>
-                <span className="text-[14px] text-card-foreground">{ms.label}</span>
+                <span className="text-[15px] text-card-foreground">{ms.label}</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-[14px] font-medium text-card-foreground">{ms.amount.toLocaleString()} ₽</span>
+                <span className="text-[15px] font-medium text-card-foreground">{ms.amount.toLocaleString()} ₽</span>
                 {ms.status === "reserved" && escrowItems.length > 0 && (
-                  <Button size="sm" variant="outline" className="text-[11px] h-6 px-2" onClick={() => handleRelease(ms.id)} disabled={releaseEscrow.isPending}>
+                  <Button size="sm" variant="outline" className="text-[12px] h-7 px-2" onClick={() => releaseEscrow.mutate({ escrowId: ms.id, dealId })} disabled={releaseEscrow.isPending}>
                     Выплатить
                   </Button>
                 )}
               </div>
             </div>
           ))}
-          <div className="flex items-center justify-between pt-1.5 mt-1 border-t border-border/30">
-            <span className="text-[12px] text-muted-foreground/60" title="Комиссия платформы 10% от суммы сделки">
-              Комиссия платформы (10%)
-            </span>
-            <span className="text-[12px] text-muted-foreground/60">{commission.toLocaleString()} ₽</span>
+          <div className="flex items-center justify-between pt-2 mt-1 border-t border-border/30">
+            <span className="text-[13px] text-muted-foreground/60">Комиссия платформы (10%)</span>
+            <span className="text-[13px] text-muted-foreground/60">{commission.toLocaleString()} ₽</span>
           </div>
         </CardContent>
       </Card>
 
-      <Button size="sm" className="text-[13px] h-8">
-        <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
-        Подтвердить выполнение
-      </Button>
-
+      {/* Dispute — collapsed by default, no visible red button */}
       <Collapsible>
-        <CollapsibleTrigger className="flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground transition-colors">
-          <ChevronRight className="h-3 w-3" />
+        <CollapsibleTrigger className="flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground transition-colors">
+          {<ChevronRight className="h-3.5 w-3.5" />}
           Проблема
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <div className="pl-4 pt-1.5 space-y-1.5">
-            <p className="text-[12px] text-muted-foreground">Если результат не соответствует условиям, вы можете открыть спор.</p>
-            <Button size="sm" variant="outline" className="text-[12px] h-7 text-destructive border-destructive/30 hover:bg-destructive/10">
-              <AlertTriangle className="h-3 w-3 mr-1.5" />
+          <div className="pl-5 pt-2 space-y-2">
+            <p className="text-[14px] text-muted-foreground">Если результат не соответствует условиям, вы можете открыть спор.</p>
+            <Button size="sm" variant="outline" className="text-[13px] h-8 text-destructive border-destructive/30 hover:bg-destructive/10">
+              <AlertTriangle className="h-3.5 w-3.5 mr-1.5" />
               Открыть спор
             </Button>
           </div>
@@ -819,58 +743,64 @@ function PaymentTab({ dealId }: { dealId: string }) {
     </div>
   );
 }
+
 /* ═══════════════════════════════════════════════════════
-   MORE TAB — 2 accordion sections, no nested tabs
+   MORE TAB — both accordions collapsed by default, audit limited to 5
    ═══════════════════════════════════════════════════════ */
 function MoreTab({ dealId }: { dealId: string }) {
   const { data: dbAudit = [] } = useDealAuditLog(dealId);
+  const [showFullAudit, setShowFullAudit] = useState(false);
   const erid = "2SDnjek4fP1";
   const ordStatus: "ok" | "error" = "ok";
-  const displayAudit = dbAudit.length > 0
-    ? dbAudit.slice(0, 12).map((e: any) => ({
+
+  const allAudit = dbAudit.length > 0
+    ? dbAudit.map((e: any) => ({
         id: e.id, ts: new Date(e.created_at).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" }),
         who: "Участник", action: e.action, category: e.category, file: (e.metadata as any)?.file_name,
       }))
-    : mockAudit.slice(0, 10);
+    : mockAudit;
+
+  const displayAudit = showFullAudit ? allAudit : allAudit.slice(0, 5);
   const categoryIcons: Record<string, any> = { terms: ScrollText, files: Files, payments: CreditCard, ord: Radio };
 
   return (
-    <div className="p-4 space-y-0 max-w-[820px] mx-auto">
-      <Accordion type="multiple" defaultValue={["ord", "audit"]}>
+    <div className="p-5 space-y-0 max-w-[820px] mx-auto">
+      {/* Both collapsed by default — defaultValue is empty */}
+      <Accordion type="multiple" defaultValue={[]}>
         <AccordionItem value="ord" className="border-border/50">
-          <AccordionTrigger className="py-2.5 text-[15px] font-semibold text-card-foreground hover:no-underline">
+          <AccordionTrigger className="py-3 text-[15px] font-semibold text-card-foreground hover:no-underline">
             Маркировка (ОРД)
           </AccordionTrigger>
-          <AccordionContent className="pb-3">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-[14px]">
+          <AccordionContent className="pb-4">
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between text-[15px]">
                 <span className="text-muted-foreground">Статус</span>
                 {ordStatus === "ok" ? (
-                  <span className="flex items-center gap-1 text-success font-medium text-[13px]">
-                    <CheckCircle2 className="h-3.5 w-3.5" /> Активно
+                  <span className="flex items-center gap-1.5 text-success font-medium text-[14px]">
+                    <CheckCircle2 className="h-4 w-4" /> Активно
                   </span>
                 ) : (
-                  <span className="flex items-center gap-1 text-destructive font-medium text-[13px]">
-                    <AlertTriangle className="h-3.5 w-3.5" /> Ошибка
+                  <span className="flex items-center gap-1.5 text-destructive font-medium text-[14px]">
+                    <AlertTriangle className="h-4 w-4" /> Ошибка
                   </span>
                 )}
               </div>
-              <div className="flex items-center justify-between text-[14px]">
+              <div className="flex items-center justify-between text-[15px]">
                 <span className="text-muted-foreground">ERID</span>
                 <div className="flex items-center gap-1.5">
-                  <span className="font-mono font-semibold text-primary text-[13px]">{erid}</span>
+                  <span className="font-mono font-semibold text-primary text-[14px]">{erid}</span>
                   <button onClick={() => { navigator.clipboard.writeText(erid); toast.success("ERID скопирован"); }}>
-                    <ClipboardCopy className="h-3 w-3 text-primary" />
+                    <ClipboardCopy className="h-3.5 w-3.5 text-primary" />
                   </button>
                 </div>
               </div>
-              <div className="flex items-center justify-between text-[14px]">
+              <div className="flex items-center justify-between text-[15px]">
                 <span className="text-muted-foreground">Последняя синхронизация</span>
-                <span className="text-[13px] text-card-foreground">19.02.2026, 14:33</span>
+                <span className="text-[14px] text-card-foreground">19.02.2026, 14:33</span>
               </div>
               {(ordStatus as string) === "error" && (
-                <Button variant="outline" size="sm" className="text-[13px] h-7 mt-1">
-                  <RefreshCw className="h-3 w-3 mr-1.5" />
+                <Button variant="outline" size="sm" className="text-[14px] h-8 mt-1">
+                  <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
                   Повторить синхронизацию
                 </Button>
               )}
@@ -879,30 +809,33 @@ function MoreTab({ dealId }: { dealId: string }) {
         </AccordionItem>
 
         <AccordionItem value="audit" className="border-border/50">
-          <AccordionTrigger className="py-2.5 text-[15px] font-semibold text-card-foreground hover:no-underline">
+          <AccordionTrigger className="py-3 text-[15px] font-semibold text-card-foreground hover:no-underline">
             Журнал действий
           </AccordionTrigger>
-          <AccordionContent className="pb-3">
+          <AccordionContent className="pb-4">
             <div className="space-y-0">
               {displayAudit.map((entry: any, i: number) => {
                 const Icon = categoryIcons[entry.category] || ScrollText;
                 return (
-                  <div key={entry.id} className={cn("flex items-start gap-2.5 py-1.5", i > 0 && "border-t border-border/30")}>
-                    <Icon className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
+                  <div key={entry.id} className={cn("flex items-start gap-2.5 py-2", i > 0 && "border-t border-border/30")}>
+                    <Icon className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <p className="text-[14px] text-card-foreground">{entry.action}</p>
-                      <span className="text-[12px] text-muted-foreground">{entry.who} · {entry.ts}</span>
+                      <p className="text-[15px] text-card-foreground">{entry.action}</p>
+                      <span className="text-[13px] text-muted-foreground">{entry.who} · {entry.ts}</span>
                       {entry.file && (
-                        <a href="#" className="block text-[12px] text-primary underline hover:no-underline mt-0.5">{entry.file}</a>
+                        <a href="#" className="block text-[13px] text-primary underline hover:no-underline mt-0.5">{entry.file}</a>
                       )}
                     </div>
                   </div>
                 );
               })}
             </div>
-            {displayAudit.length >= 10 && (
-              <button className="text-[12px] text-primary hover:underline mt-2 flex items-center gap-1">
-                Показать полный журнал <ChevronRight className="h-3 w-3" />
+            {!showFullAudit && allAudit.length > 5 && (
+              <button
+                onClick={() => setShowFullAudit(true)}
+                className="text-[13px] text-primary hover:underline mt-2 flex items-center gap-1"
+              >
+                Показать все ({allAudit.length}) <ChevronRight className="h-3.5 w-3.5" />
               </button>
             )}
           </AccordionContent>
@@ -923,6 +856,7 @@ export function DealWorkspace() {
   const [detailsOpen, setDetailsOpen] = useState(false);
 
   const primaryAction = getPrimaryAction(selectedDeal.status);
+  const nextStepHint = getNextStepHint(selectedDeal.status);
   const completedMs = selectedDeal.milestones.filter((m) => m.completed).length;
   const totalMs = selectedDeal.milestones.length;
 
@@ -948,59 +882,57 @@ export function DealWorkspace() {
 
       {/* Main workspace */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* ── Header: single source of truth ── */}
-        <div className="px-5 py-2 border-b border-border bg-card">
+        {/* ── Header Row 1: Title + status + primary CTA + kebab ── */}
+        <div className="px-5 py-2.5 border-b border-border bg-card">
           <div className="max-w-[1100px]">
-            {/* Row 1: Title + status + ONE primary CTA + kebab */}
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2.5 min-w-0">
-                <h1 className="text-[19px] font-bold text-card-foreground truncate">{selectedDeal.title}</h1>
-                <span className={cn("text-[11px] font-medium px-1.5 py-0.5 rounded border shrink-0", statusColors[selectedDeal.status])}>
+                <h1 className="text-[20px] font-bold text-card-foreground truncate">{selectedDeal.title}</h1>
+                <span className={cn("text-[11px] font-medium px-2 py-0.5 rounded border shrink-0", statusColors[selectedDeal.status])}>
                   {statusLabels[selectedDeal.status]}
                 </span>
               </div>
 
               <div className="flex items-center gap-1.5 shrink-0">
                 {primaryAction && (
-                  <Button size="sm" className="text-[13px] h-8">
-                    <primaryAction.icon className="h-3.5 w-3.5 mr-1" />
+                  <Button size="sm" className="text-[14px] h-9">
+                    <primaryAction.icon className="h-4 w-4 mr-1.5" />
                     {primaryAction.label}
                   </Button>
                 )}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                    <Button variant="ghost" size="icon" className="h-9 w-9">
                       <MoreVertical className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem><Download className="h-3.5 w-3.5 mr-2" /> Экспорт</DropdownMenuItem>
-                    <DropdownMenuItem><Copy className="h-3.5 w-3.5 mr-2" /> Дублировать</DropdownMenuItem>
-                    <DropdownMenuItem><Archive className="h-3.5 w-3.5 mr-2" /> Архивировать</DropdownMenuItem>
+                    <DropdownMenuItem className="text-[14px]"><Download className="h-4 w-4 mr-2" /> Экспорт</DropdownMenuItem>
+                    <DropdownMenuItem className="text-[14px]"><Copy className="h-4 w-4 mr-2" /> Дублировать</DropdownMenuItem>
+                    <DropdownMenuItem className="text-[14px]"><Archive className="h-4 w-4 mr-2" /> Архивировать</DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem className="text-destructive focus:text-destructive">
-                      <AlertTriangle className="h-3.5 w-3.5 mr-2" /> Открыть спор
+                    <DropdownMenuItem className="text-destructive focus:text-destructive text-[14px]">
+                      <AlertTriangle className="h-4 w-4 mr-2" /> Открыть спор
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
             </div>
 
-            {/* Collapsible "Deal details" row */}
+            {/* Row 2: Collapsible "Deal details ▾" */}
             <Collapsible open={detailsOpen} onOpenChange={setDetailsOpen}>
-              <CollapsibleTrigger className="flex items-center gap-1.5 mt-1 text-[12px] text-muted-foreground hover:text-foreground transition-colors">
-                {detailsOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+              <CollapsibleTrigger className="flex items-center gap-1.5 mt-1 text-[13px] text-muted-foreground hover:text-foreground transition-colors">
+                {detailsOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
                 <span>Детали сделки</span>
                 {!detailsOpen && (
                   <span className="text-muted-foreground/60 ml-1">
                     — {selectedDeal.budget.toLocaleString()} ₽
                     {selectedDeal.deadline && ` · до ${new Date(selectedDeal.deadline).toLocaleDateString("ru-RU")}`}
-                    {totalMs > 0 && ` · ${completedMs}/${totalMs}`}
                   </span>
                 )}
               </CollapsibleTrigger>
               <CollapsibleContent>
-                <div className="mt-1.5 grid grid-cols-2 gap-x-6 gap-y-1 text-[13px] pb-1">
+                <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1.5 text-[14px] pb-1">
                   <div className="flex items-center gap-2">
                     <span className="text-muted-foreground">Сумма:</span>
                     <span className="font-semibold text-card-foreground">{selectedDeal.budget.toLocaleString()} ₽</span>
@@ -1009,7 +941,7 @@ export function DealWorkspace() {
                     <div className="flex items-center gap-2">
                       <span className="text-muted-foreground">Дедлайн:</span>
                       <span className="font-medium text-card-foreground flex items-center gap-1">
-                        <CalendarDays className="h-3 w-3" />
+                        <CalendarDays className="h-3.5 w-3.5" />
                         {new Date(selectedDeal.deadline).toLocaleDateString("ru-RU")}
                       </span>
                     </div>
@@ -1020,7 +952,7 @@ export function DealWorkspace() {
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-muted-foreground flex items-center gap-1">
-                      <ShieldCheck className="h-3 w-3 text-success" /> Безопасная сделка
+                      <ShieldCheck className="h-3.5 w-3.5 text-success" /> Безопасная сделка
                     </span>
                     {totalMs > 0 && (
                       <span className="text-muted-foreground ml-auto">Этап {completedMs}/{totalMs}</span>
@@ -1029,10 +961,10 @@ export function DealWorkspace() {
                   <div className="flex items-center gap-2">
                     <span className="text-muted-foreground">ID:</span>
                     <button
-                      className="flex items-center gap-1 hover:text-foreground transition-colors font-mono text-[11px] text-muted-foreground"
+                      className="flex items-center gap-1 hover:text-foreground transition-colors font-mono text-[12px] text-muted-foreground"
                       onClick={() => { navigator.clipboard.writeText(selectedDeal.id); toast.success("ID скопирован"); }}
                     >
-                      #{selectedDeal.id} <ClipboardCopy className="h-2.5 w-2.5" />
+                      #{selectedDeal.id} <ClipboardCopy className="h-3 w-3" />
                     </button>
                   </div>
                 </div>
@@ -1041,7 +973,7 @@ export function DealWorkspace() {
           </div>
         </div>
 
-        {/* ── Sub-tabs: 4 core + "Ещё" dropdown ── */}
+        {/* ── Sub-tabs ── */}
         <div className="border-b border-border bg-card px-5">
           <div className="flex items-center gap-0">
             {coreTabs.map((tab) => (
@@ -1049,13 +981,13 @@ export function DealWorkspace() {
                 key={tab.value}
                 onClick={() => setActiveSubTab(tab.value)}
                 className={cn(
-                  "flex items-center gap-1.5 px-3 h-9 text-[14px] font-medium border-b-2 transition-colors",
+                  "flex items-center gap-1.5 px-3 h-10 text-[15px] font-medium border-b-2 transition-colors",
                   activeSubTab === tab.value
                     ? "border-primary text-foreground"
                     : "border-transparent text-muted-foreground hover:text-foreground"
                 )}
               >
-                <tab.icon className="h-3.5 w-3.5" />
+                <tab.icon className="h-4 w-4" />
                 {tab.label}
               </button>
             ))}
@@ -1063,7 +995,7 @@ export function DealWorkspace() {
             <button
               onClick={() => setActiveSubTab("more")}
               className={cn(
-                "flex items-center gap-1 px-3 h-9 text-[14px] font-medium border-b-2 transition-colors",
+                "flex items-center gap-1 px-3 h-10 text-[15px] font-medium border-b-2 transition-colors",
                 isMoreTab
                   ? "border-primary text-foreground"
                   : "border-transparent text-muted-foreground hover:text-foreground"
@@ -1072,11 +1004,20 @@ export function DealWorkspace() {
               Ещё
             </button>
           </div>
+
+          {/* Next step hint — single compact line */}
+          {nextStepHint && (
+            <div className="pb-2 -mt-0.5">
+              <p className="text-[13px] text-muted-foreground">
+                <span className="text-primary font-medium">→</span> {nextStepHint}
+              </p>
+            </div>
+          )}
         </div>
 
         {/* ── Tab content ── */}
         <div className="flex-1 overflow-y-auto">
-          {activeSubTab === "chat" && <ChatTab deal={selectedDeal} onOpenTerms={() => setActiveSubTab("terms")} />}
+          {activeSubTab === "chat" && <ChatTab deal={selectedDeal} />}
           {activeSubTab === "terms" && <TermsTab dealId={selectedDeal.id} />}
           {activeSubTab === "files" && <FilesTab dealId={selectedDeal.id} />}
           {activeSubTab === "payment" && <PaymentTab dealId={selectedDeal.id} />}
