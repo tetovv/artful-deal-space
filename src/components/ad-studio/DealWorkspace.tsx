@@ -630,6 +630,10 @@ function TermsTab({ dealId }: { dealId: string }) {
 /* ═══════════════════════════════════════════════════════
    FILES TAB — dense table, strict actions
    ═══════════════════════════════════════════════════════ */
+const fileSizeMock: Record<string, string> = {
+  "f1": "PDF · 1.2 MB", "f2": "MP4 · 84 MB", "f3": "MP4 · 112 MB", "f4": "PDF · 340 KB",
+};
+
 function FilesTab({ dealId }: { dealId: string }) {
   const { data: dbFiles = [], isLoading } = useDealFiles(dealId);
   const uploadFile = useUploadDealFile();
@@ -650,9 +654,7 @@ function FilesTab({ dealId }: { dealId: string }) {
     return [...displayFiles].sort((a, b) => (a.pinned && !b.pinned ? -1 : !a.pinned && b.pinned ? 1 : 0));
   }, [displayFiles]);
 
-  const fileSizeMock: Record<string, string> = {
-    "f1": "PDF · 1.2 MB", "f2": "MP4 · 84 MB", "f3": "MP4 · 112 MB", "f4": "PDF · 340 KB",
-  };
+
 
   const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
