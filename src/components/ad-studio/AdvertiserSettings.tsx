@@ -50,7 +50,7 @@ const defaults: AdvSettings = {
 };
 
 type VerifyState = "idle" | "loading" | "success" | "error";
-type SectionStatus = "empty" | "unsaved" | "filled" | "verified";
+type SectionStatus = "empty" | "partial" | "unsaved" | "filled" | "verified";
 
 const ORD_PROVIDERS = [
   { id: "yandex", label: "Яндекс ОРД" },
@@ -88,16 +88,25 @@ function isBankFieldsValid(form: AdvSettings): boolean {
   return form.bank_bik.length === 9 && form.bank_account.length === 20;
 }
 
+function isBankPartial(form: AdvSettings): boolean {
+  return (form.bank_bik.length > 0 || form.bank_account.length > 0) && !isBankFieldsValid(form);
+}
+
+function isOrdPartial(form: AdvSettings): boolean {
+  return (form.ord_identifier.length > 0 || form.ord_token.length > 0) && !form.ord_identifier;
+}
+
 /** Compare specific keys between form and saved to detect section-level dirty */
 function isSectionDirty(form: AdvSettings, saved: AdvSettings, keys: (keyof AdvSettings)[]): boolean {
   return keys.some((k) => form[k] !== saved[k]);
 }
 
-function getSectionStatus(fieldsValid: boolean, verified: boolean, sectionDirty: boolean): SectionStatus {
+function getSectionStatus(fieldsValid: boolean, verified: boolean, sectionDirty: boolean, partial?: boolean): SectionStatus {
   if (verified && fieldsValid && !sectionDirty) return "verified";
   if (fieldsValid && sectionDirty) return "unsaved";
   if (fieldsValid) return "filled";
   if (sectionDirty) return "unsaved";
+  if (partial) return "partial";
   return "empty";
 }
 
@@ -121,12 +130,13 @@ function StatusBadge({ status }: { status: SectionStatus }) {
   if (status === "verified") return <Badge variant="outline" className="text-[9px] border-success/30 text-success bg-success/10 ml-2">Подтверждено</Badge>;
   if (status === "unsaved") return <Badge variant="outline" className="text-[9px] border-warning/30 text-warning bg-warning/10 ml-2">Не сохранено</Badge>;
   if (status === "filled") return <Badge variant="outline" className="text-[9px] border-primary/30 text-primary bg-primary/10 ml-2">Заполнено</Badge>;
+  if (status === "partial") return <Badge variant="outline" className="text-[9px] border-warning/30 text-warning bg-warning/10 ml-2">Частично</Badge>;
   return <Badge variant="outline" className="text-[9px] border-muted-foreground/30 text-muted-foreground ml-2">Не заполнено</Badge>;
 }
 
 function SectionCheck({ status, label }: { status: SectionStatus; label: string }) {
   const done = status === "verified";
-  const partial = status === "filled" || status === "unsaved";
+  const partial = status === "filled" || status === "unsaved" || status === "partial";
   return (
     <div className="flex items-center gap-2 text-xs">
       {done ? <CheckCircle2 className="h-3.5 w-3.5 text-success flex-shrink-0" />
@@ -356,17 +366,17 @@ export function AdvertiserSettings() {
 
   // ─── Section statuses (with dirty awareness) ───
   const legalCfg = getLegalConfig(form.business_type);
-  const legalStatus = getSectionStatus(isLegalFieldsValid(form), form.business_verified, legalDirty);
-  const bankStatus = getSectionStatus(isBankFieldsValid(form), form.bank_verified, bankDirty);
+  const legalStatus = getSectionStatus(isLegalFieldsValid(form), form.business_verified, legalDirty, !!form.business_type && !isLegalFieldsValid(form));
+  const bankStatus = getSectionStatus(isBankFieldsValid(form), form.bank_verified, bankDirty, isBankPartial(form));
   const brandStatus = getSectionStatus(!!form.brand_name, true, brandDirty); // brand has no server verification; treat as "verified" if name exists
-  const ordStatus = getSectionStatus(!!form.ord_identifier, form.ord_verified, ordDirty);
+  const ordStatus = getSectionStatus(!!form.ord_identifier, form.ord_verified, ordDirty, isOrdPartial(form));
 
   // ─── Readiness: split mandatory vs optional ───
   const mandatoryReady = !!(form.brand_name) && !!(form.business_verified && isLegalFieldsValid(form));
   const mandatoryScore = [!!form.brand_name, !!(form.business_verified && isLegalFieldsValid(form))].filter(Boolean).length;
   const optionalItems = [
-    { done: !!(form.bank_verified && isBankFieldsValid(form)), label: "Банк", hint: "Для выплат" },
-    { done: !!(form.ord_verified && !!form.ord_identifier), label: "ОРД", hint: "Для маркировки рекламы" },
+    { status: bankStatus, label: "Банк", hint: "Для выплат" },
+    { status: ordStatus, label: "ОРД", hint: "Для маркировки рекламы" },
   ];
 
   if (isLoading) {
@@ -429,7 +439,7 @@ export function AdvertiserSettings() {
           <div className="grid grid-cols-2 gap-2">
             {optionalItems.map((item) => (
               <div key={item.label} className="flex items-center gap-2">
-                <SectionCheck status={item.done ? "verified" : "empty"} label={item.label} />
+                <SectionCheck status={item.status} label={item.label} />
                 <span className="text-[10px] text-muted-foreground">— {item.hint}</span>
               </div>
             ))}
@@ -665,7 +675,7 @@ export function AdvertiserSettings() {
                 <Label className="text-xs">Расчётный счёт * <span className="text-muted-foreground font-normal">(20 цифр)</span></Label>
                 <div className="flex items-center gap-1.5">
                   <Input
-                    value={showBankNumbers || !form.bank_account ? form.bank_account : "••••" + form.bank_account.slice(-4)}
+                    value={showBankNumbers || !form.bank_account ? form.bank_account : form.bank_account.slice(0, 4) + " •••• •••• •••• " + form.bank_account.slice(-4)}
                     onChange={showBankNumbers ? (e) => update("bank_account", e.target.value.replace(/\D/g, "").slice(0, 20)) : undefined}
                     readOnly={!showBankNumbers}
                     placeholder="40802810..."
@@ -692,7 +702,7 @@ export function AdvertiserSettings() {
                 <Label className="text-xs">Корр. счёт <span className="text-muted-foreground font-normal">(20 цифр)</span></Label>
                 <div className="flex items-center gap-1.5">
                   <Input
-                    value={showBankNumbers || !form.bank_corr_account ? form.bank_corr_account : "••••" + form.bank_corr_account.slice(-4)}
+                    value={showBankNumbers || !form.bank_corr_account ? form.bank_corr_account : form.bank_corr_account.slice(0, 4) + " •••• •••• •••• " + form.bank_corr_account.slice(-4)}
                     onChange={showBankNumbers ? (e) => update("bank_corr_account", e.target.value.replace(/\D/g, "").slice(0, 20)) : undefined}
                     readOnly={!showBankNumbers}
                     placeholder="30101810..."
@@ -771,7 +781,7 @@ export function AdvertiserSettings() {
                   <div className="pt-1">
                     <Input value={ORD_PROVIDERS.some((p) => p.id === form.ord_identifier) ? "" : form.ord_identifier}
                       onChange={(e) => update("ord_identifier", e.target.value)}
-                      placeholder="Или введите идентификатор вручную" className="text-sm h-8" maxLength={100} />
+                      placeholder="Или введите идентификатор вручную" className="text-sm h-8 bg-background" maxLength={100} />
                   </div>
                 </div>
                 <div className="space-y-1">
