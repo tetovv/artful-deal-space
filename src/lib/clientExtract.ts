@@ -35,50 +35,69 @@ async function extractPdfText(
   const pdfjsLib = await import("pdfjs-dist");
 
   // Configure worker — use CDN so PDF parsing runs in a pdfjs Web Worker
-  // If this fails, pdfjs falls back to main thread but we yield every page
   try {
+    // pdfjs-dist v4 worker URL
+    const version = pdfjsLib.version;
     pdfjsLib.GlobalWorkerOptions.workerSrc =
-      `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+      `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${version}/pdf.worker.min.mjs`;
   } catch (e) {
-    console.warn("[clientExtract] Failed to set PDF.js worker URL:", e);
+    console.warn("[clientExtract] Failed to set PDF.js worker URL, will use main thread:", e);
   }
 
+  // Disable worker if it causes issues — parse on main thread with yieldToUI
+  let doc;
   try {
-    const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
-    const numPages = Math.min(doc.numPages, MAX_PDF_PAGES);
-    console.log(`[clientExtract] PDF: ${doc.numPages} pages, processing ${numPages}`);
-
-    if (doc.numPages > MAX_PDF_PAGES) {
-      console.warn(`[clientExtract] PDF truncated: ${doc.numPages} → ${MAX_PDF_PAGES}`);
+    doc = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
+  } catch (e1: any) {
+    console.warn("[clientExtract] Worker-based load failed, retrying without worker:", e1);
+    // Retry without worker
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+    try {
+      doc = await pdfjsLib.getDocument({ 
+        data: new Uint8Array(buffer),
+        disableAutoFetch: true,
+        disableStream: true,
+      }).promise;
+    } catch (e2: any) {
+      console.error("[clientExtract] PDF load failed completely:", e2);
+      throw new Error(`PDF не удалось открыть: ${e2.message || e2}. Проверьте, что файл не повреждён.`);
     }
+  }
 
-    const pages: string[] = [];
-    for (let i = 1; i <= numPages; i++) {
-      if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+  const numPages = Math.min(doc.numPages, MAX_PDF_PAGES);
+  console.log(`[clientExtract] PDF: ${doc.numPages} pages, processing ${numPages}`);
 
+  if (doc.numPages > MAX_PDF_PAGES) {
+    console.warn(`[clientExtract] PDF truncated: ${doc.numPages} → ${MAX_PDF_PAGES}`);
+  }
+
+  const pages: string[] = [];
+  for (let i = 1; i <= numPages; i++) {
+    if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+
+    try {
       const page = await doc.getPage(i);
       const content = await page.getTextContent();
       pages.push(content.items.map((item: any) => item.str).join(" "));
-
-      onProgress?.({ page: i, totalPages: numPages, stage: "extracting" });
-
-      // Yield EVERY page — prevents UI freeze even if pdfjs worker isn't loading
-      await yieldToUI();
+    } catch (pageErr: any) {
+      console.warn(`[clientExtract] Page ${i} extraction failed:`, pageErr);
+      pages.push(""); // Skip broken pages
     }
 
-    let text = pages.join("\n\n");
-    if (text.length > MAX_TEXT_CHARS) {
-      console.warn(`[clientExtract] Text truncated: ${text.length} → ${MAX_TEXT_CHARS}`);
-      text = text.slice(0, MAX_TEXT_CHARS);
-    }
+    onProgress?.({ page: i, totalPages: numPages, stage: "extracting" });
 
-    console.log(`[clientExtract] PDF extracted: ${text.length} chars`);
-    return text;
-  } catch (e: any) {
-    if (e.name === "AbortError") throw e;
-    console.error("[clientExtract] PDF extraction failed:", e);
-    throw new Error(`PDF extraction failed: ${e.message || e}. Убедитесь, что PDF содержит текстовый слой.`);
+    // Yield EVERY page — prevents UI freeze even if pdfjs worker isn't loading
+    await yieldToUI();
   }
+
+  let text = pages.join("\n\n");
+  if (text.length > MAX_TEXT_CHARS) {
+    console.warn(`[clientExtract] Text truncated: ${text.length} → ${MAX_TEXT_CHARS}`);
+    text = text.slice(0, MAX_TEXT_CHARS);
+  }
+
+  console.log(`[clientExtract] PDF extracted: ${text.length} chars`);
+  return text;
 }
 
 /** Extract text from a DOCX file — dynamic import */
