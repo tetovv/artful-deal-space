@@ -640,10 +640,7 @@ function CreativeTab({ campaign }: { campaign: Campaign }) {
               </Button>
             </div>
           </div>
-          {/* Inline ERID — small, no big block */}
-          {campaign.erid && (
-            <p className="text-[12px] text-foreground/50">ERID: <span className="font-mono">{campaign.erid}</span></p>
-          )}
+          {/* ERID shown only in header row 2 */}
         </CardContent>
       </Card>
 
@@ -1394,166 +1391,199 @@ export function CampaignManageView({ campaign: initialCampaign, onBack }: { camp
           </div>
         )}
 
-        {/* Sticky header — Back + title + kebab only */}
-        <div className="sticky top-0 z-20 bg-background/80 backdrop-blur-sm -mx-6 px-6 py-2.5 -mt-4 mb-0.5 border-b border-border/50">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <Button size="sm" variant="ghost" onClick={onBack} className="h-8 w-8 p-0 flex-shrink-0">
+        {/* ═══ STICKY HEADER ═══ */}
+        <div className="sticky top-0 z-20 bg-background/95 backdrop-blur-md -mx-6 px-6 -mt-4 mb-0.5 border-b border-border/50">
+
+          {/* ROW 1: Back + Name + Chips + Dates + Primary Action + Kebab */}
+          <div className="flex items-center justify-between gap-3 h-[60px]">
+            <div className="flex items-center gap-3 min-w-0">
+              <Button size="sm" variant="ghost" onClick={onBack} className="h-8 gap-1.5 px-2 flex-shrink-0 text-muted-foreground hover:text-foreground">
                 <ArrowLeft className="h-4 w-4" />
+                <span className="text-[13px]">Назад</span>
               </Button>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h2 className="text-[17px] font-bold text-foreground tracking-tight truncate">{campaign.name}</h2>
-                  <EridBadge erid={campaign.erid} />
-                  <ContractBadge campaign={campaign} />
-                </div>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <Badge variant="outline" className={`text-[11px] ${statusStyles[campaign.status]}`}>
-                    {campaign.status === "finalizing" && <Loader2 className="h-2.5 w-2.5 mr-1 animate-spin" />}
-                    {statusLabels[campaign.status]}
-                  </Badge>
-                  <span className="text-[13px] text-muted-foreground">{placementLabels[campaign.placement]}</span>
-                  {campaign.startDate && (
-                    <>
-                      <Separator orientation="vertical" className="h-3" />
-                      <span className="text-[13px] text-muted-foreground flex items-center gap-1">
-                        <CalendarDays className="h-3 w-3" />
-                        {campaign.startDate} — {campaign.endDate || "∞"}
-                      </span>
-                    </>
-                  )}
-                </div>
-              </div>
+              <Separator orientation="vertical" className="h-5" />
+              <h1 className="text-lg font-semibold text-foreground truncate">{campaign.name}</h1>
+              <Badge variant="outline" className="text-[12px] border-border text-muted-foreground flex-shrink-0">
+                {placementLabels[campaign.placement]}
+              </Badge>
+              <Badge variant="outline" className={`text-[12px] flex-shrink-0 ${statusStyles[campaign.status]}`}>
+                {campaign.status === "finalizing" && <Loader2 className="h-2.5 w-2.5 mr-1 animate-spin" />}
+                {statusLabels[campaign.status]}
+              </Badge>
+              {campaign.startDate && (
+                <span className="text-[13px] text-muted-foreground flex items-center gap-1 flex-shrink-0">
+                  <CalendarDays className="h-3.5 w-3.5" />
+                  {campaign.startDate} — {campaign.endDate || "∞"}
+                </span>
+              )}
             </div>
 
-            {/* Kebab menu — all actions consolidated */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button size="sm" variant="ghost" className="h-8 w-8 p-0 flex-shrink-0">
-                  <MoreVertical className="h-4 w-4" />
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {/* Primary action button */}
+              {campaign.status === "active" && (
+                <Button size="sm" variant="outline" className="h-8 text-[13px] gap-1.5" onClick={() => { setCampaignStatus("paused"); toast.info("Кампания приостановлена"); }}>
+                  <Pause className="h-3.5 w-3.5" /> Пауза
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {campaign.status === "active" && (
-                  <DropdownMenuItem className="text-[14px] gap-2" disabled={isFinalizing}>
-                    <Pause className="h-3.5 w-3.5" /> Приостановить
-                  </DropdownMenuItem>
-                )}
-                {campaign.status === "paused" && (
-                  <DropdownMenuItem className="text-[14px] gap-2" disabled={isFinalizing}>
-                    <Play className="h-3.5 w-3.5" /> Возобновить
-                  </DropdownMenuItem>
-                )}
-                {campaign.status === "draft" && (
+              )}
+              {campaign.status === "paused" && (
+                <Button size="sm" className="h-8 text-[13px] gap-1.5" onClick={() => { setCampaignStatus("active"); toast.success("Кампания возобновлена"); }}>
+                  <Play className="h-3.5 w-3.5" /> Возобновить
+                </Button>
+              )}
+              {campaign.status === "draft" && (
+                <Button size="sm" className="h-8 text-[13px] gap-1.5">
+                  <Play className="h-3.5 w-3.5" /> Запустить
+                </Button>
+              )}
+
+              {/* Kebab — secondary actions */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="sm" variant="ghost" className="h-8 w-8 p-0">
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
                   <DropdownMenuItem className="text-[14px] gap-2">
-                    <Play className="h-3.5 w-3.5" /> Запустить
+                    <Copy className="h-3.5 w-3.5" /> Дублировать (новый ERID)
                   </DropdownMenuItem>
-                )}
-                <DropdownMenuItem className="text-[14px] gap-2">
-                  <Copy className="h-3.5 w-3.5" /> Дублировать (новый ERID)
-                </DropdownMenuItem>
-                {isCompleted && (
-                  <DropdownMenuItem className="text-[14px] gap-2">
-                    <Download className="h-3.5 w-3.5" /> Экспорт отчёта
+                  {isCompleted && (
+                    <DropdownMenuItem className="text-[14px] gap-2">
+                      <Download className="h-3.5 w-3.5" /> Экспорт отчёта
+                    </DropdownMenuItem>
+                  )}
+                  {campaign.contractLinked && !fullyLocked && (
+                    <DropdownMenuItem className="text-[14px] gap-2" onClick={() => setChangeRequestOpen(true)}>
+                      <ArrowUpRight className="h-3.5 w-3.5" /> Запросить изменение
+                    </DropdownMenuItem>
+                  )}
+                  {isOrdError && (
+                    <DropdownMenuItem className="text-[14px] gap-2 text-destructive" onClick={handleRetryOrd}>
+                      <RefreshCw className="h-3.5 w-3.5" /> Повторить ОРД
+                    </DropdownMenuItem>
+                  )}
+                  {canTerminate && (
+                    <DropdownMenuItem className="text-[14px] gap-2 text-destructive" onClick={() => setTerminateOpen(true)}>
+                      <StopCircle className="h-3.5 w-3.5" /> Завершить досрочно
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem className="text-[14px] gap-2 text-destructive" disabled={isFinalizing}>
+                    <Archive className="h-3.5 w-3.5" /> Архивировать
                   </DropdownMenuItem>
-                )}
-                {campaign.contractLinked && !fullyLocked && (
-                  <DropdownMenuItem className="text-[14px] gap-2" onClick={() => setChangeRequestOpen(true)}>
-                    <ArrowUpRight className="h-3.5 w-3.5" /> Запросить изменение
-                  </DropdownMenuItem>
-                )}
-                {isOrdError && (
-                  <DropdownMenuItem className="text-[14px] gap-2 text-destructive" onClick={handleRetryOrd}>
-                    <RefreshCw className="h-3.5 w-3.5" /> Повторить ОРД
-                  </DropdownMenuItem>
-                )}
-                {canTerminate && (
-                  <DropdownMenuItem className="text-[14px] gap-2 text-destructive" onClick={() => setTerminateOpen(true)}>
-                    <StopCircle className="h-3.5 w-3.5" /> Завершить досрочно
-                  </DropdownMenuItem>
-                )}
-                <DropdownMenuItem className="text-[14px] gap-2 text-destructive" disabled={isFinalizing}>
-                  <Archive className="h-3.5 w-3.5" /> Архивировать
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
+
+          {/* ROW 2: ERID (once) + ORD status + Contract link + Budget limit */}
+          <div className="flex items-center justify-between gap-4 h-[40px] border-t border-border/30">
+            <div className="flex items-center gap-3">
+              {campaign.erid && (
+                <div className="flex items-center gap-1.5 text-[13px]">
+                  <span className="text-muted-foreground">ERID:</span>
+                  <span className="font-mono font-medium text-foreground">{campaign.erid}</span>
+                  <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => {
+                    navigator.clipboard.writeText(campaign.erid!);
+                    toast.success("ERID скопирован");
+                  }}>
+                    <ClipboardCopy className="h-3 w-3 text-muted-foreground" />
+                  </Button>
+                </div>
+              )}
+              {campaign.erid && <Separator orientation="vertical" className="h-4" />}
+              <OrdStatusIndicator campaign={campaign} />
+            </div>
+            <div className="flex items-center gap-3 text-[13px]">
+              {campaign.contractLinked && campaign.contractNumber && (
+                <a href="#" className="flex items-center gap-1 text-primary hover:underline">
+                  <FileText className="h-3 w-3" />
+                  Договор №{campaign.contractNumber}
+                </a>
+              )}
+              {campaign.budget > 0 && (
+                <span className="text-muted-foreground">Лимит: <span className="text-foreground font-medium">{formatNum(campaign.budget)} ₽</span></span>
+              )}
+            </div>
+          </div>
+
         </div>
 
-        {/* Tabs */}
-        <Tabs defaultValue="overview" className="space-y-3">
-          <TabsList>
-            <TabsTrigger value="overview" className="text-[14px]">Обзор</TabsTrigger>
-            <TabsTrigger value="settings" className="text-[14px]">Настройки</TabsTrigger>
-            <TabsTrigger value="creative" className="text-[14px]">Креатив</TabsTrigger>
-            <TabsTrigger value="ord" className="text-[14px]">ОРД / Маркировка</TabsTrigger>
-            {campaign.contractLinked && <TabsTrigger value="contract" className="text-[14px]">Договор</TabsTrigger>}
-            <TabsTrigger value="audit" className="text-[14px]">Аудит</TabsTrigger>
-          </TabsList>
+        {/* Tabs — wraps both header tabs and content */}
+        <Tabs defaultValue="overview" className="space-y-0">
+          {/* Tabs row inside a sticky sub-header */}
+          <div className="sticky top-[100px] z-10 bg-background/95 backdrop-blur-md -mx-6 px-6 border-b border-border/30">
+            <TabsList className="bg-transparent h-10 p-0 gap-0 border-none rounded-none">
+              <TabsTrigger value="overview" className="text-[15px] rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4">Обзор</TabsTrigger>
+              <TabsTrigger value="settings" className="text-[15px] rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4">Настройки</TabsTrigger>
+              <TabsTrigger value="creative" className="text-[15px] rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4">Креатив</TabsTrigger>
+              <TabsTrigger value="ord" className="text-[15px] rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4">ОРД / Маркировка</TabsTrigger>
+              {campaign.contractLinked && <TabsTrigger value="contract" className="text-[15px] rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4">Договор</TabsTrigger>}
+              <TabsTrigger value="audit" className="text-[15px] rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4">Аудит</TabsTrigger>
+            </TabsList>
+          </div>
 
-          <TabsContent value="overview"><OverviewTab campaign={campaign} /></TabsContent>
-          <TabsContent value="settings">
-            {fullyLocked ? (
-              <div className="flex items-center gap-2.5 rounded-lg border border-muted-foreground/20 bg-muted/10 p-4">
-                <Lock className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                <div>
-                  <p className="text-[14px] font-semibold text-card-foreground">Настройки заблокированы</p>
-                  <p className="text-[13px] text-muted-foreground">Кампания {campaign.status === "completed" ? "завершена" : "в процессе завершения"}. Редактирование невозможно.</p>
+          {/* Tab contents */}
+          <div className="space-y-3 pt-3">
+            <TabsContent value="overview"><OverviewTab campaign={campaign} /></TabsContent>
+            <TabsContent value="settings">
+              {fullyLocked ? (
+                <div className="flex items-center gap-2.5 rounded-lg border border-muted-foreground/20 bg-muted/10 p-4">
+                  <Lock className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <div>
+                    <p className="text-[14px] font-semibold text-card-foreground">Настройки заблокированы</p>
+                    <p className="text-[13px] text-muted-foreground">Кампания {campaign.status === "completed" ? "завершена" : "в процессе завершения"}. Редактирование невозможно.</p>
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <SettingsTab campaign={campaign} />
-            )}
-          </TabsContent>
-          <TabsContent value="creative"><CreativeTab campaign={campaign} /></TabsContent>
-          <TabsContent value="ord"><OrdTab campaign={campaign} /></TabsContent>
-          {campaign.contractLinked && (
-            <TabsContent value="contract">
-              <div className="space-y-4">
-                {/* Contract info card */}
-                <Card className="border-accent/20 bg-accent/5">
-                  <CardContent className="p-5">
-                    <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-lg bg-accent/15 flex items-center justify-center flex-shrink-0">
-                        <FileText className="h-5 w-5 text-accent" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <p className="text-sm font-bold text-card-foreground">Договор {campaign.contractNumber}</p>
-                          <Badge variant="outline" className="text-[10px] border-accent/30 text-accent bg-accent/10">
-                            <Lock className="h-2.5 w-2.5 mr-1" />
-                            Зафиксирован
-                          </Badge>
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          от {campaign.contractDate} · {campaign.contractParty}
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Budget lock notice */}
-                <Card className="border-warning/20">
-                  <CardContent className="p-4">
-                    <div className="flex items-start gap-3">
-                      <Lock className="h-4 w-4 text-warning flex-shrink-0 mt-0.5" />
-                      <div className="space-y-1">
-                        <p className="text-sm font-medium text-card-foreground">Бюджет зафиксирован по договору</p>
-                        <p className="text-xs text-muted-foreground">
-                          Бюджет {formatNum(campaign.budget)} ₽ установлен согласно договору. Уменьшение невозможно.
-                          Увеличение допускается только через загрузку дополнительного соглашения.
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <AddendumSection campaign={campaign} />
-              </div>
+              ) : (
+                <SettingsTab campaign={campaign} />
+              )}
             </TabsContent>
-          )}
-          <TabsContent value="audit"><AuditLogTab campaign={campaign} /></TabsContent>
+            <TabsContent value="creative"><CreativeTab campaign={campaign} /></TabsContent>
+            <TabsContent value="ord"><OrdTab campaign={campaign} /></TabsContent>
+            {campaign.contractLinked && (
+              <TabsContent value="contract">
+                <div className="space-y-4">
+                  <Card className="border-accent/20 bg-accent/5">
+                    <CardContent className="p-5">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-lg bg-accent/15 flex items-center justify-center flex-shrink-0">
+                          <FileText className="h-5 w-5 text-accent" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-sm font-bold text-card-foreground">Договор {campaign.contractNumber}</p>
+                            <Badge variant="outline" className="text-[10px] border-accent/30 text-accent bg-accent/10">
+                              <Lock className="h-2.5 w-2.5 mr-1" />
+                              Зафиксирован
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            от {campaign.contractDate} · {campaign.contractParty}
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-warning/20">
+                    <CardContent className="p-4">
+                      <div className="flex items-start gap-3">
+                        <Lock className="h-4 w-4 text-warning flex-shrink-0 mt-0.5" />
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium text-card-foreground">Бюджет зафиксирован по договору</p>
+                          <p className="text-xs text-muted-foreground">
+                            Бюджет {formatNum(campaign.budget)} ₽ установлен согласно договору. Уменьшение невозможно.
+                            Увеличение допускается только через загрузку дополнительного соглашения.
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <AddendumSection campaign={campaign} />
+                </div>
+              </TabsContent>
+            )}
+            <TabsContent value="audit"><AuditLogTab campaign={campaign} /></TabsContent>
+          </div>
         </Tabs>
       </div>
 
