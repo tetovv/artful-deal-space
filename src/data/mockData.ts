@@ -41,7 +41,7 @@ export const contentItems: ContentItem[] = [
   { id: "cnt2", title: "Lo-Fi Beats Collection Vol.3", description: "50 оригинальных lo-fi треков для ваших проектов", type: "music", thumbnail: thumbs[1], creatorId: "c3", creatorName: "Игорь Сидоров", creatorAvatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Igor", price: 990, views: 8200, likes: 1240, createdAt: "2024-10-15", tags: ["Музыка", "Lo-Fi", "Биты"] },
   { id: "cnt3", title: "UI Kit для Figma — 200+ компонентов", description: "Полный UI Kit с компонентами для веб и мобильных приложений", type: "template", thumbnail: thumbs[2], creatorId: "c2", creatorName: "Анна Волкова", creatorAvatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Anna", price: 4990, views: 5600, likes: 672, createdAt: "2024-09-20", tags: ["Дизайн", "Figma", "UI"] },
   { id: "cnt4", title: "Как построить личный бренд", description: "Подкаст о стратегиях построения личного бренда в цифровую эпоху", type: "podcast", thumbnail: thumbs[3], creatorId: "c4", creatorName: "Ольга Новикова", creatorAvatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Olga", price: null, views: 23000, likes: 2100, createdAt: "2024-12-01", tags: ["Бизнес", "Бренд"] },
-  { id: "cnt5", title: "Фотопак: Минимализм в архитектуре", description: "30 фото высокого разрешения для коммерческого использования", type: "image", thumbnail: thumbs[5], creatorId: "c2", creatorName: "Анна Волкова", creatorAvatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Anna", price: 1490, views: 3200, likes: 445, createdAt: "2024-11-28", tags: ["Фото", "Архитектура"] },
+  { id: "cnt5", title: "Фотопак: Минимализм в архитектуре", description: "30 фото высокого разрешения для коммерческого использования", type: "post", thumbnail: thumbs[5], creatorId: "c2", creatorName: "Анна Волкова", creatorAvatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Anna", price: 1490, views: 3200, likes: 445, createdAt: "2024-11-28", tags: ["Фото", "Архитектура"] },
   { id: "cnt6", title: "Предпринимательство: от идеи до масштаба", description: "Электронная книга с пошаговым руководством для стартаперов", type: "book", thumbnail: thumbs[6], creatorId: "c4", creatorName: "Ольга Новикова", creatorAvatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Olga", price: 1990, views: 9800, likes: 1560, createdAt: "2024-08-15", tags: ["Книга", "Бизнес", "Стартап"] },
   { id: "cnt7", title: "Motion Graphics Starter Pack", description: "20 анимированных шаблонов для After Effects", type: "template", thumbnail: thumbs[7], creatorId: "c5", creatorName: "Максим Лебедев", creatorAvatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Max", price: 3490, views: 4100, likes: 388, createdAt: "2024-10-05", tags: ["Motion", "After Effects"] },
   { id: "cnt8", title: "Тренды дизайна 2025", description: "Обзор главных трендов в UI/UX и графическом дизайне", type: "post", thumbnail: thumbs[4], creatorId: "c2", creatorName: "Анна Волкова", creatorAvatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Anna", price: null, views: 18500, likes: 2890, createdAt: "2024-12-10", tags: ["Дизайн", "Тренды", "2025"] },
@@ -132,7 +132,7 @@ export const contentTypeLabels: Record<string, string> = {
   podcast: "Подкаст",
   book: "Книга",
   template: "Шаблон",
-  image: "Изображение",
+  
 };
 
 export const contentTypeIcons: Record<string, string> = {

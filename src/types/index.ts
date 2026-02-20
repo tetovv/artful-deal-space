@@ -23,7 +23,7 @@ export interface CreatorProfile {
   verified: boolean;
 }
 
-export type ContentType = "video" | "music" | "post" | "podcast" | "book" | "template" | "image";
+export type ContentType = "video" | "music" | "post" | "podcast" | "book" | "template";
 
 export interface ContentItem {
   id: string;

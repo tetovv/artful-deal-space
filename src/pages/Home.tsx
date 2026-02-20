@@ -35,7 +35,6 @@ const stagger = {
 const contentTypeOptions = [
   { type: "video", label: "Видео", icon: Video, color: "text-destructive" },
   { type: "post", label: "Пост", icon: FileText, color: "text-primary" },
-  { type: "image", label: "Фото", icon: Image, color: "text-accent" },
   { type: "music", label: "Музыка", icon: Music, color: "text-warning" },
   { type: "podcast", label: "Подкаст", icon: Mic, color: "text-info" },
   { type: "book", label: "Книга", icon: BookOpen, color: "text-success" },
@@ -445,7 +444,7 @@ const Home = () => {
   );
 };
 
-const types: ContentType[] = ["video", "music", "post", "podcast", "book", "template", "image"];
+const types: ContentType[] = ["video", "music", "post", "podcast", "book", "template"];
 
 function UserCatalog({ allItems, navigate }: { allItems: any[]; navigate: (p: string) => void }) {
   const [search, setSearch] = useState("");
@@ -506,7 +505,6 @@ export function SelectTabPrompt() {
     { Icon: FileText, label: "Посты", color: "text-accent-foreground", bg: "bg-accent/10" },
     { Icon: Mic, label: "Подкасты", color: "text-primary", bg: "bg-primary/10" },
     { Icon: BookOpen, label: "Книги", color: "text-foreground", bg: "bg-muted" },
-    { Icon: Image, label: "Фото", color: "text-primary", bg: "bg-primary/10" },
     { Icon: Layout, label: "Шаблоны", color: "text-muted-foreground", bg: "bg-muted" },
   ];
 
