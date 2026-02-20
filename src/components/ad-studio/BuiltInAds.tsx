@@ -11,8 +11,10 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import {
   Plus, BarChart3, Eye, MousePointerClick, TrendingUp, AlertTriangle, Search,
   ChevronDown, CheckCircle2, ShieldCheck, Landmark, MoreVertical, Pause, Play,
-  Copy, Archive, Settings, CalendarDays, HelpCircle, ArrowLeft, ArrowUpDown,
+  Copy, Archive, Settings, CalendarDays, HelpCircle, ArrowUpDown,
 } from "lucide-react";
+import { CampaignManageView } from "./CampaignManageView";
+import type { Campaign, CampaignStatus, Placement } from "./CampaignManageView";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -22,23 +24,7 @@ interface BuiltInAdsProps {
   onGoToSettings: () => void;
 }
 
-type CampaignStatus = "active" | "paused" | "draft" | "completed";
-type Placement = "banner" | "feed" | "recommendations";
 type DateRange = "today" | "7d" | "30d" | "custom";
-
-interface Campaign {
-  id: number;
-  name: string;
-  placement: Placement;
-  status: CampaignStatus;
-  impressions: number;
-  clicks: number;
-  ctr: number;
-  budget: number;
-  spent: number;
-  startDate: string;
-  endDate: string;
-}
 
 const placementLabels: Record<Placement, string> = {
   banner: "Баннер в каталоге",
@@ -51,6 +37,7 @@ const statusLabels: Record<CampaignStatus, string> = {
   paused: "Пауза",
   draft: "Черновик",
   completed: "Завершена",
+  error: "Ошибка",
 };
 
 const statusStyles: Record<CampaignStatus, string> = {
@@ -58,6 +45,7 @@ const statusStyles: Record<CampaignStatus, string> = {
   paused: "bg-warning/15 text-warning border-warning/30",
   draft: "bg-muted text-muted-foreground border-muted-foreground/20",
   completed: "bg-primary/15 text-primary border-primary/30",
+  error: "bg-destructive/15 text-destructive border-destructive/30",
 };
 
 const dateRangeLabels: Record<DateRange, string> = {
@@ -240,119 +228,6 @@ function CampaignRow({ campaign, isVerified, onManage }: {
   );
 }
 
-// ─── Campaign Manage View ───
-function CampaignManageView({ campaign, onBack }: { campaign: Campaign; onBack: () => void }) {
-  return (
-    <div className="flex-1 overflow-y-auto">
-      <div className="w-full max-w-[1040px] mx-auto px-6 py-6 space-y-5">
-        {/* Back + title */}
-        <div className="flex items-center gap-3">
-          <Button size="sm" variant="ghost" onClick={onBack} className="h-9 w-9 p-0">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div>
-            <h2 className="text-lg font-bold text-foreground tracking-tight">{campaign.name}</h2>
-            <div className="flex items-center gap-2 mt-0.5">
-              <Badge variant="outline" className={`text-[10px] ${statusStyles[campaign.status]}`}>
-                {statusLabels[campaign.status]}
-              </Badge>
-              <span className="text-sm text-muted-foreground">{placementLabels[campaign.placement]}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Tabs */}
-        <Tabs defaultValue="overview" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="overview" className="text-sm">Обзор</TabsTrigger>
-            <TabsTrigger value="settings" className="text-sm">Настройки</TabsTrigger>
-            <TabsTrigger value="ord" className="text-sm">ОРД / Маркировка</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="overview" className="space-y-4">
-            {/* KPIs */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <KpiCard label="Показы" value={formatNum(campaign.impressions)} icon={Eye} colorClass="bg-info/15 text-info" />
-              <KpiCard label="Клики" value={formatNum(campaign.clicks)} icon={MousePointerClick} colorClass="bg-success/15 text-success" />
-              <KpiCard label="CTR" value={`${campaign.ctr}%`} icon={TrendingUp} colorClass="bg-accent/15 text-accent" />
-              <KpiCard label="Потрачено" value={`${formatNum(campaign.spent)} ₽`} icon={BarChart3} colorClass="bg-warning/15 text-warning" />
-            </div>
-
-            {/* Chart placeholder */}
-            <Card>
-              <CardContent className="p-6">
-                <p className="text-sm font-semibold text-card-foreground mb-3">Динамика за период</p>
-                <div className="h-48 rounded-lg bg-muted/30 border border-border flex items-center justify-center">
-                  <p className="text-sm text-muted-foreground">График показов/кликов по дням</p>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Budget */}
-            <Card>
-              <CardContent className="p-5 space-y-2">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold text-card-foreground">Бюджет</p>
-                  <span className="text-sm font-medium text-card-foreground">{formatNum(campaign.spent)} / {formatNum(campaign.budget)} ₽</span>
-                </div>
-                <Progress value={campaign.budget > 0 ? (campaign.spent / campaign.budget) * 100 : 0} className="h-2" />
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="settings" className="space-y-4">
-            <Card>
-              <CardContent className="p-5 space-y-4">
-                <p className="text-sm font-semibold text-card-foreground">Параметры кампании</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-                  <div className="space-y-1">
-                    <span className="text-muted-foreground">Размещение</span>
-                    <p className="font-medium text-card-foreground">{placementLabels[campaign.placement]}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <span className="text-muted-foreground">Бюджет</span>
-                    <p className="font-medium text-card-foreground">{formatNum(campaign.budget)} ₽</p>
-                  </div>
-                  <div className="space-y-1">
-                    <span className="text-muted-foreground">Период</span>
-                    <p className="font-medium text-card-foreground">{campaign.startDate || "—"} — {campaign.endDate || "∞"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <span className="text-muted-foreground">Таргетинг</span>
-                    <p className="font-medium text-card-foreground">Все пользователи</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-5 space-y-3">
-                <p className="text-sm font-semibold text-card-foreground">Креативы</p>
-                <div className="h-32 rounded-lg bg-muted/30 border border-dashed border-border flex items-center justify-center">
-                  <p className="text-sm text-muted-foreground">Загрузите баннер или креатив</p>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="ord" className="space-y-4">
-            <Card>
-              <CardContent className="p-5 space-y-3">
-                <p className="text-sm font-semibold text-card-foreground">Статус маркировки ОРД</p>
-                <div className="flex items-center gap-2 text-sm">
-                  <div className="h-4 w-4 rounded-full border border-muted-foreground/40" />
-                  <span className="text-muted-foreground">Токен маркировки не назначен</span>
-                </div>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  После запуска кампании система автоматически зарегистрирует креатив в ОРД и добавит маркировку «Реклама» с erid.
-                </p>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-      </div>
-    </div>
-  );
-}
 
 // ─── Main Component ───
 export function BuiltInAds({ isVerified, onGoToSettings }: BuiltInAdsProps) {
