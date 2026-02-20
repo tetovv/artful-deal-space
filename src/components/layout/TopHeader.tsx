@@ -31,7 +31,7 @@ const allNavItems: NavItem[] = [
   { title: "Студия", url: "/creator-studio", icon: Palette, roles: ["creator", "moderator"] },
   { title: "Биржа", url: "/ad-studio", icon: Megaphone, roles: ["advertiser", "moderator"] },
   { title: "Предложения", url: "/marketplace", icon: Store, roles: ["creator", "moderator"] },
-  { title: "Рейтинг", url: "/trust-rating", icon: Shield, roles: ["creator", "advertiser", "moderator"] },
+  
   { title: "AI", url: "/ai-workspace", icon: Brain },
   { title: "Библиотека", url: "/library", icon: Library },
 ];
