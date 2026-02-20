@@ -118,6 +118,8 @@ async function extractText(file: File): Promise<string> {
         const page = await pdf.getPage(i);
         const tc = await page.getTextContent();
         pages.push(tc.items.map((it: any) => it.str).join(" "));
+        // Yield every 5 pages to keep UI responsive
+        if (i % 5 === 0) await new Promise<void>(r => setTimeout(r, 0));
       }
       return pages.join("\n\n");
     } catch (e) {
@@ -172,10 +174,13 @@ const INITIAL_GEN_STAGES: GenStage[] = [
   { key: "generating", label: "Генерация первого результата", icon: Sparkles, status: "pending" },
 ];
 
-const STAGE_TIMEOUT_MS = 30_000;
-const LLM_STAGE_TIMEOUT_MS = 120_000; // LLM stages need more time
+const STAGE_TIMEOUT_MS = 120_000; // Increased: large files need more time
+const LLM_STAGE_TIMEOUT_MS = 180_000; // LLM stages need even more time
 const MIN_QUALITY_CHARS = 200; // Minimum total chars for quality check
 const MIN_QUALITY_CHUNKS = 1;
+
+/** Yield to the browser event loop so the UI doesn't freeze */
+const yieldToUI = () => new Promise<void>(r => setTimeout(r, 0));
 
 /** Wrap a promise with a timeout */
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
@@ -235,34 +240,24 @@ async function callEdge(fnName: string, body: any): Promise<any> {
 }
 
 /* ═══════════════ Error Card ═══════════════ */
-const EdgeErrorCard = ({ error, onRetry }: { error: EdgeError; onRetry?: () => void }) => {
+const EdgeErrorCard = ({ error, onRetry, onBackToSources }: { error: EdgeError; onRetry?: () => void; onBackToSources?: () => void }) => {
   const [open, setOpen] = useState(false);
-  const extra = error as EdgeError & { payloadSize?: number; url?: string };
-  const report = [
-    `Function: ${error.functionName}`,
-    `Status: ${error.status}`,
-    extra.url ? `URL: ${extra.url}` : null,
-    extra.payloadSize ? `Payload: ~${Math.round(extra.payloadSize / 1024)}KB` : null,
-    `Body: ${error.body}`,
-  ].filter(Boolean).join("\n");
+  const isQualityError = error.functionName === "quality_check";
+  const userMessage = isQualityError
+    ? "Недостаточно текстового контента для создания материала. Попробуйте загрузить файл с большим объёмом текста."
+    : `Произошла ошибка. Попробуйте ещё раз.`;
 
   return (
     <Card className="border-destructive/30 bg-destructive/5">
       <CardContent className="pt-5 space-y-3">
         <div className="flex items-center gap-2">
           <AlertTriangle className="h-5 w-5 text-destructive shrink-0" />
-          <p className="text-sm font-medium text-foreground">Ошибка: {error.functionName}</p>
+          <p className="text-sm font-medium text-foreground">{userMessage}</p>
         </div>
-        <p className="text-xs text-muted-foreground">HTTP {error.status}</p>
-        {error.status === 0 && (
-          <p className="text-xs text-yellow-600 bg-yellow-500/10 p-2 rounded">
-            💡 Запрос не получил ответ. Откройте DevTools → Network/Console для диагностики.
-          </p>
-        )}
         <Collapsible open={open} onOpenChange={setOpen}>
           <CollapsibleTrigger asChild>
             <Button variant="ghost" size="sm" className="text-xs">
-              {open ? "Скрыть" : "Debug"} <ChevronDown className={cn("h-3 w-3 ml-1 transition-transform", open && "rotate-180")} />
+              {open ? "Скрыть подробности" : "Подробнее"} <ChevronDown className={cn("h-3 w-3 ml-1 transition-transform", open && "rotate-180")} />
             </Button>
           </CollapsibleTrigger>
           <CollapsibleContent>
@@ -272,10 +267,12 @@ const EdgeErrorCard = ({ error, onRetry }: { error: EdgeError; onRetry?: () => v
           </CollapsibleContent>
         </Collapsible>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => { navigator.clipboard.writeText(report); toast.success("Скопировано"); }}>
-            <Copy className="h-3 w-3 mr-1" /> Копировать отчёт
-          </Button>
-          {onRetry && (
+          {(isQualityError || onBackToSources) && (
+            <Button variant="outline" size="sm" onClick={onBackToSources}>
+              <ChevronLeft className="h-3 w-3 mr-1" /> Вернуться к источникам
+            </Button>
+          )}
+          {onRetry && !isQualityError && (
             <Button variant="outline" size="sm" onClick={onRetry}>
               <RotateCcw className="h-3 w-3 mr-1" /> Повторить
             </Button>
@@ -764,6 +761,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
 
     // Delete old chunks before re-ingesting
     await supabase.from("project_chunks").delete().eq("project_id", projId);
+    await yieldToUI();
 
     for (const doc of docs) {
       if (!doc.text.trim()) continue;
@@ -801,13 +799,14 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
         chunkIndex++;
       }
 
-      // Insert chunks in batches
+      // Insert chunks in batches, yielding between each to keep UI responsive
       for (let i = 0; i < chunks.length; i += 50) {
         const batch = chunks.slice(i, i + 50);
         const { error: insertErr } = await supabase.from("project_chunks").insert(batch);
         if (insertErr) {
           throw { functionName: "chunk_insert", status: 0, body: insertErr.message } as EdgeError;
         }
+        await yieldToUI(); // prevent UI freeze
       }
     }
 
@@ -935,6 +934,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
           extractedDocs.push({ text, file_name: file.name });
           const rawPath = `${user.id}/${proj.id}/raw/${file.name}`;
           await supabase.storage.from("ai_sources").upload(rawPath, file, { upsert: true });
+          await yieldToUI(); // keep UI responsive between files
         } catch (e: any) {
           console.warn(`Extraction failed ${file.name}:`, e);
           if (e.functionName) throw e; // timeout — propagate
