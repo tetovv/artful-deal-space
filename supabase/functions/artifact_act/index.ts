@@ -51,6 +51,7 @@ serve(async (req) => {
       p_query: retrievalQuery,
       p_limit: 30,
       p_fts_config: ftsConfig,
+      p_user_id: user.id,
     });
 
     let chunks = candidates || [];

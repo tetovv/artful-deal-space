@@ -28,13 +28,14 @@ serve(async (req) => {
       .from("projects").select("*").eq("id", project_id).eq("user_id", user.id).single();
     if (!project) return errorResponse("Project not found or forbidden", 404);
 
-    // Retrieve candidate chunks via FTS
+    // Retrieve candidate chunks via FTS (pass user.id since service role has no auth.uid())
     const ftsConfig = Deno.env.get("FTS_CONFIG") || "simple";
     const { data: candidates } = await supabase.rpc("match_chunks_fts", {
       p_project_id: project_id,
       p_query: "основные темы структура термины определения концепции",
       p_limit: 30,
       p_fts_config: ftsConfig,
+      p_user_id: user.id,
     });
 
     // Fallback: if FTS returns nothing, grab first 30 chunks directly
