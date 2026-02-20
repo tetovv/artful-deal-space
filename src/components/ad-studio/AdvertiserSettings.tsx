@@ -372,7 +372,14 @@ export function AdvertiserSettings() {
 
   // ─── Readiness: split mandatory vs optional ───
   const mandatoryReady = !!(form.brand_name) && !!(form.business_verified && isLegalFieldsValid(form));
-  const mandatoryScore = [!!form.brand_name, !!(form.business_verified && isLegalFieldsValid(form))].filter(Boolean).length;
+  const allSections = [
+    !!form.brand_name,
+    !!(form.business_verified && isLegalFieldsValid(form)),
+    !!(form.bank_verified && isBankFieldsValid(form)),
+    !!(form.ord_verified && !!form.ord_identifier),
+  ];
+  const totalScore = allSections.filter(Boolean).length;
+  const totalSections = allSections.length;
   const optionalItems = [
     { status: bankStatus, label: "Банк", hint: "Для выплат" },
     { status: ordStatus, label: "ОРД", hint: "Для маркировки рекламы" },
@@ -416,9 +423,9 @@ export function AdvertiserSettings() {
         <div className="rounded-xl border border-border bg-card p-5 space-y-4">
           <div className="flex items-center justify-between">
             <span className="text-sm font-semibold text-card-foreground">Готовность к сделкам</span>
-            <span className="text-sm text-muted-foreground font-medium">{mandatoryScore} / 2</span>
+            <span className="text-sm text-muted-foreground font-medium">{totalScore} / {totalSections}</span>
           </div>
-          <Progress value={(mandatoryScore / 2) * 100} className="h-1.5" />
+          <Progress value={(totalScore / totalSections) * 100} className="h-1.5" />
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <SectionCheck status={brandStatus} label="Бренд" />
             <SectionCheck status={legalStatus} label="Реквизиты" />
