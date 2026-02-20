@@ -919,6 +919,42 @@ export type Database = {
         }
         Relationships: []
       }
+      promo_codes: {
+        Row: {
+          code: string
+          created_at: string
+          creator_id: string
+          discount_percent: number
+          expires_at: string | null
+          id: string
+          is_active: boolean
+          max_uses: number | null
+          used_count: number
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          creator_id: string
+          discount_percent?: number
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean
+          max_uses?: number | null
+          used_count?: number
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          creator_id?: string
+          discount_percent?: number
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean
+          max_uses?: number | null
+          used_count?: number
+        }
+        Relationships: []
+      }
       purchases: {
         Row: {
           content_id: string
@@ -1003,6 +1039,54 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      studio_settings: {
+        Row: {
+          auto_publish: boolean | null
+          channel_description: string | null
+          channel_name: string | null
+          created_at: string
+          default_language: string | null
+          default_monetization: string | null
+          id: string
+          notify_new_comment: boolean | null
+          notify_new_deal: boolean | null
+          notify_new_subscriber: boolean | null
+          updated_at: string
+          user_id: string
+          watermark_enabled: boolean | null
+        }
+        Insert: {
+          auto_publish?: boolean | null
+          channel_description?: string | null
+          channel_name?: string | null
+          created_at?: string
+          default_language?: string | null
+          default_monetization?: string | null
+          id?: string
+          notify_new_comment?: boolean | null
+          notify_new_deal?: boolean | null
+          notify_new_subscriber?: boolean | null
+          updated_at?: string
+          user_id: string
+          watermark_enabled?: boolean | null
+        }
+        Update: {
+          auto_publish?: boolean | null
+          channel_description?: string | null
+          channel_name?: string | null
+          created_at?: string
+          default_language?: string | null
+          default_monetization?: string | null
+          id?: string
+          notify_new_comment?: boolean | null
+          notify_new_deal?: boolean | null
+          notify_new_subscriber?: boolean | null
+          updated_at?: string
+          user_id?: string
+          watermark_enabled?: boolean | null
+        }
+        Relationships: []
       }
       subscriptions: {
         Row: {
