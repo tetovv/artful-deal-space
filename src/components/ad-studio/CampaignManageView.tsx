@@ -583,98 +583,109 @@ function SettingsTabEditable({ campaign }: { campaign: Campaign }) {
 }
 
 // ═══════════════════════════════════════════════════════
-// ─── Creative Tab (read-only after ERID / start) ───
+// ─── Creative Tab (clean, action-light) ───
 // ═══════════════════════════════════════════════════════
 function CreativeTab({ campaign }: { campaign: Campaign }) {
   const locked = isLocked(campaign);
   const creative = mockCreative;
+  const [previewOpen, setPreviewOpen] = useState(false);
+
+  // Mock file metadata
+  const fileMeta = { name: "banner_728x90.png", format: "PNG", size: "84 KB", uploaded: "18.02.2026" };
 
   return (
     <div className="space-y-3">
-      {/* Lock notice */}
+      {/* Compact lock notice */}
       {locked && (
-        <div className="flex items-start gap-2.5 rounded-lg border border-primary/20 bg-primary/5 p-3">
-          <Lock className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-[14px] font-medium text-card-foreground">Креатив заблокирован</p>
-            <p className="text-[13px] text-muted-foreground">
-              {hasErid(campaign)
-                ? "ERID выдан — изменение креатива после получения ERID невозможно по закону."
-                : "Кампания запущена — изменение креатива невозможно."}
-              {" "}Для нового креатива дублируйте кампанию.
-            </p>
-          </div>
+        <div className="flex items-center gap-2 rounded-md bg-muted/40 border border-muted-foreground/15 px-3 py-1.5">
+          <Lock className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+          <span className="text-[13px] text-muted-foreground">
+            Креатив заблокирован{hasErid(campaign) ? " — ERID выдан" : " — кампания запущена"}. Для нового креатива дублируйте кампанию.
+          </span>
         </div>
       )}
 
-      <div className="flex items-center justify-between">
-        <p className="text-[15px] font-semibold text-card-foreground">Креатив кампании</p>
-        <span className="text-[11px] text-muted-foreground bg-muted/30 rounded px-2 py-0.5">1 кампания = 1 креатив = 1 ERID</span>
-      </div>
-
-      {/* Creative card */}
+      {/* Creative file card */}
       <Card>
-        <CardContent className="p-3.5">
-          <div className="flex items-start gap-3">
-            <div className="h-16 w-24 rounded-lg bg-muted/30 border border-border flex items-center justify-center flex-shrink-0">
+        <CardContent className="p-4 space-y-3">
+          <p className="text-[15px] font-semibold text-card-foreground">Файл креатива</p>
+          <div className="flex items-center gap-3">
+            <div className="h-14 w-20 rounded-lg bg-muted/30 border border-border flex items-center justify-center flex-shrink-0">
               <ImagePlus className="h-5 w-5 text-muted-foreground/40" />
             </div>
             <div className="flex-1 min-w-0 space-y-1">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[14px] font-semibold text-card-foreground">{creative.title}</span>
+                <span className="text-[14px] font-semibold text-card-foreground">{fileMeta.name}</span>
                 <Badge variant="outline" className={`text-[11px] ${creativeStatusStyles[creative.status]}`}>
                   {creativeStatusLabels[creative.status]}
                 </Badge>
-                {locked && (
-                  <Badge variant="outline" className="text-[11px] border-primary/30 text-primary bg-primary/10">
-                    <Lock className="h-2.5 w-2.5 mr-1" />
-                    Заблокирован
-                  </Badge>
-                )}
               </div>
-              <div className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
-                <Link2 className="h-3 w-3" />
-                <span className="truncate">{creative.url}</span>
-                <ExternalLink className="h-3 w-3 flex-shrink-0" />
+              <div className="flex items-center gap-3 text-[13px] text-foreground/60">
+                <span>{fileMeta.format}</span>
+                <span>·</span>
+                <span>{fileMeta.size}</span>
+                <span>·</span>
+                <span>Загружен {fileMeta.uploaded}</span>
               </div>
             </div>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <Button size="sm" variant="ghost" className="h-7 text-[13px] gap-1 text-primary hover:text-primary"
+                onClick={() => window.open("#", "_blank")}>
+                <ExternalLink className="h-3 w-3" />
+                Открыть
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 text-[13px] gap-1 text-muted-foreground hover:text-foreground">
+                <Download className="h-3 w-3" />
+                Скачать
+              </Button>
+            </div>
           </div>
+          {/* Inline ERID — small, no big block */}
+          {campaign.erid && (
+            <p className="text-[12px] text-foreground/50">ERID: <span className="font-mono">{campaign.erid}</span></p>
+          )}
         </CardContent>
       </Card>
 
-      {/* Preview */}
+      {/* Landing URL */}
       <Card>
-        <CardContent className="p-4 space-y-2.5">
-          <p className="text-[15px] font-semibold text-card-foreground">Предпросмотр размещения</p>
-          <div className="rounded-lg border border-border bg-muted/20 p-3 flex flex-col items-center justify-center gap-2 min-h-[100px]">
-            <div className="rounded-lg bg-primary/10 border border-primary/20 px-5 py-2.5 text-center max-w-xs">
-              <p className="text-[13px] font-semibold text-primary">{creative.title}</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">Реклама · {placementLabels[campaign.placement]}</p>
-              {campaign.erid && (
-                <p className="text-[10px] text-muted-foreground/60 mt-0.5">erid: {campaign.erid}</p>
-              )}
-            </div>
-          </div>
+        <CardContent className="p-4 space-y-1.5">
+          <p className="text-[15px] font-semibold text-card-foreground">Целевая ссылка</p>
+          <a href={creative.url} target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-[14px] text-primary hover:underline font-medium break-all">
+            {creative.url}
+            <ExternalLink className="h-3.5 w-3.5 flex-shrink-0" />
+          </a>
         </CardContent>
       </Card>
 
-      {/* Duplicate CTA */}
-      <Card className="border-primary/20 bg-primary/5">
-        <CardContent className="p-3.5">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-[14px] font-semibold text-card-foreground">Нужен другой креатив?</p>
-              <p className="text-[13px] text-muted-foreground">
-                Дублируйте кампанию — будет зарегистрирован новый ERID.
-              </p>
+      {/* Compact collapsible preview */}
+      <Card>
+        <CardContent className="p-0">
+          <button type="button" onClick={() => setPreviewOpen(!previewOpen)}
+            className="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-muted/20 transition-colors rounded-lg">
+            <span className="text-[14px] font-medium text-card-foreground">Как будет выглядеть на Главной</span>
+            <ArrowRight className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${previewOpen ? "rotate-90" : ""}`} />
+          </button>
+          {previewOpen && (
+            <div className="px-4 pb-3">
+              <div className="rounded-lg border border-border bg-muted/10 p-3 max-w-xs">
+                <div className="h-10 w-full rounded bg-primary/10 border border-primary/20 flex items-center justify-center mb-1.5">
+                  <span className="text-[12px] text-primary font-medium">{fileMeta.name}</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground">Реклама · {placementLabels[campaign.placement]}</p>
+              </div>
             </div>
-            <Button size="sm" variant="outline" className="h-8 text-[13px] gap-1.5 flex-shrink-0 border-primary/30 text-primary hover:bg-primary/10">
-              <Copy className="h-3.5 w-3.5" />
-              Дублировать
-            </Button>
-          </div>
+          )}
         </CardContent>
       </Card>
+
+      {/* Subtle duplicate hint — only if not already in header kebab */}
+      {locked && (
+        <p className="text-[13px] text-foreground/50 flex items-center gap-1.5">
+          Нужен другой креатив? Используйте «Дублировать» в меню кампании <MoreVertical className="h-3 w-3 inline" />.
+        </p>
+      )}
     </div>
   );
 }
