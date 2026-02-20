@@ -1,8 +1,10 @@
 import { useState, useMemo, useCallback, useRef } from "react";
-import { deals, messages as allMessages } from "@/data/mockData";
+import { deals as mockDeals, messages as allMessages } from "@/data/mockData";
 import { useRealtimeMessages } from "@/hooks/useRealtimeMessages";
 import { useAdvertiserScores } from "@/hooks/useAdvertiserScores";
 import { useAuth } from "@/contexts/AuthContext";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import {
   useDealAuditLog, useLogDealEvent,
   useDealEscrow, useReserveEscrow, useReleaseEscrow,
@@ -46,43 +48,61 @@ const statusColors: Record<DealStatus, string> = {
   disputed: "bg-destructive/15 text-destructive border-destructive/30",
 };
 
-const statusLabels: Record<DealStatus, string> = {
-  pending: "Ожидание",
+const statusLabels: Record<string, string> = {
+  pending: "Ожидание автора",
   briefing: "Бриф",
   in_progress: "В работе",
   review: "На проверке",
   completed: "Завершено",
   disputed: "Спор",
+  needs_changes: "Требует правок",
+  accepted: "Принято",
+  rejected: "Отклонено",
 };
 
-const filterStatusMap: Record<string, DealStatus[]> = {
-  all: ["pending", "briefing", "in_progress", "review", "completed", "disputed"],
-  active: ["in_progress", "briefing"],
-  pending: ["pending", "review"],
+const filterStatusMap: Record<string, string[]> = {
+  all: ["pending", "briefing", "in_progress", "review", "completed", "disputed", "needs_changes", "accepted", "rejected"],
+  active: ["in_progress", "briefing", "accepted"],
+  proposals: ["pending", "needs_changes", "accepted", "rejected"],
+  pending: ["pending", "review", "needs_changes"],
   disputed: ["disputed"],
   completed: ["completed"],
 };
 
+/* ─── Placement type label for sidebar ─── */
+const placementTypeFromTitle = (title: string): string | null => {
+  const t = title.toLowerCase();
+  if (t.includes("видео") || t.includes("video")) return "Видео";
+  if (t.includes("пост") || t.includes("post")) return "Пост";
+  if (t.includes("подкаст") || t.includes("podcast")) return "Подкаст";
+  return null;
+};
+
 /* ─── State-specific primary CTA — explicit next step, not generic ─── */
-function getPrimaryAction(status: DealStatus, _role?: string): { label: string; icon: any } | null {
+function getPrimaryAction(status: string, _role?: string): { label: string; icon: any } | null {
   switch (status) {
-    case "pending": return { label: "Подтвердить условия", icon: CheckCircle2 };
+    case "pending": return null; // Waiting for creator — no action
+    case "needs_changes": return { label: "Просмотреть правки", icon: ScrollText };
+    case "accepted": return { label: "Зарезервировать средства", icon: CreditCard };
     case "briefing": return { label: "Отправить черновик на проверку", icon: Send };
     case "in_progress": return { label: "Отправить черновик на проверку", icon: Upload };
     case "review": return { label: "Принять черновик", icon: CheckCircle2 };
-    default: return null; // completed / disputed — hide CTA
+    default: return null;
   }
 }
 
 /* ─── Next-step hint text (non-interactive) ─── */
-function getNextStepHint(status: DealStatus): string | null {
+function getNextStepHint(status: string): string | null {
   switch (status) {
-    case "pending": return "Следующий шаг: Подтвердить условия обеими сторонами";
+    case "pending": return "Ожидаем ответа автора на ваше предложение";
+    case "needs_changes": return "Автор предложил изменения — проверьте условия";
+    case "accepted": return "Предложение принято — зарезервируйте средства для начала работы";
     case "briefing": return "Следующий шаг: Отправить черновик интеграции на проверку";
     case "in_progress": return "Следующий шаг: Загрузить черновик и отправить на проверку";
     case "review": return "Следующий шаг: Принять или запросить правки черновика";
     case "completed": return null;
     case "disputed": return "Ожидаем решения: спор на рассмотрении";
+    case "rejected": return "Автор отклонил предложение";
     default: return null;
   }
 }
@@ -149,7 +169,7 @@ const fileSizeMock: Record<string, string> = {
    SIDEBAR
    ═══════════════════════════════════════════════════════ */
 function DealSidebar({
-  selectedId, onSelect, searchQuery, setSearchQuery, statusFilter, setStatusFilter,
+  selectedId, onSelect, searchQuery, setSearchQuery, statusFilter, setStatusFilter, allDeals,
 }: {
   selectedId: string;
   onSelect: (d: Deal) => void;
@@ -157,11 +177,12 @@ function DealSidebar({
   setSearchQuery: (v: string) => void;
   statusFilter: string;
   setStatusFilter: (v: string) => void;
+  allDeals: Deal[];
 }) {
   const { scores } = useAdvertiserScores();
 
   const filtered = useMemo(() => {
-    let list = [...deals];
+    let list = [...allDeals];
     const statuses = filterStatusMap[statusFilter] || filterStatusMap.all;
     list = list.filter((d) => statuses.includes(d.status));
     if (searchQuery.trim()) {
@@ -174,7 +195,11 @@ function DealSidebar({
       );
     }
     return list;
-  }, [searchQuery, statusFilter]);
+  }, [allDeals, searchQuery, statusFilter]);
+
+  const proposalCount = useMemo(() =>
+    allDeals.filter((d) => ["pending", "needs_changes", "accepted", "rejected"].includes(d.status)).length
+  , [allDeals]);
 
   return (
     <div className="w-[320px] border-r border-border bg-card flex flex-col shrink-0 h-full">
@@ -191,6 +216,7 @@ function DealSidebar({
         <div className="flex gap-1 flex-wrap">
           {[
             { key: "all", label: "Все" },
+            { key: "proposals", label: "Исходящие", count: proposalCount },
             { key: "active", label: "В работе" },
             { key: "pending", label: "Ожидание" },
             { key: "disputed", label: "Спор" },
@@ -200,13 +226,16 @@ function DealSidebar({
               key={f.key}
               onClick={() => setStatusFilter(f.key)}
               className={cn(
-                "px-2 py-0.5 rounded text-[12px] font-medium transition-colors",
+                "px-2 py-0.5 rounded text-[12px] font-medium transition-colors flex items-center gap-1",
                 statusFilter === f.key
                   ? "bg-primary/15 text-primary"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
               )}
             >
               {f.label}
+              {f.count !== undefined && f.count > 0 && (
+                <span className="bg-primary/20 text-primary text-[10px] font-bold px-1 rounded-full">{f.count}</span>
+              )}
             </button>
           ))}
         </div>
@@ -217,6 +246,9 @@ function DealSidebar({
           const completedMs = deal.milestones.filter((m) => m.completed).length;
           const totalMs = deal.milestones.length;
           const isSelected = selectedId === deal.id;
+          const placement = placementTypeFromTitle(deal.title);
+          const isProposal = ["pending", "needs_changes", "accepted", "rejected"].includes(deal.status);
+          const statusColor = statusColors[deal.status as DealStatus] || "bg-muted text-muted-foreground border-muted-foreground/20";
 
           return (
             <button
@@ -228,18 +260,24 @@ function DealSidebar({
               )}
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[14px] font-semibold text-card-foreground truncate flex-1">{deal.title}</span>
-                <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded border shrink-0", statusColors[deal.status])}>
-                  {statusLabels[deal.status]}
+                <span className="text-[14px] font-semibold text-card-foreground truncate flex-1">{deal.creatorName}</span>
+                <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded border shrink-0", statusColor)}>
+                  {statusLabels[deal.status] || deal.status}
                 </span>
               </div>
-              <div className="flex items-center justify-between mt-0.5">
-                <span className="text-[12px] text-muted-foreground truncate">
-                  {deal.advertiserName} → {deal.creatorName}
-                </span>
-                <span className="text-[13px] font-medium text-card-foreground shrink-0">{deal.budget.toLocaleString()} ₽</span>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                {placement && (
+                  <span className="text-[11px] font-medium text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded">{placement}</span>
+                )}
+                <span className="text-[12px] text-muted-foreground truncate">{deal.title}</span>
               </div>
-              {totalMs > 0 && (
+              <div className="flex items-center justify-between mt-1">
+                <span className="text-[13px] font-medium text-card-foreground">{deal.budget.toLocaleString()} ₽</span>
+                <span className="text-[11px] text-muted-foreground">
+                  {new Date(deal.createdAt).toLocaleDateString("ru-RU", { day: "numeric", month: "short" })}
+                </span>
+              </div>
+              {!isProposal && totalMs > 0 && (
                 <div className="flex items-center gap-1.5 mt-1">
                   <div className="h-[3px] flex-1 bg-muted rounded-full overflow-hidden">
                     <div className="h-full bg-primary/60 rounded-full transition-all" style={{ width: `${(completedMs / totalMs) * 100}%` }} />
@@ -849,16 +887,63 @@ function MoreTab({ dealId }: { dealId: string }) {
    MAIN DEAL WORKSPACE
    ═══════════════════════════════════════════════════════ */
 export function DealWorkspace() {
-  const [selectedDeal, setSelectedDeal] = useState<Deal>(deals[0]);
+  const { user } = useAuth();
+
+  // Fetch real deals from DB
+  const { data: dbDeals = [] } = useQuery({
+    queryKey: ["my_deals", user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      const { data, error } = await supabase
+        .from("deals")
+        .select("*")
+        .or(`advertiser_id.eq.${user.id},creator_id.eq.${user.id}`)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user,
+  });
+
+  // Merge DB deals with mock deals, DB takes priority
+  const allDeals: Deal[] = useMemo(() => {
+    const dbMapped: Deal[] = dbDeals.map((d: any) => ({
+      id: d.id,
+      advertiserId: d.advertiser_id || "",
+      advertiserName: d.advertiser_name || "",
+      creatorId: d.creator_id || "",
+      creatorName: d.creator_name || "",
+      title: d.title,
+      description: d.description || "",
+      budget: d.budget || 0,
+      status: d.status as DealStatus,
+      createdAt: d.created_at,
+      deadline: d.deadline || "",
+      milestones: [],
+    }));
+    const dbIds = new Set(dbMapped.map((d) => d.id));
+    const mock = mockDeals.filter((d) => !dbIds.has(d.id));
+    return [...dbMapped, ...mock];
+  }, [dbDeals]);
+
+  const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
+  const activeDeal = selectedDeal || allDeals[0];
+
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [activeSubTab, setActiveSubTab] = useState("chat");
   const [detailsOpen, setDetailsOpen] = useState(false);
 
-  const primaryAction = getPrimaryAction(selectedDeal.status);
-  const nextStepHint = getNextStepHint(selectedDeal.status);
-  const completedMs = selectedDeal.milestones.filter((m) => m.completed).length;
-  const totalMs = selectedDeal.milestones.length;
+  if (!activeDeal) {
+    return <div className="flex-1 flex items-center justify-center text-muted-foreground text-[15px]">Нет сделок</div>;
+  }
+
+  const dealStatus = activeDeal.status as string;
+  const isProposal = ["pending", "needs_changes", "accepted", "rejected"].includes(dealStatus);
+  const primaryAction = getPrimaryAction(dealStatus);
+  const nextStepHint = getNextStepHint(dealStatus);
+  const completedMs = activeDeal.milestones.filter((m) => m.completed).length;
+  const totalMs = activeDeal.milestones.length;
 
   const coreTabs = [
     { value: "chat", label: "Чат", icon: MessageCircle },
@@ -872,12 +957,18 @@ export function DealWorkspace() {
   return (
     <div className="flex-1 flex h-full overflow-hidden">
       <DealSidebar
-        selectedId={selectedDeal.id}
-        onSelect={(d) => { setSelectedDeal(d); setActiveSubTab("chat"); setDetailsOpen(false); }}
+        selectedId={activeDeal.id}
+        onSelect={(d) => {
+          setSelectedDeal(d);
+          const isProp = ["pending", "needs_changes", "accepted", "rejected"].includes(d.status as string);
+          setActiveSubTab(isProp && (d.status as string) === "needs_changes" ? "terms" : "chat");
+          setDetailsOpen(false);
+        }}
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
         statusFilter={statusFilter}
         setStatusFilter={setStatusFilter}
+        allDeals={allDeals}
       />
 
       {/* Main workspace */}
@@ -887,19 +978,27 @@ export function DealWorkspace() {
           <div className="max-w-[1100px]">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2.5 min-w-0">
-                <h1 className="text-[20px] font-bold text-card-foreground truncate">{selectedDeal.title}</h1>
-                <span className={cn("text-[11px] font-medium px-2 py-0.5 rounded border shrink-0", statusColors[selectedDeal.status])}>
-                  {statusLabels[selectedDeal.status]}
+                <h1 className="text-[20px] font-bold text-card-foreground truncate">{activeDeal.title}</h1>
+                <span className={cn("text-[11px] font-medium px-2 py-0.5 rounded border shrink-0", statusColors[activeDeal.status as DealStatus] || "bg-muted text-muted-foreground border-muted-foreground/20")}>
+                  {statusLabels[activeDeal.status] || activeDeal.status}
                 </span>
               </div>
 
               <div className="flex items-center gap-1.5 shrink-0">
-                {primaryAction && (
-                  <Button size="sm" className="text-[14px] h-9">
+                {primaryAction ? (
+                  <Button size="sm" className="text-[14px] h-9" onClick={() => {
+                    if ((activeDeal.status as string) === "needs_changes") setActiveSubTab("terms");
+                    if ((activeDeal.status as string) === "accepted") setActiveSubTab("payment");
+                  }}>
                     <primaryAction.icon className="h-4 w-4 mr-1.5" />
                     {primaryAction.label}
                   </Button>
-                )}
+                ) : isProposal ? (
+                  <Badge variant="outline" className="text-[12px] py-1 px-2.5 border-warning/30 text-warning">
+                    <Clock className="h-3.5 w-3.5 mr-1" />
+                    {(activeDeal.status as string) === "rejected" ? "Отклонено" : "Ожидание автора"}
+                  </Badge>
+                ) : null}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="icon" className="h-9 w-9">
@@ -926,8 +1025,8 @@ export function DealWorkspace() {
                 <span>Детали сделки</span>
                 {!detailsOpen && (
                   <span className="text-muted-foreground/60 ml-1">
-                    — {selectedDeal.budget.toLocaleString()} ₽
-                    {selectedDeal.deadline && ` · до ${new Date(selectedDeal.deadline).toLocaleDateString("ru-RU")}`}
+                    — {activeDeal.budget.toLocaleString()} ₽
+                    {activeDeal.deadline && ` · до ${new Date(activeDeal.deadline).toLocaleDateString("ru-RU")}`}
                   </span>
                 )}
               </CollapsibleTrigger>
@@ -935,20 +1034,20 @@ export function DealWorkspace() {
                 <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1.5 text-[14px] pb-1">
                   <div className="flex items-center gap-2">
                     <span className="text-muted-foreground">Сумма:</span>
-                    <span className="font-semibold text-card-foreground">{selectedDeal.budget.toLocaleString()} ₽</span>
+                    <span className="font-semibold text-card-foreground">{activeDeal.budget.toLocaleString()} ₽</span>
                   </div>
-                  {selectedDeal.deadline && (
+                  {activeDeal.deadline && (
                     <div className="flex items-center gap-2">
                       <span className="text-muted-foreground">Дедлайн:</span>
                       <span className="font-medium text-card-foreground flex items-center gap-1">
                         <CalendarDays className="h-3.5 w-3.5" />
-                        {new Date(selectedDeal.deadline).toLocaleDateString("ru-RU")}
+                        {new Date(activeDeal.deadline).toLocaleDateString("ru-RU")}
                       </span>
                     </div>
                   )}
                   <div className="flex items-center gap-2">
                     <span className="text-muted-foreground">Стороны:</span>
-                    <span className="text-card-foreground">{selectedDeal.advertiserName} → {selectedDeal.creatorName}</span>
+                    <span className="text-card-foreground">{activeDeal.advertiserName} → {activeDeal.creatorName}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-muted-foreground flex items-center gap-1">
@@ -962,9 +1061,9 @@ export function DealWorkspace() {
                     <span className="text-muted-foreground">ID:</span>
                     <button
                       className="flex items-center gap-1 hover:text-foreground transition-colors font-mono text-[12px] text-muted-foreground"
-                      onClick={() => { navigator.clipboard.writeText(selectedDeal.id); toast.success("ID скопирован"); }}
+                      onClick={() => { navigator.clipboard.writeText(activeDeal.id); toast.success("ID скопирован"); }}
                     >
-                      #{selectedDeal.id} <ClipboardCopy className="h-3 w-3" />
+                      #{activeDeal.id.slice(0, 8)} <ClipboardCopy className="h-3 w-3" />
                     </button>
                   </div>
                 </div>
@@ -1017,11 +1116,11 @@ export function DealWorkspace() {
 
         {/* ── Tab content ── */}
         <div className="flex-1 overflow-y-auto">
-          {activeSubTab === "chat" && <ChatTab deal={selectedDeal} />}
-          {activeSubTab === "terms" && <TermsTab dealId={selectedDeal.id} />}
-          {activeSubTab === "files" && <FilesTab dealId={selectedDeal.id} />}
-          {activeSubTab === "payment" && <PaymentTab dealId={selectedDeal.id} />}
-          {activeSubTab === "more" && <MoreTab dealId={selectedDeal.id} />}
+          {activeSubTab === "chat" && <ChatTab deal={activeDeal} />}
+          {activeSubTab === "terms" && <TermsTab dealId={activeDeal.id} />}
+          {activeSubTab === "files" && <FilesTab dealId={activeDeal.id} />}
+          {activeSubTab === "payment" && <PaymentTab dealId={activeDeal.id} />}
+          {activeSubTab === "more" && <MoreTab dealId={activeDeal.id} />}
         </div>
       </div>
     </div>
