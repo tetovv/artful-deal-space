@@ -40,7 +40,7 @@ import { PostEditor } from "@/components/studio/PostEditor";
 import { TemplateEditor } from "@/components/studio/TemplateEditor";
 import { PromoCodesSection } from "@/components/studio/PromoCodesSection";
 import { StudioSettingsSection } from "@/components/studio/StudioSettingsSection";
-/* ── constants ── */
+import { CreatorOffersSection } from "@/components/studio/CreatorOffersSection";
 const PIE_COLORS = [
   "hsl(var(--primary))", "hsl(var(--accent))", "hsl(var(--warning))",
   "hsl(var(--destructive))", "hsl(var(--success))", "hsl(var(--info))",
@@ -62,13 +62,14 @@ const TT = {
   },
 };
 
-type Section = "content" | "analytics" | "monetization" | "promos" | "studio-settings";
+type Section = "content" | "analytics" | "monetization" | "promos" | "offers" | "studio-settings";
 
 const NAV_ITEMS: { id: Section; label: string; icon: React.ElementType }[] = [
   { id: "content", label: "Контент", icon: FolderOpen },
   { id: "analytics", label: "Аналитика", icon: LineChartIcon },
   { id: "monetization", label: "Монетизация", icon: Wallet },
   { id: "promos", label: "Промокоды", icon: Crown },
+  { id: "offers", label: "Офферы", icon: Handshake },
   { id: "studio-settings", label: "Настройки студии", icon: Edit },
 ];
 
@@ -955,10 +956,12 @@ const CreatorStudio = () => {
             {/* ═══ PROMOS ═══ */}
             {section === "promos" && <PromoCodesSection />}
 
+            {/* ═══ OFFERS ═══ */}
+            {section === "offers" && <CreatorOffersSection />}
+
             {/* ═══ STUDIO SETTINGS ═══ */}
             {section === "studio-settings" && <StudioSettingsSection />}
 
-            {/* offers section removed — use header Предложения nav */}
           </motion.div>
         </AnimatePresence>
         )}

@@ -1,13 +1,18 @@
-import { Home, Compass, Palette, Megaphone, Store, Shield, Brain, Settings, Bell, Sun, Moon, LogOut, Menu, X, User, ShoppingBag, Check, CheckCheck, Rss, Library } from "lucide-react";
+import { Home, Compass, Palette, Megaphone, Store, Shield, Brain, Settings, Bell, Sun, Moon, LogOut, Menu, X, User, ShoppingBag, Check, CheckCheck, Rss, Library, Wallet, Plus, Minus } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useNotifications } from "@/hooks/useNotifications";
+import { useUserBalance } from "@/hooks/useDealData";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,7 +20,98 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
+
+/* ─── Balance Indicator ─── */
+function BalanceIndicator() {
+  const { user } = useAuth();
+  const { data: balance } = useUserBalance();
+  const [open, setOpen] = useState(false);
+  const [amount, setAmount] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  if (!user) return null;
+
+  const handleTopUp = async () => {
+    const val = parseInt(amount);
+    if (!val || val <= 0) { toast.error("Введите корректную сумму"); return; }
+    setLoading(true);
+    try {
+      const current = balance?.available || 0;
+      const { error } = await supabase
+        .from("user_balances")
+        .update({ available: current + val })
+        .eq("user_id", user.id);
+      if (error) throw error;
+      toast.success(`Баланс пополнен на ${val.toLocaleString()} ₽`);
+      setAmount("");
+      setOpen(false);
+    } catch { toast.error("Ошибка пополнения"); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-sm font-medium bg-success/10 text-success hover:bg-success/20 transition-colors"
+      >
+        <Wallet className="h-3.5 w-3.5" />
+        {(balance?.available || 0).toLocaleString()} ₽
+      </button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-lg">Баланс</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="bg-muted/50 rounded-lg p-3">
+                <p className="text-muted-foreground text-xs">Доступно</p>
+                <p className="text-lg font-bold text-foreground">{(balance?.available || 0).toLocaleString()} ₽</p>
+              </div>
+              <div className="bg-muted/50 rounded-lg p-3">
+                <p className="text-muted-foreground text-xs">В резерве</p>
+                <p className="text-lg font-bold text-foreground">{(balance?.reserved || 0).toLocaleString()} ₽</p>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-foreground">Пополнить баланс</p>
+              <div className="flex gap-2">
+                <Input
+                  type="number"
+                  placeholder="Сумма, ₽"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  className="flex-1"
+                />
+                <Button onClick={handleTopUp} disabled={loading} size="sm" className="h-10 px-4">
+                  <Plus className="h-4 w-4 mr-1" />
+                  {loading ? "…" : "Пополнить"}
+                </Button>
+              </div>
+              <div className="flex gap-1.5">
+                {[1000, 5000, 10000, 50000].map((v) => (
+                  <button
+                    key={v}
+                    onClick={() => setAmount(String(v))}
+                    className="text-xs px-2 py-1 rounded-md bg-muted hover:bg-muted/80 text-muted-foreground transition-colors"
+                  >
+                    {v.toLocaleString()} ₽
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
 
 interface NavItem {
   title: string;
@@ -105,6 +201,8 @@ export function TopHeader() {
         </nav>
 
         <div className="flex items-center gap-3 ml-auto">
+          <BalanceIndicator />
+
           <span className={cn("hidden sm:inline-flex text-xs font-medium px-2.5 py-1 rounded-full", roleBadgeColors[primaryRole] || roleBadgeColors.user)}>
             {roleLabels[primaryRole] || "Пользователь"}
           </span>
