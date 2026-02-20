@@ -370,7 +370,76 @@ function OverviewTab({ campaign }: { campaign: Campaign }) {
 // ═══════════════════════════════════════════════════════
 // ─── Settings Tab ───
 // ═══════════════════════════════════════════════════════
+// ─── Read-only summary row ───
+function SummaryRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex items-start justify-between gap-4 py-1.5">
+      <span className="text-[14px] text-foreground/60 flex-shrink-0">{label}</span>
+      <span className="text-[14px] font-medium text-card-foreground text-right">{value}</span>
+    </div>
+  );
+}
+
 function SettingsTab({ campaign }: { campaign: Campaign }) {
+  const fullyLocked = isFullyLocked(campaign);
+
+  // ── Read-only summary for completed/finalizing campaigns ──
+  if (fullyLocked) {
+    return (
+      <div className="space-y-3">
+        {/* Compact lock notice */}
+        <div className="flex items-center gap-2 rounded-md bg-muted/40 border border-muted-foreground/15 px-3 py-1.5">
+          <Lock className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+          <span className="text-[13px] text-muted-foreground">Кампания завершена — настройки доступны только для просмотра</span>
+        </div>
+
+        {/* Placement */}
+        <Card>
+          <CardContent className="p-4 space-y-1">
+            <p className="text-[15px] font-semibold text-card-foreground">Параметры размещения</p>
+            <SummaryRow label="Тип размещения" value={placementLabels[campaign.placement] || campaign.placement} />
+            <SummaryRow label="Формат" value="Все устройства" />
+          </CardContent>
+        </Card>
+
+        {/* Dates */}
+        <Card>
+          <CardContent className="p-4 space-y-1">
+            <p className="text-[15px] font-semibold text-card-foreground">Сроки</p>
+            <SummaryRow label="Начало" value={campaign.startDate || "—"} />
+            <SummaryRow label="Окончание" value={campaign.endDate || "—"} />
+          </CardContent>
+        </Card>
+
+        {/* Budget */}
+        <Card>
+          <CardContent className="p-4 space-y-1.5">
+            <p className="text-[15px] font-semibold text-card-foreground">Бюджет</p>
+            <SummaryRow label="Лимит" value={`${formatNum(campaign.budget)} ₽`} />
+            <SummaryRow label="Потрачено" value={`${formatNum(campaign.spent)} ₽`} />
+            <p className="text-[12px] text-foreground/50 mt-1">Бюджет зафиксирован договором, редактирование недоступно</p>
+          </CardContent>
+        </Card>
+
+        {/* Targeting */}
+        <Card>
+          <CardContent className="p-4 space-y-1">
+            <p className="text-[15px] font-semibold text-card-foreground">Таргетинг</p>
+            <div className="flex items-center gap-2 text-[14px]">
+              <Globe className="h-4 w-4 text-muted-foreground" />
+              <span className="text-card-foreground font-medium">Все пользователи</span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // ── Editable settings for active/draft/paused campaigns ──
+  return <SettingsTabEditable campaign={campaign} />;
+}
+
+function SettingsTabEditable({ campaign }: { campaign: Campaign }) {
   const [hasChanges, setHasChanges] = useState(false);
   const [budgetValue, setBudgetValue] = useState(String(campaign.budget));
   const [startDate, setStartDate] = useState(campaign.startDate);
@@ -379,13 +448,13 @@ function SettingsTab({ campaign }: { campaign: Campaign }) {
 
   const started = isStarted(campaign);
   const budgetDecreaseBlocked = started;
-  const minBudget = campaign.spent; // Never allow below spent
+  const minBudget = campaign.spent;
 
   const handleBudgetChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     const num = Number(val);
     if (budgetDecreaseBlocked && num < campaign.budget) {
-      toast.error("Уменьшение бюджета запрещено после старта кампании. Используйте «Пополнить бюджет» на вкладке Обзор.");
+      toast.error("Уменьшение бюджета запрещено после старта кампании.");
       return;
     }
     if (num < minBudget) {
@@ -420,36 +489,31 @@ function SettingsTab({ campaign }: { campaign: Campaign }) {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <div className="flex items-center gap-1.5">
-                <label className="text-[13px] text-muted-foreground">Общий бюджет (₽)</label>
+                <label className="text-[14px] text-muted-foreground">Общий бюджет (₽)</label>
                 {budgetDecreaseBlocked && (
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Lock className="h-3 w-3 text-muted-foreground" />
                     </TooltipTrigger>
                     <TooltipContent className="max-w-[240px]">
-                      <p className="text-xs">Уменьшение бюджета запрещено после старта кампании для обеспечения корректности учёта и маркировки в ОРД. Бюджет можно только увеличить.</p>
+                      <p className="text-xs">Уменьшение бюджета запрещено после старта кампании.</p>
                     </TooltipContent>
                   </Tooltip>
                 )}
               </div>
-              <Input
-                value={budgetValue}
-                onChange={handleBudgetChange}
-                type="number"
-                min={budgetDecreaseBlocked ? campaign.budget : 0}
-                className="h-10"
-              />
+              <Input value={budgetValue} onChange={handleBudgetChange} type="number"
+                min={budgetDecreaseBlocked ? campaign.budget : 0} className="h-10" />
               {budgetDecreaseBlocked && (
-                <p className="text-[10px] text-muted-foreground">Мин. значение: {formatNum(campaign.budget)} ₽ (только увеличение)</p>
+                <p className="text-[11px] text-muted-foreground">Мин. значение: {formatNum(campaign.budget)} ₽</p>
               )}
             </div>
             <div className="space-y-1.5">
-              <label className="text-[13px] text-muted-foreground">Дневной лимит (₽)</label>
+              <label className="text-[14px] text-muted-foreground">Дневной лимит (₽)</label>
               <Input placeholder="Без ограничений" className="h-9" onChange={() => setHasChanges(true)} />
             </div>
             <div className="space-y-1.5">
               <div className="flex items-center gap-1.5">
-                <label className="text-[13px] text-muted-foreground">Дата начала</label>
+                <label className="text-[14px] text-muted-foreground">Дата начала</label>
                 {started && <Lock className="h-3 w-3 text-muted-foreground" />}
               </div>
               <LockedField locked={started} reason="Дата начала не может быть изменена после запуска кампании">
@@ -457,7 +521,7 @@ function SettingsTab({ campaign }: { campaign: Campaign }) {
               </LockedField>
             </div>
             <div className="space-y-1.5">
-              <label className="text-[13px] text-muted-foreground">Дата окончания</label>
+              <label className="text-[14px] text-muted-foreground">Дата окончания</label>
               <Input type="date" value={endDate} onChange={handleChange(setEndDate)} className="h-10" />
             </div>
           </div>
@@ -483,17 +547,17 @@ function SettingsTab({ campaign }: { campaign: Campaign }) {
           <p className="text-[15px] font-semibold text-card-foreground">Трекинг (UTM-параметры)</p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="space-y-1.5">
-              <label className="text-[13px] text-muted-foreground">utm_source</label>
+              <label className="text-[14px] text-muted-foreground">utm_source</label>
               <Input placeholder="mediaos" value={utm.source}
                 onChange={(e) => { setUtm({ ...utm, source: e.target.value }); setHasChanges(true); }} className="h-10" />
             </div>
             <div className="space-y-1.5">
-              <label className="text-[13px] text-muted-foreground">utm_medium</label>
+              <label className="text-[14px] text-muted-foreground">utm_medium</label>
               <Input placeholder="cpc" value={utm.medium}
                 onChange={(e) => { setUtm({ ...utm, medium: e.target.value }); setHasChanges(true); }} className="h-10" />
             </div>
             <div className="space-y-1.5">
-              <label className="text-[13px] text-muted-foreground">utm_campaign</label>
+              <label className="text-[14px] text-muted-foreground">utm_campaign</label>
               <Input placeholder={campaign.name.toLowerCase().replace(/\s/g, "_")} value={utm.campaign}
                 onChange={(e) => { setUtm({ ...utm, campaign: e.target.value }); setHasChanges(true); }} className="h-10" />
             </div>
