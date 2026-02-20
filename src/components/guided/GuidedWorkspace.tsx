@@ -862,9 +862,9 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
       }
       setProjectId(proj.id);
 
-      // Upload files to storage (no client-side extraction!)
+      // Upload files to storage in parallel (no client-side extraction!)
       const uploadedSources: { storage_path: string; file_name: string; source_id: string }[] = [];
-      for (const file of intake.files) {
+      const uploadPromises = intake.files.map(async (file) => {
         try {
           const { storagePath, fileName } = await uploadFileToStorage(file, user.id, proj.id);
 
@@ -881,13 +881,18 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
 
           if (srcErr) {
             console.warn(`Source record failed for ${fileName}:`, srcErr);
-            continue;
+            return null;
           }
 
-          uploadedSources.push({ storage_path: storagePath, file_name: fileName, source_id: sourceRec.id });
+          return { storage_path: storagePath, file_name: fileName, source_id: sourceRec.id };
         } catch (e: any) {
           console.warn(`Upload failed ${file.name}:`, e);
+          return null;
         }
+      });
+      const results = await Promise.all(uploadPromises);
+      for (const r of results) {
+        if (r) uploadedSources.push(r);
       }
 
       // Check that we have at least something to process
