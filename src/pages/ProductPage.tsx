@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { contentItems as mockItems, contentTypeLabels, purchasedItems } from "@/data/mockData";
-import { Eye, Heart, ShoppingCart, Check, Play, ThumbsUp, ThumbsDown, Share2, Bookmark } from "lucide-react";
+import { Eye, Heart, ShoppingCart, Check, Play, ThumbsUp, ThumbsDown, Share2, Bookmark, Tag, X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useState, useRef, useEffect } from "react";
@@ -13,6 +13,8 @@ import { Separator } from "@/components/ui/separator";
 import { CommentsSection } from "@/components/comments/CommentsSection";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { useReaction } from "@/hooks/useReaction";
+import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
 
 const ProductPage = () => {
   const { id } = useParams();
@@ -27,6 +29,12 @@ const ProductPage = () => {
   const [bookmarking, setBookmarking] = useState(false);
   const { likes, dislikes, userReaction, toggleReaction } = useReaction(id);
   const [bouncing, setBouncing] = useState<"like" | "dislike" | null>(null);
+  
+  // Promo code state
+  const [promoCode, setPromoCode] = useState("");
+  const [promoChecking, setPromoChecking] = useState(false);
+  const [appliedPromo, setAppliedPromo] = useState<{ code: string; discount_percent: number; id: string } | null>(null);
+  const [promoError, setPromoError] = useState("");
 
   const animatedReaction = (type: "like" | "dislike") => {
     setBouncing(type);
@@ -81,12 +89,46 @@ const ProductPage = () => {
     .filter((i) => i.id !== item.id && i.status === "published")
     .slice(0, 10);
 
+  const handleApplyPromo = async () => {
+    if (!promoCode.trim()) return;
+    setPromoError("");
+    setPromoChecking(true);
+    try {
+      const { data, error } = await supabase
+        .from("promo_codes")
+        .select("id, code, discount_percent, is_active, max_uses, used_count, expires_at")
+        .eq("code", promoCode.trim().toUpperCase())
+        .maybeSingle();
+      
+      if (error || !data) {
+        setPromoError("Промокод не найден");
+      } else if (!data.is_active) {
+        setPromoError("Промокод неактивен");
+      } else if (data.max_uses && data.used_count >= data.max_uses) {
+        setPromoError("Лимит использований исчерпан");
+      } else if (data.expires_at && new Date(data.expires_at) < new Date()) {
+        setPromoError("Промокод истёк");
+      } else {
+        setAppliedPromo({ code: data.code, discount_percent: data.discount_percent, id: data.id });
+        toast.success(`Промокод применён: -${data.discount_percent}%`);
+      }
+    } catch {
+      setPromoError("Ошибка проверки");
+    }
+    setPromoChecking(false);
+  };
+
   const handleBuy = async () => {
     if (!user) return;
     setBuying(true);
     try {
       await supabase.from("purchases").insert({ user_id: user.id, content_id: item.id });
+      // Increment promo usage
+      if (appliedPromo) {
+        await supabase.from("promo_codes").update({ used_count: (await supabase.from("promo_codes").select("used_count").eq("id", appliedPromo.id).single()).data?.used_count! + 1 }).eq("id", appliedPromo.id);
+      }
       setBought(true);
+      toast.success("Покупка успешна!");
     } catch (e) {
       console.error(e);
     }
@@ -94,6 +136,9 @@ const ProductPage = () => {
   };
 
   const isFree = item.price === null || item.monetization_type === "free";
+  const discountedPrice = appliedPromo && item.price
+    ? Math.round(item.price * (1 - appliedPromo.discount_percent / 100))
+    : null;
 
   return (
     <PageTransition>
@@ -196,16 +241,54 @@ const ProductPage = () => {
             <CommentsSection contentId={item.id} />
 
             {!isFree && (
-              <div className="rounded-xl border border-border p-4 flex items-center justify-between">
-                <p className="text-2xl font-bold text-foreground">{item.price?.toLocaleString()} ₽</p>
-                {bought ? (
-                  <Button variant="outline" disabled>
-                    <Check className="h-4 w-4 mr-2" /> Куплено
-                  </Button>
-                ) : (
-                  <Button className="glow-primary" onClick={handleBuy} disabled={buying}>
-                    <ShoppingCart className="h-4 w-4 mr-2" /> {buying ? "Покупка..." : "Купить"}
-                  </Button>
+              <div className="rounded-xl border border-border p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    {discountedPrice !== null ? (
+                      <>
+                        <p className="text-2xl font-bold text-foreground">{discountedPrice.toLocaleString()} ₽</p>
+                        <p className="text-lg text-muted-foreground line-through">{item.price?.toLocaleString()} ₽</p>
+                        <Badge variant="secondary" className="text-xs">-{appliedPromo!.discount_percent}%</Badge>
+                      </>
+                    ) : (
+                      <p className="text-2xl font-bold text-foreground">{item.price?.toLocaleString()} ₽</p>
+                    )}
+                  </div>
+                  {bought ? (
+                    <Button variant="outline" disabled>
+                      <Check className="h-4 w-4 mr-2" /> Куплено
+                    </Button>
+                  ) : (
+                    <Button className="glow-primary" onClick={handleBuy} disabled={buying}>
+                      <ShoppingCart className="h-4 w-4 mr-2" /> {buying ? "Покупка..." : "Купить"}
+                    </Button>
+                  )}
+                </div>
+                {!bought && (
+                  <div className="space-y-1.5">
+                    {appliedPromo ? (
+                      <div className="flex items-center gap-2 text-sm">
+                        <Tag className="h-4 w-4 text-primary" />
+                        <span className="text-primary font-medium">{appliedPromo.code}</span>
+                        <button onClick={() => { setAppliedPromo(null); setPromoCode(""); }} className="text-muted-foreground hover:text-destructive transition-colors">
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder="Промокод"
+                          value={promoCode}
+                          onChange={(e) => { setPromoCode(e.target.value.toUpperCase()); setPromoError(""); }}
+                          className="h-9 text-sm max-w-[200px]"
+                        />
+                        <Button variant="outline" size="sm" onClick={handleApplyPromo} disabled={promoChecking || !promoCode.trim()}>
+                          {promoChecking ? <Loader2 className="h-4 w-4 animate-spin" /> : "Применить"}
+                        </Button>
+                      </div>
+                    )}
+                    {promoError && <p className="text-xs text-destructive">{promoError}</p>}
+                  </div>
                 )}
               </div>
             )}
