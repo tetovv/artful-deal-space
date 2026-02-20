@@ -172,6 +172,21 @@ const INITIAL_GEN_STAGES: GenStage[] = [
   { key: "generating", label: "Генерация первого результата", icon: Sparkles, status: "pending" },
 ];
 
+const STAGE_TIMEOUT_MS = 30_000;
+
+/** Wrap a promise with a timeout */
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject({ functionName: label, status: 0, body: `Таймаут: стадия «${label}» не завершилась за ${ms / 1000} сек.` } as EdgeError);
+    }, ms);
+    promise.then(
+      (val) => { clearTimeout(timer); resolve(val); },
+      (err) => { clearTimeout(timer); reject(err); },
+    );
+  });
+}
+
 /** Call edge function with detailed error reporting */
 async function callEdge(fnName: string, body: any): Promise<any> {
   const payloadSize = JSON.stringify(body).length;
@@ -187,7 +202,7 @@ async function callEdge(fnName: string, body: any): Promise<any> {
 
     // HTTP 0 — no response at all (CORS / network / payload too large)
     if (status === 0 || !status) {
-      detail = `Запрос не получил ответ (возможно: CORS, сеть или слишком большой payload ~${Math.round(payloadSize / 1024)}KB).\n\nОткрой DevTools → Network/Console для деталей.\n\nURL: ${url}\nPayload size: ~${Math.round(payloadSize / 1024)}KB\n\nОригинальная ошибка: ${detail}`;
+      detail = `Запрос не получил ответ (возможно: CORS, сеть или слишком большой payload ~${Math.round(payloadSize / 1024)}KB).\n\nURL: ${url}\nPayload size: ~${Math.round(payloadSize / 1024)}KB\n\nОригинальная ошибка: ${detail}`;
     }
 
     throw { functionName: fnName, status, body: detail, payloadSize, url } as EdgeError & { payloadSize: number; url: string };
@@ -715,76 +730,111 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
     setGenStages(prev => prev.map(s => s.key === key ? { ...s, status, error } : s));
   };
 
-  const runPipeline = async (projId: string, extractedDocs: { text: string; file_name: string }[], format: OutputFormat) => {
+  // Store extracted docs so retry can reuse them
+  const extractedDocsRef = useRef<{ text: string; file_name: string }[]>([]);
+
+  const runStageUpload = async (projId: string): Promise<void> => {
+    // Upload stage is already done when we call runPipeline (docs extracted in handleGenerate)
+    // This is a no-op placeholder for retry — real upload happens in handleGenerate
+  };
+
+  const runStageIngest = async (projId: string, docs: { text: string; file_name: string }[]): Promise<void> => {
+    const maxChars = 1200;
+    const overlap = 150;
+    const allChunks: { project_id: string; user_id: string; content: string; metadata: any; source_id: string }[] = [];
+
+    for (const doc of docs) {
+      if (!doc.text.trim()) continue;
+      let start = 0;
+      let chunkIndex = 0;
+      while (start < doc.text.length) {
+        const end = Math.min(start + maxChars, doc.text.length);
+        allChunks.push({
+          project_id: projId, user_id: user!.id,
+          content: doc.text.slice(start, end),
+          metadata: { file_name: doc.file_name, chunk_index: chunkIndex, start_char: start, end_char: end },
+          source_id: projId,
+        });
+        start = end - overlap;
+        if (start >= doc.text.length) break;
+        chunkIndex++;
+      }
+    }
+
+    if (!allChunks.length) {
+      throw { functionName: "chunking", status: 0, body: "Не удалось создать чанки из текста" } as EdgeError;
+    }
+
+    await supabase.from("project_chunks").delete().eq("project_id", projId);
+    for (let i = 0; i < allChunks.length; i += 50) {
+      const batch = allChunks.slice(i, i + 50);
+      const { error: insertErr } = await supabase.from("project_chunks").insert(batch);
+      if (insertErr) {
+        throw { functionName: "chunk_insert", status: 0, body: insertErr.message } as EdgeError;
+      }
+    }
+    await supabase.from("projects").update({ status: "ingested" }).eq("id", projId);
+  };
+
+  const runStagePlan = async (projId: string): Promise<void> => {
+    await withTimeout(callEdge("project_plan", { project_id: projId }), STAGE_TIMEOUT_MS, "project_plan");
+  };
+
+  const runStageGenerate = async (projId: string, format: OutputFormat): Promise<string | null> => {
+    const actionType = formatToActionType(format);
+    const actData = await withTimeout(
+      callEdge("artifact_act", { project_id: projId, action_type: actionType, context: `Format: ${format}` }),
+      STAGE_TIMEOUT_MS, "artifact_act"
+    );
+    return actData?.artifact_id || null;
+  };
+
+  /** Run pipeline from a specific stage (inclusive) */
+  const runPipelineFrom = async (projId: string, fromStage: GenStageKey, docs: { text: string; file_name: string }[], format: OutputFormat) => {
     setPipelineError(null);
-    setGenStages(INITIAL_GEN_STAGES.map(s => ({ ...s })));
-    updateStage("uploading", "done");
+    const stageOrder: GenStageKey[] = ["uploading", "ingesting", "planning", "generating"];
+    const startIdx = stageOrder.indexOf(fromStage);
+
+    // Reset stages from startIdx onward to pending
+    setGenStages(prev => prev.map((s, i) => {
+      const si = stageOrder.indexOf(s.key);
+      if (si >= startIdx) return { ...s, status: "pending" as GenStageStatus, error: undefined };
+      return s;
+    }));
 
     try {
-      updateStage("ingesting", "running");
-      setGenStatus("ingesting");
-      const maxChars = 1200;
-      const overlap = 150;
-      const allChunks: { project_id: string; user_id: string; content: string; metadata: any; source_id: string }[] = [];
+      for (let i = startIdx; i < stageOrder.length; i++) {
+        const key = stageOrder[i];
+        updateStage(key, "running");
+        setGenStatus(key);
 
-      for (const doc of extractedDocs) {
-        if (!doc.text.trim()) continue;
-        let start = 0;
-        let chunkIndex = 0;
-        while (start < doc.text.length) {
-          const end = Math.min(start + maxChars, doc.text.length);
-          allChunks.push({
-            project_id: projId, user_id: user!.id,
-            content: doc.text.slice(start, end),
-            metadata: { file_name: doc.file_name, chunk_index: chunkIndex, start_char: start, end_char: end },
-            source_id: projId,
-          });
-          start = end - overlap;
-          if (start >= doc.text.length) break;
-          chunkIndex++;
+        try {
+          if (key === "uploading") {
+            await runStageUpload(projId);
+          } else if (key === "ingesting") {
+            await withTimeout(runStageIngest(projId, docs), STAGE_TIMEOUT_MS, "ingest");
+          } else if (key === "planning") {
+            await runStagePlan(projId);
+          } else if (key === "generating") {
+            const artId = await runStageGenerate(projId, format);
+            if (artId) {
+              const { data: art } = await supabase.from("artifacts").select("*").eq("id", artId).single();
+              if (art) setActiveArtifact(art as Artifact);
+            }
+          }
+          updateStage(key, "done");
+        } catch (stageErr: any) {
+          const edgeErr: EdgeError = stageErr.functionName
+            ? stageErr
+            : { functionName: key, status: 0, body: stageErr.message || String(stageErr) };
+          updateStage(key, "error", edgeErr);
+          throw edgeErr;
         }
       }
-
-      if (!allChunks.length) {
-        const err = { functionName: "chunking", status: 0, body: "Не удалось создать чанки из текста" } as EdgeError;
-        updateStage("ingesting", "error", err);
-        throw err;
-      }
-
-      await supabase.from("project_chunks").delete().eq("project_id", projId);
-      for (let i = 0; i < allChunks.length; i += 50) {
-        const batch = allChunks.slice(i, i + 50);
-        const { error: insertErr } = await supabase.from("project_chunks").insert(batch);
-        if (insertErr) {
-          const err = { functionName: "chunk_insert", status: 0, body: insertErr.message } as EdgeError;
-          updateStage("ingesting", "error", err);
-          throw err;
-        }
-      }
-      await supabase.from("projects").update({ status: "ingested" }).eq("id", projId);
-      updateStage("ingesting", "done");
-
-      updateStage("planning", "running");
-      setGenStatus("planning");
-      await callEdge("project_plan", { project_id: projId });
-      updateStage("planning", "done");
-
-      updateStage("generating", "running");
-      setGenStatus("generating");
-      const actionType = formatToActionType(format);
-      const actData = await callEdge("artifact_act", {
-        project_id: projId, action_type: actionType, context: `Format: ${format}`,
-      });
-      updateStage("generating", "done");
 
       queryClient.invalidateQueries({ queryKey: ["guided-project", projId] });
       queryClient.invalidateQueries({ queryKey: ["guided-artifacts", projId] });
       queryClient.invalidateQueries({ queryKey: ["my-guided-projects"] });
-
-      if (actData?.artifact_id) {
-        const { data: art } = await supabase.from("artifacts").select("*").eq("id", actData.artifact_id).single();
-        if (art) setActiveArtifact(art as Artifact);
-      }
 
       setGenStatus("done");
       setPhase("player");
@@ -798,6 +848,13 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
         setPipelineError({ functionName: "unknown", status: 0, body: e.message || String(e) });
       }
     }
+  };
+
+  // Legacy compat wrapper
+  const runPipeline = async (projId: string, extractedDocs: { text: string; file_name: string }[], format: OutputFormat) => {
+    extractedDocsRef.current = extractedDocs;
+    updateStage("uploading", "done"); // upload already done
+    await runPipelineFrom(projId, "ingesting", extractedDocs, format);
   };
 
   const handleGenerate = async () => {
@@ -829,13 +886,14 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
       const extractedDocs: { text: string; file_name: string }[] = [];
       for (const file of intake.files) {
         try {
-          const text = await extractText(file);
+          const text = await withTimeout(extractText(file), STAGE_TIMEOUT_MS, `extractText(${file.name})`);
           if (!text.trim()) continue;
           extractedDocs.push({ text, file_name: file.name });
           const rawPath = `${user.id}/${proj.id}/raw/${file.name}`;
           await supabase.storage.from("ai_sources").upload(rawPath, file, { upsert: true });
-        } catch (e) {
+        } catch (e: any) {
           console.warn(`Extraction failed ${file.name}:`, e);
+          if (e.functionName) throw e; // timeout — propagate
         }
       }
 
@@ -849,8 +907,9 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
         throw err;
       }
 
+      extractedDocsRef.current = extractedDocs;
       updateStage("uploading", "done");
-      await runPipeline(proj.id, extractedDocs, selectedFormat);
+      await runPipelineFrom(proj.id, "ingesting", extractedDocs, selectedFormat);
     } catch (e: any) {
       console.error("Generate error:", e);
       setGenStatus("error");
@@ -862,37 +921,20 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
     }
   };
 
-  /* ─── Retry pipeline from last failed step ─── */
-  const handleRetryPipeline = () => {
+  /* ─── Retry pipeline from the specific failed stage ─── */
+  const handleRetryStage = (stageKey?: GenStageKey) => {
     if (!projectId) return;
+    // Find the first failed stage if none specified
+    const failedStage = stageKey || genStages.find(s => s.status === "error")?.key;
+    if (!failedStage) return;
+
     setPipelineError(null);
-    setGenStatus("idle");
     setPhase("generate");
-    (async () => {
-      try {
-        setGenStatus("planning");
-        await callEdge("project_plan", { project_id: projectId });
-        setGenStatus("generating");
-        const actData = await callEdge("artifact_act", {
-          project_id: projectId, action_type: formatToActionType(selectedFormat),
-          context: `Format: ${selectedFormat}`,
-        });
-        queryClient.invalidateQueries({ queryKey: ["guided-project", projectId] });
-        queryClient.invalidateQueries({ queryKey: ["guided-artifacts", projectId] });
-        queryClient.invalidateQueries({ queryKey: ["my-guided-projects"] });
-        if (actData?.artifact_id) {
-          const { data: art } = await supabase.from("artifacts").select("*").eq("id", actData.artifact_id).single();
-          if (art) setActiveArtifact(art as Artifact);
-        }
-        setGenStatus("done");
-        setPhase("player");
-        toast.success("Гайд создан!");
-      } catch (e: any) {
-        setGenStatus("error");
-        setPipelineError(e.functionName ? e : { functionName: "unknown", status: 0, body: e.message || String(e) });
-      }
-    })();
+    runPipelineFrom(projectId, failedStage, extractedDocsRef.current, selectedFormat);
   };
+
+  // Back-compat alias
+  const handleRetryPipeline = () => handleRetryStage();
 
   /* ─── Demo project ─── */
   const handleDemo = async () => {
@@ -1292,19 +1334,39 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
             {genStages.map((stage) => {
               const Icon = stage.icon;
               return (
-                <div key={stage.key} className={cn("flex items-center gap-3 p-3 rounded-lg border",
-                  stage.status === "error" ? "border-destructive/30 bg-destructive/5" :
-                  stage.status === "done" ? "border-accent/30 bg-accent/5" : "border-border")}>
-                  {stage.status === "done" ? <CheckCircle2 className="h-4 w-4 text-accent shrink-0" /> :
-                   stage.status === "error" ? <AlertTriangle className="h-4 w-4 text-destructive shrink-0" /> :
-                   stage.status === "running" ? <Loader2 className="h-4 w-4 text-primary animate-spin shrink-0" /> :
-                   <Icon className="h-4 w-4 text-muted-foreground/40 shrink-0" />}
-                  <span className={cn("text-sm flex-1", stage.status === "error" ? "text-destructive" :
-                    stage.status === "done" ? "text-foreground" : "text-muted-foreground")}>{stage.label}</span>
-                  {stage.status === "error" && (
-                    <Button variant="outline" size="sm" className="text-xs h-7" onClick={handleRetryPipeline}>
-                      <RotateCcw className="h-3 w-3 mr-1" /> Повторить
-                    </Button>
+                <div key={stage.key} className="space-y-0">
+                  <div className={cn("flex items-center gap-3 p-3 rounded-lg border",
+                    stage.status === "error" ? "border-destructive/30 bg-destructive/5" :
+                    stage.status === "done" ? "border-accent/30 bg-accent/5" : "border-border")}>
+                    {stage.status === "done" ? <CheckCircle2 className="h-4 w-4 text-accent shrink-0" /> :
+                     stage.status === "error" ? <AlertTriangle className="h-4 w-4 text-destructive shrink-0" /> :
+                     stage.status === "running" ? <Loader2 className="h-4 w-4 text-primary animate-spin shrink-0" /> :
+                     <Icon className="h-4 w-4 text-muted-foreground/40 shrink-0" />}
+                    <span className={cn("text-sm flex-1", stage.status === "error" ? "text-destructive" :
+                      stage.status === "done" ? "text-foreground" : "text-muted-foreground")}>{stage.label}</span>
+                    {stage.status === "error" && (
+                      <Button variant="outline" size="sm" className="text-xs h-7" onClick={() => handleRetryStage(stage.key)}>
+                        <RotateCcw className="h-3 w-3 mr-1" /> Повторить
+                      </Button>
+                    )}
+                  </div>
+                  {/* Debug details for error stage */}
+                  {stage.status === "error" && stage.error && (
+                    <Collapsible>
+                      <CollapsibleTrigger asChild>
+                        <Button variant="ghost" size="sm" className="text-xs ml-7 mt-1">
+                          Подробнее <ChevronDown className="h-3 w-3 ml-1" />
+                        </Button>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <div className="ml-7 mt-1 p-3 rounded-lg bg-muted/30 text-[11px] text-muted-foreground space-y-1">
+                          <p><strong>Стадия:</strong> {stage.key}</p>
+                          <p><strong>Функция:</strong> {stage.error.functionName}</p>
+                          <p><strong>Статус:</strong> HTTP {stage.error.status}</p>
+                          <p className="whitespace-pre-wrap break-all"><strong>Сообщение:</strong> {stage.error.body?.slice(0, 500)}</p>
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
                   )}
                 </div>
               );
