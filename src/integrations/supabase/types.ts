@@ -1215,7 +1215,36 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      advertiser_brand_public: {
+        Row: {
+          brand_description: string | null
+          brand_logo_url: string | null
+          brand_name: string | null
+          brand_website: string | null
+          business_verified: boolean | null
+          ord_verified: boolean | null
+          user_id: string | null
+        }
+        Insert: {
+          brand_description?: string | null
+          brand_logo_url?: string | null
+          brand_name?: string | null
+          brand_website?: string | null
+          business_verified?: boolean | null
+          ord_verified?: boolean | null
+          user_id?: string | null
+        }
+        Update: {
+          brand_description?: string | null
+          brand_logo_url?: string | null
+          brand_name?: string | null
+          brand_website?: string | null
+          business_verified?: boolean | null
+          ord_verified?: boolean | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       award_achievement: {
