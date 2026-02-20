@@ -2,10 +2,11 @@ import { useState } from "react";
 import { contentItems as mockItems, contentTypeLabels } from "@/data/mockData";
 import { ContentCard } from "@/components/content/ContentCard";
 import { Input } from "@/components/ui/input";
-import { Search } from "lucide-react";
+import { Search, Video, Music, FileText, Mic, BookOpen, Layout, Image, Sparkles, ArrowRight } from "lucide-react";
 import { ContentType } from "@/types";
 import { useContentItems } from "@/hooks/useDbData";
 import { PageTransition } from "@/components/layout/PageTransition";
+import { motion } from "framer-motion";
 
 const types: ContentType[] = ["video", "music", "post", "podcast", "book", "template", "image"];
 
@@ -61,6 +62,8 @@ const Explore = () => {
 
         {isLoading ? (
           <div className="text-center py-16 text-muted-foreground">Загрузка...</div>
+        ) : activeType === null ? (
+          <ExploreSelectTabPrompt />
         ) : activeType === "post" ? (
           <div className="space-y-4 max-w-2xl mx-auto">
             {filtered.map((item: any) => (
@@ -82,4 +85,90 @@ const Explore = () => {
   );
 };
 
+function ExploreSelectTabPrompt() {
+  const icons = [
+    { Icon: Video, label: "Видео", color: "text-destructive", bg: "bg-destructive/10" },
+    { Icon: Music, label: "Музыка", color: "text-warning", bg: "bg-warning/10" },
+    { Icon: FileText, label: "Посты", color: "text-primary", bg: "bg-primary/10" },
+    { Icon: Mic, label: "Подкасты", color: "text-info", bg: "bg-info/10" },
+    { Icon: BookOpen, label: "Книги", color: "text-success", bg: "bg-success/10" },
+    { Icon: Image, label: "Фото", color: "text-accent", bg: "bg-accent/10" },
+    { Icon: Layout, label: "Шаблоны", color: "text-muted-foreground", bg: "bg-muted" },
+  ];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.5, ease: "easeOut" }}
+      className="flex flex-col items-center justify-center py-16 gap-8"
+    >
+      <div className="relative w-40 h-40 flex items-center justify-center">
+        <motion.div
+          animate={{ scale: [1, 1.15, 1], opacity: [0.5, 0.8, 0.5] }}
+          transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute inset-0 rounded-full bg-primary/10"
+        />
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: 30, repeat: Infinity, ease: "linear" }}
+          className="absolute inset-0"
+        >
+          {icons.map(({ Icon, color, bg }, i) => {
+            const angle = (360 / icons.length) * i - 90;
+            const rad = (angle * Math.PI) / 180;
+            const x = Math.cos(rad) * 64;
+            const y = Math.sin(rad) * 64;
+            return (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, scale: 0 }}
+                animate={{ opacity: 1, scale: 1, y: [0, -4, 0] }}
+                transition={{
+                  opacity: { delay: 0.1 * i, duration: 0.4 },
+                  scale: { delay: 0.1 * i, duration: 0.4, type: "spring" },
+                  y: { delay: 0.1 * i + 0.5, duration: 2, repeat: Infinity, ease: "easeInOut" },
+                }}
+                className={`absolute ${bg} rounded-lg p-1.5`}
+                style={{ left: `calc(50% + ${x}px - 14px)`, top: `calc(50% + ${y}px - 14px)` }}
+              >
+                <Icon className={`h-4 w-4 ${color}`} />
+              </motion.div>
+            );
+          })}
+        </motion.div>
+        <motion.div
+          animate={{ scale: [1, 1.2, 1] }}
+          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+        >
+          <Sparkles className="h-7 w-7 text-primary" />
+        </motion.div>
+      </div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3, duration: 0.5 }}
+        className="text-center space-y-2 max-w-md"
+      >
+        <h3 className="text-xl font-bold text-foreground">Выберите тип контента</h3>
+        <p className="text-sm text-muted-foreground">
+          Нажмите на категорию выше — видео, музыка, посты, подкасты и другое ждут вас
+        </p>
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1, y: [0, -6, 0] }}
+        transition={{ delay: 0.6, y: { duration: 1.5, repeat: Infinity, ease: "easeInOut" } }}
+        className="flex items-center gap-2 text-xs text-primary font-medium"
+      >
+        <ArrowRight className="h-3.5 w-3.5 rotate-[-90deg]" />
+        <span>Выберите тип контента</span>
+      </motion.div>
+    </motion.div>
+  );
+}
+
 export default Explore;
+
