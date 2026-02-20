@@ -24,9 +24,16 @@ export function ContentCard({ item }: ContentCardProps) {
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [bouncing, setBouncing] = useState<"like" | "dislike" | null>(null);
 
   // Like/dislike state (real-time, persisted)
   const { likes, dislikes, userReaction, toggleReaction } = useReaction(item.id);
+
+  const animatedReaction = (type: "like" | "dislike") => {
+    setBouncing(type);
+    setTimeout(() => setBouncing(null), 300);
+    toggleReaction(type);
+  };
 
   // Comments
   const { data: comments = [] } = useQuery({
@@ -45,12 +52,12 @@ export function ContentCard({ item }: ContentCardProps) {
 
   const handleLike = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    toggleReaction("like");
+    animatedReaction("like");
   };
 
   const handleDislike = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    toggleReaction("dislike");
+    animatedReaction("dislike");
   };
 
   const handleComment = async (e: React.FormEvent) => {
@@ -114,17 +121,18 @@ export function ContentCard({ item }: ContentCardProps) {
             <div className="flex items-center gap-4">
               <button
                 onClick={handleLike}
-                className={`flex items-center gap-1.5 text-xs transition-colors ${userReaction === "like" ? "text-primary" : "text-muted-foreground hover:text-primary"}`}
+                className={`flex items-center gap-1.5 text-xs transition-all ${userReaction === "like" ? "text-primary" : "text-muted-foreground hover:text-primary"} ${bouncing === "like" ? "scale-125" : "scale-100"}`}
+                style={{ transition: "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), color 0.2s" }}
               >
                 <ThumbsUp className="h-4 w-4" fill={userReaction === "like" ? "currentColor" : "none"} />
                 {likes > 0 && <span>{likes}</span>}
               </button>
               <button
                 onClick={handleDislike}
-                className={`flex items-center gap-1.5 text-xs transition-colors ${userReaction === "dislike" ? "text-destructive" : "text-muted-foreground hover:text-destructive"}`}
+                className={`flex items-center gap-1.5 text-xs transition-all ${userReaction === "dislike" ? "text-destructive" : "text-muted-foreground hover:text-destructive"} ${bouncing === "dislike" ? "scale-125" : "scale-100"}`}
+                style={{ transition: "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), color 0.2s" }}
               >
                 <ThumbsDown className="h-4 w-4" fill={userReaction === "dislike" ? "currentColor" : "none"} />
-                {dislikes > 0 && <span>{dislikes}</span>}
               </button>
               <button
                 onClick={(e) => { e.stopPropagation(); setShowComments(!showComments); }}
@@ -219,7 +227,6 @@ export function ContentCard({ item }: ContentCardProps) {
               <div className="flex items-center gap-3 text-xs text-muted-foreground">
                 <span className="flex items-center gap-1"><Eye className="h-3 w-3" />{(item.views / 1000).toFixed(1)}k</span>
                 <span className="flex items-center gap-1"><ThumbsUp className="h-3 w-3" />{likes}</span>
-                {dislikes > 0 && <span className="flex items-center gap-1"><ThumbsDown className="h-3 w-3" />{dislikes}</span>}
               </div>
               {item.price !== null && (
                 <span className="text-sm font-bold text-primary">{item.price.toLocaleString()} ₽</span>

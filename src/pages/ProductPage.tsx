@@ -26,6 +26,13 @@ const ProductPage = () => {
   const [bookmarked, setBookmarked] = useState(false);
   const [bookmarking, setBookmarking] = useState(false);
   const { likes, dislikes, userReaction, toggleReaction } = useReaction(id);
+  const [bouncing, setBouncing] = useState<"like" | "dislike" | null>(null);
+
+  const animatedReaction = (type: "like" | "dislike") => {
+    setBouncing(type);
+    setTimeout(() => setBouncing(null), 300);
+    toggleReaction(type);
+  };
 
   // Check if bookmarked
   useEffect(() => {
@@ -131,8 +138,9 @@ const ProductPage = () => {
                   <Button
                     variant={userReaction === "like" ? "default" : "ghost"}
                     size="sm"
-                    onClick={() => toggleReaction("like")}
-                    className="gap-1.5 rounded-none border-0"
+                    onClick={() => animatedReaction("like")}
+                    className={cn("gap-1.5 rounded-none border-0 transition-transform", bouncing === "like" && "scale-125")}
+                    style={{ transition: "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)" }}
                   >
                     <ThumbsUp className={cn("h-4 w-4", userReaction === "like" && "fill-current")} />
                     {likes.toLocaleString()}
@@ -141,11 +149,11 @@ const ProductPage = () => {
                   <Button
                     variant={userReaction === "dislike" ? "default" : "ghost"}
                     size="sm"
-                    onClick={() => toggleReaction("dislike")}
-                    className="rounded-none border-0"
+                    onClick={() => animatedReaction("dislike")}
+                    className={cn("rounded-none border-0 transition-transform", bouncing === "dislike" && "scale-125")}
+                    style={{ transition: "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)" }}
                   >
                     <ThumbsDown className={cn("h-4 w-4", userReaction === "dislike" && "fill-current")} />
-                    {dislikes > 0 && <span>{dislikes.toLocaleString()}</span>}
                   </Button>
                 </div>
                 <Button variant="outline" size="sm" className="gap-1.5">
