@@ -10,7 +10,7 @@ import {
   ArrowRight, ChevronDown, Plus, Trash2, MapPin,
   RefreshCw, Award, Bug, Copy, AlertTriangle, PanelRight
 } from "lucide-react";
-import { MAX_TEXT_CHARS, MAX_PDF_PAGES, MAX_FILE_SIZE_MB } from "@/lib/clientExtract";
+import { MAX_TEXT_CHARS, MAX_PDF_PAGES, MAX_FILE_SIZE_MB, chunkText } from "@/lib/clientExtract";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
@@ -872,8 +872,8 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
     // Upload stage is already done when we call runPipeline
   };
 
-  /** Server-side ingest: sends pre-extracted text documents to edge function,
-   *  which returns immediately. Then polls project status/progress until done or error. */
+  /** Client-side ingest: chunks text locally and inserts directly into DB.
+   *  No edge function needed — avoids WORKER_LIMIT entirely. */
   const runStageIngest = async (
     projId: string,
     documents: { text: string; file_name: string; source_id?: string }[],
@@ -881,37 +881,99 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
   ): Promise<void> => {
     if (!user) throw { functionName: "project_ingest", status: 0, body: "Не авторизован" } as EdgeError;
 
-    // Call edge function with pre-extracted text — NO binary parsing on server
-    await callEdge("project_ingest", {
-      project_id: projId,
-      documents,
-    });
+    const MAX_TEXT_CHARS = 500_000;
+    const maxChunkChars = 1200;
+    const overlap = 150;
 
-    // Poll project status until ingested/error
-    const POLL_INTERVAL = 2000;
-    const MAX_POLLS = 150; // 5 min max
-    for (let i = 0; i < MAX_POLLS; i++) {
-      if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
-      await new Promise(r => setTimeout(r, POLL_INTERVAL));
+    // Set project to ingesting
+    await supabase.from("projects").update({ status: "ingesting", ingest_progress: 0, ingest_error: null }).eq("id", projId);
 
-      const { data: proj } = await supabase.from("projects").select("status, ingest_progress, ingest_error").eq("id", projId).single();
-      if (!proj) continue;
+    try {
+      // Delete old chunks
+      await supabase.from("project_chunks").delete().eq("project_id", projId);
 
-      const progress = (proj as any).ingest_progress || 0;
-      setGenStages(prev => prev.map(s => s.key === "ingesting"
-        ? { ...s, label: `Индексация в фоне… ${progress}%` }
-        : s));
+      const allChunks: { content: string; metadata: Record<string, unknown>; source_id?: string }[] = [];
 
-      if (proj.status === "ingested") {
-        setGenStages(prev => prev.map(s => s.key === "ingesting" ? { ...s, label: "Индексация в фоне" } : s));
-        return;
+      for (const doc of documents) {
+        if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+        let text = doc.text || "";
+        if (!text.trim()) continue;
+        if (text.length > MAX_TEXT_CHARS) text = text.slice(0, MAX_TEXT_CHARS);
+
+        let start = 0;
+        let chunkIndex = 0;
+        while (start < text.length) {
+          const end = Math.min(start + maxChunkChars, text.length);
+          allChunks.push({
+            content: text.slice(start, end),
+            metadata: { file_name: doc.file_name, chunk_index: chunkIndex, start_char: start, end_char: end },
+            source_id: doc.source_id,
+          });
+          start = end - overlap;
+          if (start >= text.length) break;
+          chunkIndex++;
+        }
+
+        // Update source status
+        if (doc.source_id) {
+          await supabase.from("project_sources").update({ status: "processed", chunk_count: chunkIndex + 1 }).eq("id", doc.source_id);
+        }
       }
-      if (proj.status === "error") {
-        const errMsg = (proj as any).ingest_error || "Ошибка индексации";
-        throw { functionName: "project_ingest", status: 0, body: errMsg } as EdgeError;
+
+      if (!allChunks.length) {
+        throw { functionName: "project_ingest", status: 0, body: "Не удалось извлечь текст. Убедитесь, что файлы содержат читаемый текст." } as EdgeError;
       }
+
+      const totalChars = allChunks.reduce((sum, c) => sum + c.content.length, 0);
+      if (totalChars < 200) {
+        throw { functionName: "project_ingest", status: 0, body: "Слишком мало текстового контента для создания материала." } as EdgeError;
+      }
+
+      // Insert in batches of 50
+      let inserted = 0;
+      for (let i = 0; i < allChunks.length; i += 50) {
+        if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+
+        const batch = allChunks.slice(i, i + 50).map((c) => ({
+          project_id: projId,
+          user_id: user.id,
+          content: c.content,
+          metadata: c.metadata as Record<string, string | number>,
+          source_id: c.source_id || projId,
+        }));
+
+        const { error: insertErr } = await supabase.from("project_chunks").insert(batch);
+        if (insertErr) {
+          console.error("Chunk insert error:", insertErr);
+          continue;
+        }
+        inserted += batch.length;
+
+        const progress = Math.round((inserted / allChunks.length) * 100);
+        setGenStages(prev => prev.map(s => s.key === "ingesting"
+          ? { ...s, label: `Индексация… ${progress}%` }
+          : s));
+      }
+
+      if (inserted === 0) {
+        throw { functionName: "project_ingest", status: 0, body: "Не удалось сохранить данные. Попробуйте ещё раз." } as EdgeError;
+      }
+
+      await supabase.from("projects").update({ status: "ingested", ingest_progress: 100, ingest_error: null }).eq("id", projId);
+      setGenStages(prev => prev.map(s => s.key === "ingesting" ? { ...s, label: "Индексация" } : s));
+      console.log(`[ingest] Done: ${inserted} chunks from ${documents.length} files`);
+    } catch (e: any) {
+      if (e.name === "AbortError") {
+        await supabase.from("projects").update({ status: "error", ingest_progress: 0, ingest_error: "Отменено пользователем" }).eq("id", projId);
+        throw e;
+      }
+      if (e.functionName) {
+        await supabase.from("projects").update({ status: "error", ingest_progress: 0, ingest_error: e.body }).eq("id", projId);
+        throw e;
+      }
+      await supabase.from("projects").update({ status: "error", ingest_progress: 0, ingest_error: (e as Error).message || String(e) }).eq("id", projId);
+      throw { functionName: "project_ingest", status: 0, body: (e as Error).message || String(e) } as EdgeError;
     }
-    throw { functionName: "project_ingest", status: 0, body: "Таймаут: индексация не завершилась за 5 минут." } as EdgeError;
   };
 
   const runStagePlan = async (projId: string): Promise<void> => {
@@ -1280,20 +1342,33 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
 
         if (srcErr) { toast.error(`Ошибка: ${srcErr.message}`); continue; }
 
-        // Trigger server-side ingest for the added source
+        // Extract text on client and insert chunks directly
         try {
-          await callEdge("project_ingest", {
-            project_id: projectId,
-            sources: [{ storage_path: storagePath, file_name: fileName, source_id: sourceRec.id }],
-          });
-          // Poll until done (simplified — just wait a bit for small files)
-          let done = false;
-          for (let attempt = 0; attempt < 30; attempt++) {
-            await new Promise(r => setTimeout(r, 2000));
-            const { data: src } = await supabase.from("project_sources").select("status").eq("id", sourceRec.id).single();
-            if (src?.status === "processed") { done = true; break; }
+          let text = "";
+          try {
+            text = await extractTextOnClient(file);
+          } catch (extractErr: any) {
+            toast.error(`Ошибка извлечения ${fileName}: ${extractErr.message || extractErr}`);
+            continue;
           }
-          if (!done) toast.warning(`${fileName}: индексация ещё не завершена`);
+          if (!text.trim()) {
+            toast.error(`Файл «${fileName}» не содержит текстового слоя.`);
+            continue;
+          }
+
+          // Chunk and insert directly
+          const chunks = chunkText(text);
+          for (let ci = 0; ci < chunks.length; ci += 50) {
+            const batch = chunks.slice(ci, ci + 50).map((c) => ({
+              project_id: projectId,
+              user_id: user.id,
+              content: c.content,
+              metadata: { file_name: fileName, chunk_index: c.chunk_index, start_char: c.start_char, end_char: c.end_char } as Record<string, string | number>,
+              source_id: sourceRec.id,
+            }));
+            await supabase.from("project_chunks").insert(batch);
+          }
+          await supabase.from("project_sources").update({ status: "processed", chunk_count: chunks.length }).eq("id", sourceRec.id);
         } catch (extractErr: any) {
           console.error(`[addSources] Ingest failed for ${fileName}:`, extractErr);
           toast.error(`Не удалось индексировать ${fileName}`);
