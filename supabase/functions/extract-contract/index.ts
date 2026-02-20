@@ -26,18 +26,95 @@ const SYSTEM_PROMPT = `Ты — юридический AI-помощник, сп
 - Бюджет: только число (без валюты и слов)
 - Валюта: ISO код (RUB, USD, EUR)`;
 
+const fieldSchema = {
+  type: "object" as const,
+  properties: {
+    value: { type: "string" },
+    confidence: { type: "number" },
+    sourceSnippet: { type: "string" },
+  },
+  required: ["value", "confidence", "sourceSnippet"],
+};
+
+const fieldNames = [
+  "partyAdvertiser", "advertiserInn", "advertiserOgrn",
+  "partyExecutor", "executorInn",
+  "contractNumber", "contractDate",
+  "budget", "currency",
+  "startDate", "endDate",
+  "contentType", "placement",
+  "ordRequirements", "paymentTerms", "cancellationClause",
+];
+
+// ─── PDF text extraction using pdf-parse ───
+async function extractPdfText(data: Uint8Array): Promise<string> {
+  try {
+    const pdfParse = (await import("npm:pdf-parse@1.1.1")).default;
+    const result = await pdfParse(Buffer.from(data));
+    return result.text || "";
+  } catch (e) {
+    console.error("PDF parse error:", e);
+    throw new Error("PDF_PARSE_FAILED");
+  }
+}
+
+// ─── DOCX text extraction using mammoth ───
+async function extractDocxText(data: Uint8Array): Promise<string> {
+  try {
+    const mammoth = await import("npm:mammoth@1.8.0");
+    const result = await mammoth.extractRawText({ buffer: Buffer.from(data) });
+    return result.value || "";
+  } catch (e) {
+    console.error("DOCX parse error:", e);
+    throw new Error("DOCX_PARSE_FAILED");
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { text, redactSensitive } = await req.json();
+    const contentType = req.headers.get("content-type") || "";
+    let text: string;
+    let redactSensitive = false;
 
-    if (!text || typeof text !== "string") {
+    if (contentType.includes("multipart/form-data")) {
+      // ─── New path: file upload, server-side parsing ───
+      const formData = await req.formData();
+      const file = formData.get("file") as File | null;
+      redactSensitive = formData.get("redactSensitive") === "true";
+
+      if (!file) {
+        return new Response(
+          JSON.stringify({ error: "Файл не предоставлен" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const fileBytes = new Uint8Array(await file.arrayBuffer());
+      const fileName = file.name.toLowerCase();
+
+      if (fileName.endsWith(".pdf")) {
+        text = await extractPdfText(fileBytes);
+      } else if (fileName.endsWith(".docx")) {
+        text = await extractDocxText(fileBytes);
+      } else {
+        // Plain text fallback
+        text = new TextDecoder().decode(fileBytes);
+      }
+    } else {
+      // ─── Legacy path: pre-extracted text ───
+      const body = await req.json();
+      text = body.text;
+      redactSensitive = body.redactSensitive || false;
+    }
+
+    if (!text || text.trim().length < 50) {
       return new Response(
-        JSON.stringify({ error: "Текст договора не предоставлен" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ error: "Не удалось извлечь текст из документа. Убедитесь, что файл содержит читаемый текст, а не сканированные изображения." }),
+        { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -47,14 +124,17 @@ serve(async (req) => {
     // Optionally redact bank details before sending to AI
     let processedText = text;
     if (redactSensitive) {
-      // Mask bank account numbers (20 digits)
       processedText = processedText.replace(/\b\d{20}\b/g, "****BANK_ACCOUNT****");
-      // Mask card numbers
       processedText = processedText.replace(/\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/g, "****CARD****");
     }
 
     // Truncate to ~12000 chars to stay within limits
     const truncated = processedText.slice(0, 12000);
+
+    const properties: Record<string, typeof fieldSchema> = {};
+    for (const name of fieldNames) {
+      properties[name] = fieldSchema;
+    }
 
     const response = await fetch(GATEWAY_URL, {
       method: "POST",
@@ -76,161 +156,8 @@ serve(async (req) => {
               description: "Извлечённые поля из договора",
               parameters: {
                 type: "object",
-                properties: {
-                  partyAdvertiser: {
-                    type: "object",
-                    properties: {
-                      value: { type: "string" },
-                      confidence: { type: "number" },
-                      sourceSnippet: { type: "string" },
-                    },
-                    required: ["value", "confidence", "sourceSnippet"],
-                  },
-                  advertiserInn: {
-                    type: "object",
-                    properties: {
-                      value: { type: "string" },
-                      confidence: { type: "number" },
-                      sourceSnippet: { type: "string" },
-                    },
-                    required: ["value", "confidence", "sourceSnippet"],
-                  },
-                  advertiserOgrn: {
-                    type: "object",
-                    properties: {
-                      value: { type: "string" },
-                      confidence: { type: "number" },
-                      sourceSnippet: { type: "string" },
-                    },
-                    required: ["value", "confidence", "sourceSnippet"],
-                  },
-                  partyExecutor: {
-                    type: "object",
-                    properties: {
-                      value: { type: "string" },
-                      confidence: { type: "number" },
-                      sourceSnippet: { type: "string" },
-                    },
-                    required: ["value", "confidence", "sourceSnippet"],
-                  },
-                  executorInn: {
-                    type: "object",
-                    properties: {
-                      value: { type: "string" },
-                      confidence: { type: "number" },
-                      sourceSnippet: { type: "string" },
-                    },
-                    required: ["value", "confidence", "sourceSnippet"],
-                  },
-                  contractNumber: {
-                    type: "object",
-                    properties: {
-                      value: { type: "string" },
-                      confidence: { type: "number" },
-                      sourceSnippet: { type: "string" },
-                    },
-                    required: ["value", "confidence", "sourceSnippet"],
-                  },
-                  contractDate: {
-                    type: "object",
-                    properties: {
-                      value: { type: "string" },
-                      confidence: { type: "number" },
-                      sourceSnippet: { type: "string" },
-                    },
-                    required: ["value", "confidence", "sourceSnippet"],
-                  },
-                  budget: {
-                    type: "object",
-                    properties: {
-                      value: { type: "string" },
-                      confidence: { type: "number" },
-                      sourceSnippet: { type: "string" },
-                    },
-                    required: ["value", "confidence", "sourceSnippet"],
-                  },
-                  currency: {
-                    type: "object",
-                    properties: {
-                      value: { type: "string" },
-                      confidence: { type: "number" },
-                      sourceSnippet: { type: "string" },
-                    },
-                    required: ["value", "confidence", "sourceSnippet"],
-                  },
-                  startDate: {
-                    type: "object",
-                    properties: {
-                      value: { type: "string" },
-                      confidence: { type: "number" },
-                      sourceSnippet: { type: "string" },
-                    },
-                    required: ["value", "confidence", "sourceSnippet"],
-                  },
-                  endDate: {
-                    type: "object",
-                    properties: {
-                      value: { type: "string" },
-                      confidence: { type: "number" },
-                      sourceSnippet: { type: "string" },
-                    },
-                    required: ["value", "confidence", "sourceSnippet"],
-                  },
-                  contentType: {
-                    type: "object",
-                    properties: {
-                      value: { type: "string" },
-                      confidence: { type: "number" },
-                      sourceSnippet: { type: "string" },
-                    },
-                    required: ["value", "confidence", "sourceSnippet"],
-                  },
-                  placement: {
-                    type: "object",
-                    properties: {
-                      value: { type: "string" },
-                      confidence: { type: "number" },
-                      sourceSnippet: { type: "string" },
-                    },
-                    required: ["value", "confidence", "sourceSnippet"],
-                  },
-                  ordRequirements: {
-                    type: "object",
-                    properties: {
-                      value: { type: "string" },
-                      confidence: { type: "number" },
-                      sourceSnippet: { type: "string" },
-                    },
-                    required: ["value", "confidence", "sourceSnippet"],
-                  },
-                  paymentTerms: {
-                    type: "object",
-                    properties: {
-                      value: { type: "string" },
-                      confidence: { type: "number" },
-                      sourceSnippet: { type: "string" },
-                    },
-                    required: ["value", "confidence", "sourceSnippet"],
-                  },
-                  cancellationClause: {
-                    type: "object",
-                    properties: {
-                      value: { type: "string" },
-                      confidence: { type: "number" },
-                      sourceSnippet: { type: "string" },
-                    },
-                    required: ["value", "confidence", "sourceSnippet"],
-                  },
-                },
-                required: [
-                  "partyAdvertiser", "advertiserInn", "advertiserOgrn",
-                  "partyExecutor", "executorInn",
-                  "contractNumber", "contractDate",
-                  "budget", "currency",
-                  "startDate", "endDate",
-                  "contentType", "placement",
-                  "ordRequirements", "paymentTerms", "cancellationClause",
-                ],
+                properties,
+                required: fieldNames,
                 additionalProperties: false,
               },
             },
@@ -257,7 +184,7 @@ serve(async (req) => {
       }
       console.error("AI gateway error:", status, body);
       return new Response(
-        JSON.stringify({ error: `Ошибка AI: ${status}` }),
+        JSON.stringify({ error: "Сервис AI временно недоступен. Повторите попытку позже." }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -270,14 +197,24 @@ serve(async (req) => {
 
     const extracted = JSON.parse(toolCalls[0].function.arguments);
 
-    return new Response(JSON.stringify({ fields: extracted }), {
+    // Also return extracted text length for client info
+    return new Response(JSON.stringify({ fields: extracted, textLength: text.length }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
     console.error("extract-contract error:", e);
     const msg = e instanceof Error ? e.message : "Unknown error";
-    return new Response(JSON.stringify({ error: msg }), {
+
+    // Map internal errors to user-friendly messages
+    let userMessage = "Произошла ошибка при обработке документа. Попробуйте ещё раз.";
+    if (msg === "PDF_PARSE_FAILED") {
+      userMessage = "Не удалось прочитать PDF-файл. Убедитесь, что файл не повреждён и содержит текст (не сканированное изображение).";
+    } else if (msg === "DOCX_PARSE_FAILED") {
+      userMessage = "Не удалось прочитать DOCX-файл. Убедитесь, что файл не повреждён.";
+    }
+
+    return new Response(JSON.stringify({ error: userMessage, _debug: msg }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
