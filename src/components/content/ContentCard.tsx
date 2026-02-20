@@ -1,5 +1,5 @@
 import { ContentItem } from "@/types";
-import { Eye, Heart, ThumbsUp, MessageCircle, Share2, MoreVertical, User, Send } from "lucide-react";
+import { Eye, Heart, ThumbsUp, ThumbsDown, MessageCircle, Share2, MoreVertical, User, Send } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { motion } from "framer-motion";
@@ -11,6 +11,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
+import { useReaction } from "@/hooks/useReaction";
 
 interface ContentCardProps {
   item: ContentItem & { duration?: number | null };
@@ -24,20 +25,8 @@ export function ContentCard({ item }: ContentCardProps) {
   const [commentText, setCommentText] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  // Like state
-  const { data: isLiked = false } = useQuery({
-    queryKey: ["post-liked", item.id, user?.id],
-    queryFn: async () => {
-      if (!user) return false;
-      const { count } = await supabase
-        .from("bookmarks")
-        .select("*", { count: "exact", head: true })
-        .eq("content_id", item.id)
-        .eq("user_id", user.id);
-      return (count || 0) > 0;
-    },
-    enabled: item.type === "post" && !!user,
-  });
+  // Like/dislike state (real-time, persisted)
+  const { likes, dislikes, userReaction, toggleReaction } = useReaction(item.id);
 
   // Comments
   const { data: comments = [] } = useQuery({
@@ -56,13 +45,12 @@ export function ContentCard({ item }: ContentCardProps) {
 
   const handleLike = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!user) { toast.error("Войдите, чтобы оценить"); return; }
-    if (isLiked) {
-      await supabase.from("bookmarks").delete().eq("content_id", item.id).eq("user_id", user.id);
-    } else {
-      await supabase.from("bookmarks").insert({ content_id: item.id, user_id: user.id });
-    }
-    queryClient.invalidateQueries({ queryKey: ["post-liked", item.id, user.id] });
+    toggleReaction("like");
+  };
+
+  const handleDislike = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    toggleReaction("dislike");
   };
 
   const handleComment = async (e: React.FormEvent) => {
@@ -126,9 +114,17 @@ export function ContentCard({ item }: ContentCardProps) {
             <div className="flex items-center gap-4">
               <button
                 onClick={handleLike}
-                className={`flex items-center gap-1.5 transition-colors ${isLiked ? "text-primary" : "text-muted-foreground hover:text-primary"}`}
+                className={`flex items-center gap-1.5 text-xs transition-colors ${userReaction === "like" ? "text-primary" : "text-muted-foreground hover:text-primary"}`}
               >
-                <ThumbsUp className="h-4 w-4" fill={isLiked ? "currentColor" : "none"} />
+                <ThumbsUp className="h-4 w-4" fill={userReaction === "like" ? "currentColor" : "none"} />
+                {likes > 0 && <span>{likes}</span>}
+              </button>
+              <button
+                onClick={handleDislike}
+                className={`flex items-center gap-1.5 text-xs transition-colors ${userReaction === "dislike" ? "text-destructive" : "text-muted-foreground hover:text-destructive"}`}
+              >
+                <ThumbsDown className="h-4 w-4" fill={userReaction === "dislike" ? "currentColor" : "none"} />
+                {dislikes > 0 && <span>{dislikes}</span>}
               </button>
               <button
                 onClick={(e) => { e.stopPropagation(); setShowComments(!showComments); }}
@@ -222,7 +218,8 @@ export function ContentCard({ item }: ContentCardProps) {
             <div className="flex items-center justify-between pt-1">
               <div className="flex items-center gap-3 text-xs text-muted-foreground">
                 <span className="flex items-center gap-1"><Eye className="h-3 w-3" />{(item.views / 1000).toFixed(1)}k</span>
-                <span className="flex items-center gap-1"><Heart className="h-3 w-3" />{item.likes}</span>
+                <span className="flex items-center gap-1"><ThumbsUp className="h-3 w-3" />{likes}</span>
+                {dislikes > 0 && <span className="flex items-center gap-1"><ThumbsDown className="h-3 w-3" />{dislikes}</span>}
               </div>
               {item.price !== null && (
                 <span className="text-sm font-bold text-primary">{item.price.toLocaleString()} ₽</span>

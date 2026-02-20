@@ -298,6 +298,7 @@ export type Database = {
           creator_id: string | null
           creator_name: string
           description: string | null
+          dislikes: number | null
           duration: number | null
           geo: string | null
           id: string
@@ -326,6 +327,7 @@ export type Database = {
           creator_id?: string | null
           creator_name?: string
           description?: string | null
+          dislikes?: number | null
           duration?: number | null
           geo?: string | null
           id?: string
@@ -354,6 +356,7 @@ export type Database = {
           creator_id?: string | null
           creator_name?: string
           description?: string | null
+          dislikes?: number | null
           duration?: number | null
           geo?: string | null
           id?: string
@@ -375,6 +378,38 @@ export type Database = {
           views?: number | null
         }
         Relationships: []
+      }
+      content_reactions: {
+        Row: {
+          content_id: string
+          created_at: string
+          id: string
+          reaction: string
+          user_id: string
+        }
+        Insert: {
+          content_id: string
+          created_at?: string
+          id?: string
+          reaction: string
+          user_id: string
+        }
+        Update: {
+          content_id?: string
+          created_at?: string
+          id?: string
+          reaction?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "content_reactions_content_id_fkey"
+            columns: ["content_id"]
+            isOneToOne: false
+            referencedRelation: "content_items"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       deals: {
         Row: {
