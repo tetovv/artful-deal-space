@@ -1113,9 +1113,27 @@ function AddendumSection({ campaign }: { campaign: Campaign }) {
 }
 
 // ─── Audit Log Tab ───
+type AuditFilter = "all" | "docs" | "ord" | "campaign";
+const auditFilterLabels: Record<AuditFilter, string> = { all: "Все", docs: "Документы", ord: "ОРД", campaign: "Кампания" };
+
+function categorizeEntry(action: string): AuditFilter {
+  if (/договор|загружен|доп\. соглашение|contract|addendum/i.test(action)) return "docs";
+  if (/ОРД|ERID|маркировка|синхронизация/i.test(action)) return "ord";
+  return "campaign";
+}
+
+function isClickableFile(details?: string): { type: "contract" | "creative"; name: string } | null {
+  if (!details) return null;
+  if (/\.pdf$/i.test(details)) return { type: "contract", name: details };
+  if (/\.(png|jpg|jpeg|gif|webp|svg)$/i.test(details)) return { type: "creative", name: details };
+  return null;
+}
+
 function AuditLogTab({ campaign }: { campaign: Campaign }) {
   const campaignId = campaign.contractLinked ? String(campaign.id) : undefined;
   const { data: contractVersions, isLoading: loadingVersions } = useContractsByCampaign(campaignId);
+  const [filter, setFilter] = useState<AuditFilter>("all");
+  const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
 
   const mockAudit: AuditLogEntry[] = campaign.auditLog || [
     { timestamp: "20.02.2026 10:15", action: "Договор загружен", user: "Иванов А.С.", details: "contract_v1.pdf" },
@@ -1128,41 +1146,84 @@ function AuditLogTab({ campaign }: { campaign: Campaign }) {
     { timestamp: "21.02.2026 09:00", action: "Кампания запущена", user: "Иванов А.С." },
   ];
 
+  const filtered = filter === "all" ? mockAudit : mockAudit.filter((e) => categorizeEntry(e.action) === filter);
+
   return (
     <div className="space-y-3">
-      <Card>
-        <CardContent className="p-4 space-y-1.5">
-          <div className="flex items-center gap-2">
-            <History className="h-4 w-4 text-muted-foreground" />
-            <p className="text-[15px] font-semibold text-card-foreground">Журнал действий</p>
-          </div>
-          <p className="text-[13px] text-muted-foreground">Все действия с кампанией, включая импорт договора, изменения и отправки в ОРД.</p>
-        </CardContent>
-      </Card>
+      {/* Header + compact filters */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <History className="h-4 w-4 text-muted-foreground" />
+          <p className="text-[15px] font-semibold text-card-foreground">Журнал действий</p>
+        </div>
+        <div className="flex items-center gap-1 text-[13px]">
+          {(["all", "docs", "ord", "campaign"] as AuditFilter[]).map((f) => (
+            <button key={f} type="button" onClick={() => setFilter(f)}
+              className={`px-2 py-0.5 rounded-md transition-colors ${filter === f
+                ? "bg-primary/15 text-primary font-medium"
+                : "text-muted-foreground hover:text-foreground"
+              }`}>
+              {auditFilterLabels[f]}
+            </button>
+          ))}
+        </div>
+      </div>
 
+      {/* Timeline */}
       <Card>
-        <CardContent className="p-4">
+        <CardContent className="p-3">
           <div className="space-y-0">
-            {mockAudit.map((entry, i) => (
-              <div key={i} className="flex items-start gap-2.5 py-2 border-b border-border/50 last:border-0">
-                <div className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <CheckCircle2 className="h-3 w-3 text-primary" />
+            {filtered.map((entry, i) => {
+              const clickable = isClickableFile(entry.details);
+              const isExpanded = expandedIdx === i;
+              const isSystem = entry.user === "Система";
+              return (
+                <div key={i}
+                  className="flex items-start gap-2 py-1.5 border-b border-border/30 last:border-0 cursor-pointer hover:bg-muted/10 rounded px-1 -mx-1 transition-colors"
+                  onClick={() => setExpandedIdx(isExpanded ? null : i)}>
+                  <div className={`h-5 w-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                    isSystem ? "bg-muted/40" : "bg-primary/10"
+                  }`}>
+                    {isSystem
+                      ? <RefreshCw className="h-2.5 w-2.5 text-muted-foreground" />
+                      : <User className="h-2.5 w-2.5 text-primary" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[14px] font-medium text-card-foreground">{entry.action}</span>
+                      <span className="text-[12px] text-foreground/40">·</span>
+                      <span className="text-[12px] text-foreground/50">{entry.user}</span>
+                    </div>
+                    {/* Expanded details */}
+                    {isExpanded && entry.details && (
+                      <div className="mt-1 text-[13px] text-foreground/60">
+                        {clickable ? (
+                          <a href="#" onClick={(e) => e.stopPropagation()}
+                            className="inline-flex items-center gap-1 text-primary hover:underline">
+                            <Download className="h-3 w-3" />
+                            {clickable.name}
+                          </a>
+                        ) : (
+                          <span>{entry.details}</span>
+                        )}
+                      </div>
+                    )}
+                    {/* Show clickable file inline even when collapsed */}
+                    {!isExpanded && clickable && (
+                      <a href="#" onClick={(e) => e.stopPropagation()}
+                        className="inline-flex items-center gap-1 text-[12px] text-primary hover:underline mt-0.5">
+                        <Download className="h-2.5 w-2.5" />
+                        {clickable.name}
+                      </a>
+                    )}
+                  </div>
+                  <span className="text-[12px] text-foreground/40 font-mono flex-shrink-0 mt-0.5">{entry.timestamp}</span>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[14px] text-card-foreground">{entry.action}</p>
-                  {entry.details && (
-                    <p className="text-[12px] text-muted-foreground mt-0.5">{entry.details}</p>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 flex-shrink-0 text-right">
-                  <span className="text-[12px] text-muted-foreground flex items-center gap-1">
-                    <User className="h-2.5 w-2.5" />
-                    {entry.user}
-                  </span>
-                  <span className="text-[12px] text-muted-foreground">{entry.timestamp}</span>
-                </div>
-              </div>
-            ))}
+              );
+            })}
+            {filtered.length === 0 && (
+              <p className="text-[13px] text-foreground/40 text-center py-4">Нет записей по выбранному фильтру</p>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -1170,65 +1231,63 @@ function AuditLogTab({ campaign }: { campaign: Campaign }) {
       {/* Version history from DB */}
       {campaign.contractLinked && (
         <Card>
-          <CardContent className="p-5 space-y-3">
+          <CardContent className="p-4 space-y-2">
             <div className="flex items-center gap-2">
               <FileText className="h-4 w-4 text-muted-foreground" />
-              <p className="text-sm font-semibold text-card-foreground">Версии документов</p>
+              <p className="text-[15px] font-semibold text-card-foreground">Версии документов</p>
               {loadingVersions && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {contractVersions && contractVersions.length > 0 ? (
                 contractVersions.map((cv) => (
-                  <div key={cv.id} className="flex items-center justify-between gap-3 text-sm py-2 px-3 rounded-lg border border-border bg-muted/10">
-                    <div className="flex items-center gap-3">
-                      {cv.document_type === "original" ? (
-                        <FileText className="h-4 w-4 text-primary flex-shrink-0" />
-                      ) : (
-                        <FilePlus className="h-4 w-4 text-accent flex-shrink-0" />
-                      )}
+                  <div key={cv.id} className="flex items-center justify-between gap-3 py-1.5 px-3 rounded-lg border border-border bg-muted/10">
+                    <div className="flex items-center gap-2.5">
+                      {cv.document_type === "original"
+                        ? <FileText className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+                        : <FilePlus className="h-3.5 w-3.5 text-accent flex-shrink-0" />}
                       <div>
-                        <p className="text-xs font-medium text-card-foreground">
+                        <p className="text-[13px] font-medium text-card-foreground">
                           {cv.document_type === "original" ? "Основной договор" : `Доп. соглашение №${cv.version - 1}`}
                         </p>
-                        <p className="text-[10px] text-muted-foreground">
+                        <p className="text-[11px] text-foreground/50">
                           {cv.file_name || "—"} · {new Date(cv.created_at).toLocaleDateString("ru-RU")}
-                          {cv.confirmed_at && ` · Подтверждён ${new Date(cv.confirmed_at).toLocaleDateString("ru-RU")}`}
+                          {cv.confirmed_at && ` · Подтв. ${new Date(cv.confirmed_at).toLocaleDateString("ru-RU")}`}
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5">
                       <Badge variant="outline" className={`text-[10px] ${
                         cv.status === "confirmed" ? "border-success/30 text-success" : "border-warning/30 text-warning"
                       }`}>
                         {cv.status === "confirmed" ? "Подтверждён" : "Извлечён"}
                       </Badge>
-                      <Badge variant="outline" className={`text-[10px] ${
-                        cv.document_type === "original" ? "border-primary/30 text-primary" : "border-accent/30 text-accent"
-                      }`}>
-                        {cv.document_type === "original" ? "Оригинал" : "Доп. соглашение"}
-                      </Badge>
+                      {cv.file_name && (
+                        <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-muted-foreground hover:text-primary">
+                          <Download className="h-3 w-3" />
+                        </Button>
+                      )}
                     </div>
                   </div>
                 ))
               ) : !loadingVersions ? (
                 <>
-                  <div className="flex items-center justify-between gap-3 text-sm py-2 px-3 rounded-lg border border-border bg-muted/10">
-                    <div className="flex items-center gap-3">
-                      <FileText className="h-4 w-4 text-primary flex-shrink-0" />
+                  <div className="flex items-center justify-between gap-3 py-1.5 px-3 rounded-lg border border-border bg-muted/10">
+                    <div className="flex items-center gap-2.5">
+                      <FileText className="h-3.5 w-3.5 text-primary flex-shrink-0" />
                       <div>
-                        <p className="text-xs font-medium text-card-foreground">Основной договор</p>
-                        <p className="text-[10px] text-muted-foreground">{campaign.contractNumber} · {campaign.contractDate}</p>
+                        <p className="text-[13px] font-medium text-card-foreground">Основной договор</p>
+                        <p className="text-[11px] text-foreground/50">{campaign.contractNumber} · {campaign.contractDate}</p>
                       </div>
                     </div>
                     <Badge variant="outline" className="text-[10px] border-primary/30 text-primary">Оригинал</Badge>
                   </div>
                   {(campaign.addenda || []).map((a, i) => (
-                    <div key={i} className="flex items-center justify-between gap-3 text-sm py-2 px-3 rounded-lg border border-border bg-muted/10">
-                      <div className="flex items-center gap-3">
-                        <FilePlus className="h-4 w-4 text-accent flex-shrink-0" />
+                    <div key={i} className="flex items-center justify-between gap-3 py-1.5 px-3 rounded-lg border border-border bg-muted/10">
+                      <div className="flex items-center gap-2.5">
+                        <FilePlus className="h-3.5 w-3.5 text-accent flex-shrink-0" />
                         <div>
-                          <p className="text-xs font-medium text-card-foreground">{a.title}</p>
-                          <p className="text-[10px] text-muted-foreground">{a.fileName} · {a.date}</p>
+                          <p className="text-[13px] font-medium text-card-foreground">{a.title}</p>
+                          <p className="text-[11px] text-foreground/50">{a.fileName} · {a.date}</p>
                         </div>
                       </div>
                       <Badge variant="outline" className="text-[10px] border-accent/30 text-accent">Доп. соглашение</Badge>
@@ -1243,9 +1302,6 @@ function AuditLogTab({ campaign }: { campaign: Campaign }) {
     </div>
   );
 }
-
-// ═══════════════════════════════════════════════════════
-// ─── Main CampaignManageView ───
 // ═══════════════════════════════════════════════════════
 export function CampaignManageView({ campaign: initialCampaign, onBack }: { campaign: Campaign; onBack: () => void }) {
   const [terminateOpen, setTerminateOpen] = useState(false);
