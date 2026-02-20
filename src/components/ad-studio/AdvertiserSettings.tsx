@@ -1,11 +1,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { useBlocker } from "react-router-dom";
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+// useBlocker requires data router — not available with BrowserRouter
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -258,10 +254,7 @@ export function AdvertiserSettings() {
     }
   }, []);
 
-  // Navigation guard for unsaved changes
-  const blocker = useBlocker(dirty);
-
-  // Also warn on browser close/refresh
+  // Warn on browser close/refresh with unsaved changes
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
       if (dirty) { e.preventDefault(); }
@@ -688,24 +681,6 @@ export function AdvertiserSettings() {
           </CardContent>
         </Card>
       </div>
-
-      {/* Navigation guard dialog */}
-      <AlertDialog open={blocker.state === "blocked"}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Несохранённые изменения</AlertDialogTitle>
-            <AlertDialogDescription>
-              У вас есть несохранённые изменения в настройках. Если вы покинете страницу, изменения будут потеряны.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => blocker.reset?.()}>Остаться</AlertDialogCancel>
-            <AlertDialogAction onClick={() => blocker.proceed?.()} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Покинуть
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }
