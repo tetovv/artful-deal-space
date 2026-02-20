@@ -317,7 +317,11 @@ const exportToPptx = async (title: string, slides: Slide[]) => {
 };
 
 /* ========== MAIN LEGACY COMPONENT ========== */
-export const LegacyWorkspace = () => {
+interface LegacyWorkspaceProps {
+  readOnly?: boolean;
+}
+
+export const LegacyWorkspace = ({ readOnly = false }: LegacyWorkspaceProps) => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -472,7 +476,8 @@ export const LegacyWorkspace = () => {
 
   return (
     <div className="space-y-6">
-      {/* Input area */}
+      {/* Input area — hidden in readOnly mode */}
+      {!readOnly && (
       <div className="space-y-4">
         <div className="flex gap-2">
           <Button variant={inputMode === "file" ? "default" : "outline"} size="sm" onClick={() => { setInputMode("file"); setDescription(""); }}>
@@ -558,6 +563,7 @@ export const LegacyWorkspace = () => {
         )}
         <input ref={fileInputRef} type="file" accept=".pdf,.txt,.md,.docx" multiple className="hidden" onChange={handleFileSelect} />
       </div>
+      )}
 
       {/* Items list + preview */}
       {isLoading ? (
