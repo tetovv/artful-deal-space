@@ -942,6 +942,8 @@ export type Database = {
           description: string | null
           goal: string | null
           id: string
+          ingest_error: string | null
+          ingest_progress: number
           roadmap: Json | null
           status: string
           title: string
@@ -955,6 +957,8 @@ export type Database = {
           description?: string | null
           goal?: string | null
           id?: string
+          ingest_error?: string | null
+          ingest_progress?: number
           roadmap?: Json | null
           status?: string
           title: string
@@ -968,6 +972,8 @@ export type Database = {
           description?: string | null
           goal?: string | null
           id?: string
+          ingest_error?: string | null
+          ingest_progress?: number
           roadmap?: Json | null
           status?: string
           title?: string
