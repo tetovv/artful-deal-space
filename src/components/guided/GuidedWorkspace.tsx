@@ -10,7 +10,7 @@ import {
   ArrowRight, ChevronDown, Plus, Trash2, MapPin,
   RefreshCw, Award, Bug, Copy, AlertTriangle, PanelRight
 } from "lucide-react";
-import { extractTextFromFile, chunkText } from "@/lib/clientExtract";
+import { extractTextFromFile, chunkText, type ExtractProgress } from "@/lib/clientExtract";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
@@ -30,7 +30,7 @@ type GuidedPhase = "intake" | "recommendation" | "generate" | "player" | "checki
 type OutputFormat = "COURSE_LEARN" | "EXAM_PREP" | "QUIZ_ONLY" | "INTERVIEW" | "FLASHCARDS" | "PRESENTATION";
 type IntakeStep = 0 | 1 | 2 | 3 | 4 | 5;
 type GenStageKey = "uploading" | "ingesting" | "planning" | "generating";
-type GenStageStatus = "pending" | "running" | "done" | "error";
+type GenStageStatus = "pending" | "running" | "done" | "error" | "canceled";
 type GenStatus = "idle" | "uploading" | "ingesting" | "planning" | "generating" | "done" | "error";
 
 interface GenStage {
@@ -649,14 +649,66 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
   // Checkin
   const [checkinAnswers, setCheckinAnswers] = useState({ hardTopics: "", pace: "normal", addMore: "" });
 
-  // Resume from MyGuides
+  // Abort controller for cancellation
+  const abortRef = useRef<AbortController | null>(null);
+
+  // Resume from MyGuides — check project status before deciding phase
   useEffect(() => {
-    if (resumeProjectId && resumeProjectId !== projectId) {
-      setProjectId(resumeProjectId);
-      setPhase("player");
-      setGenStatus("done");
-      onResumeComplete?.();
-    }
+    if (!resumeProjectId || resumeProjectId === projectId) return;
+    setProjectId(resumeProjectId);
+
+    // Fetch project status to decide where to go
+    supabase.from("projects").select("*").eq("id", resumeProjectId).single()
+      .then(({ data: proj }) => {
+        if (!proj) {
+          setPhase("intake");
+          onResumeComplete?.();
+          return;
+        }
+
+        const status = proj.status as string;
+
+        if ((status === "ready" || status === "completed")) {
+          // Check if artifacts exist before opening player
+          supabase.from("artifacts").select("id").eq("project_id", resumeProjectId).limit(1)
+            .then(({ data: arts }) => {
+              if (arts && arts.length > 0) {
+                setPhase("player");
+                setGenStatus("done");
+              } else {
+                // No artifacts despite ready status — show error
+                setPhase("generate");
+                setGenStatus("error");
+                setPipelineError({
+                  functionName: "resume",
+                  status: 0,
+                  body: "Гайд помечен как готовый, но артефакты отсутствуют. Попробуйте повторить генерацию.",
+                });
+              }
+              onResumeComplete?.();
+            });
+          return;
+        }
+
+        if (status === "error" || status === "failed") {
+          setPhase("generate");
+          setGenStatus("error");
+          setPipelineError({
+            functionName: "resume",
+            status: 0,
+            body: "Предыдущая генерация завершилась с ошибкой. Попробуйте повторить.",
+          });
+          // Set stages to show which ones completed
+          setGenStages(INITIAL_GEN_STAGES.map(s => ({ ...s })));
+        } else {
+          // draft/ingesting/generating/planning — show progress screen (idle so user can retry)
+          setPhase("generate");
+          setGenStatus("idle");
+          setGenStages(INITIAL_GEN_STAGES.map(s => ({ ...s })));
+        }
+
+        onResumeComplete?.();
+      });
   }, [resumeProjectId]);
 
   // Roadmap & artifacts from DB
@@ -780,8 +832,9 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
   };
 
   /** Client-side ingest: extract text from files on client, chunk, and insert directly into DB.
-   *  This avoids Edge Function memory limits (WORKER_LIMIT / 546). */
-  const runStageIngest = async (projId: string, sources: { storage_path: string; file_name: string; source_id: string }[], pastedText?: string): Promise<void> => {
+   *  This avoids Edge Function memory limits (WORKER_LIMIT / 546).
+   *  Supports AbortSignal for cancellation. */
+  const runStageIngest = async (projId: string, sources: { storage_path: string; file_name: string; source_id: string }[], pastedText?: string, signal?: AbortSignal): Promise<void> => {
     if (!user) throw { functionName: "project_ingest", status: 0, body: "Не авторизован" } as EdgeError;
 
     const allChunks: { content: string; metadata: any; source_id: string }[] = [];
@@ -789,6 +842,9 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
 
     // Extract text from original File objects (stored in extractFilesRef) — no re-download needed
     for (let si = 0; si < sources.length; si++) {
+      // Check abort before each file
+      if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+
       const src = sources[si];
       // Update stage label with progress
       setGenStages(prev => prev.map(s => s.key === "ingesting"
@@ -802,7 +858,13 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
         if (originalFile) {
           // Fast path: extract from the original File object in memory
           console.log(`[ingest] Extracting from memory: ${src.file_name}`);
-          text = await extractTextFromFile(originalFile);
+          text = await extractTextFromFile(originalFile, signal, (p) => {
+            if (p.page && p.totalPages) {
+              setGenStages(prev => prev.map(s => s.key === "ingesting"
+                ? { ...s, label: `${src.file_name}: стр. ${p.page}/${p.totalPages}` }
+                : s));
+            }
+          });
         } else {
           // Fallback: download from storage (e.g. on retry)
           console.log(`[ingest] Downloading from storage: ${src.storage_path}`);
@@ -818,7 +880,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
           const ext = src.file_name.split(".").pop() || "txt";
           const mimeMap: Record<string, string> = { pdf: "application/pdf", docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", txt: "text/plain" };
           const file = new File([blob], src.file_name, { type: mimeMap[ext] || "application/octet-stream" });
-          text = await extractTextFromFile(file);
+          text = await extractTextFromFile(file, signal);
         }
 
         if (!text.trim()) {
@@ -839,6 +901,8 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
         await supabase.from("project_sources").update({ status: "processed", chunk_count: chunks.length }).eq("id", src.source_id);
         await yieldToUI();
       } catch (e: any) {
+        // Rethrow AbortError so the pipeline catches it
+        if (e.name === "AbortError") throw e;
         console.error(`[ingest] Client extraction failed for ${src.file_name}:`, e);
         failedFiles.push({ name: src.file_name, reason: e.message || String(e) });
       }
@@ -923,24 +987,31 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
     const stageOrder: GenStageKey[] = ["uploading", "ingesting", "planning", "generating"];
     const startIdx = stageOrder.indexOf(fromStage);
 
+    // Create new AbortController for this pipeline run
+    abortRef.current = new AbortController();
+    const signal = abortRef.current.signal;
+
     // Reset stages from startIdx onward to pending
-    setGenStages(prev => prev.map((s, i) => {
+    setGenStages(prev => prev.map((s) => {
       const si = stageOrder.indexOf(s.key);
-      if (si >= startIdx) return { ...s, status: "pending" as GenStageStatus, error: undefined };
+      if (si >= startIdx) return { ...s, status: "pending" as GenStageStatus, error: undefined, label: INITIAL_GEN_STAGES[si].label };
       return s;
     }));
 
     try {
       for (let i = startIdx; i < stageOrder.length; i++) {
+        // Check abort before starting each stage
+        if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+
         const key = stageOrder[i];
         updateStage(key, "running");
         setGenStatus(key);
 
         try {
           if (key === "uploading") {
-            await runStageUpload(projId);
+            await withTimeout(runStageUpload(projId), 60_000, "uploading");
           } else if (key === "ingesting") {
-            await runStageIngest(projId, uploadedSources, pastedText);
+            await withTimeout(runStageIngest(projId, uploadedSources, pastedText, signal), STAGE_TIMEOUT_MS, "ingesting");
           } else if (key === "planning") {
             await runStagePlan(projId);
           } else if (key === "generating") {
@@ -952,6 +1023,11 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
           }
           updateStage(key, "done");
         } catch (stageErr: any) {
+          // Handle AbortError (user cancelled)
+          if (stageErr.name === "AbortError" || stageErr.functionName === "canceled") {
+            updateStage(key, "canceled");
+            throw stageErr;
+          }
           const edgeErr: EdgeError = stageErr.functionName
             ? stageErr
             : { functionName: key, status: 0, body: stageErr.message || String(stageErr) };
@@ -969,12 +1045,20 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
       toast.success("Гайд создан!");
     } catch (e: any) {
       console.error("Pipeline error:", e);
-      setGenStatus("error");
-      if (e.functionName) {
-        setPipelineError(e as EdgeError);
+
+      // Handle cancellation
+      if (e.name === "AbortError") {
+        setGenStatus("error");
+        setPipelineError({ functionName: "canceled", status: 0, body: "Генерация отменена пользователем." });
       } else {
-        setPipelineError({ functionName: "unknown", status: 0, body: e.message || String(e) });
+        setGenStatus("error");
+        if (e.functionName) {
+          setPipelineError(e as EdgeError);
+        } else {
+          setPipelineError({ functionName: "unknown", status: 0, body: e.message || String(e) });
+        }
       }
+
       // Mark project as error so MyMaterials shows error state
       if (projId) {
         supabase.from("projects").update({ status: "error" }).eq("id", projId).then(() => {
@@ -1230,12 +1314,10 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
     }
   };
 
-  /* ─── Add sources to existing project (server-side) ─── */
+  /* ─── Add sources to existing project (CLIENT-SIDE, no Edge Function) ─── */
   const handleAddSources = async (files: File[]) => {
     if (!projectId || !user) return;
     try {
-      const sources: { storage_path: string; file_name: string; source_id: string }[] = [];
-
       for (const file of files) {
         const { storagePath, fileName } = await uploadFileToStorage(file, user.id, projectId);
 
@@ -1249,12 +1331,30 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
         }).select("id").single();
 
         if (srcErr) { toast.error(`Ошибка: ${srcErr.message}`); continue; }
-        sources.push({ storage_path: storagePath, file_name: fileName, source_id: sourceRec.id });
-      }
 
-      if (sources.length > 0) {
-        // Call server-side ingest for the new sources
-        await callEdge("project_ingest", { project_id: projectId, sources });
+        // Client-side extraction (no Edge Function call)
+        try {
+          const text = await extractTextFromFile(file);
+          if (!text.trim()) {
+            toast.warning(`${fileName}: пустой текст после извлечения`);
+            continue;
+          }
+          const chunks = chunkText(text);
+          for (let i = 0; i < chunks.length; i += 50) {
+            await supabase.from("project_chunks").insert(
+              chunks.slice(i, i + 50).map(c => ({
+                project_id: projectId, user_id: user.id,
+                content: c.content,
+                metadata: { file_name: fileName, chunk_index: c.chunk_index },
+                source_id: sourceRec.id,
+              }))
+            );
+          }
+          await supabase.from("project_sources").update({ status: "processed", chunk_count: chunks.length }).eq("id", sourceRec.id);
+        } catch (extractErr: any) {
+          console.error(`[addSources] Extraction failed for ${fileName}:`, extractErr);
+          toast.error(`Не удалось извлечь текст из ${fileName}`);
+        }
       }
 
       queryClient.invalidateQueries({ queryKey: ["project-sources", projectId] });
@@ -1669,15 +1769,26 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
             return (
               <div key={stage.key} className={cn("flex items-center gap-3 p-3 rounded-lg border",
                 stage.status === "done" ? "border-accent/30 bg-accent/5" :
-                stage.status === "running" ? "border-primary/30 bg-primary/5" : "border-border")}>
+                stage.status === "running" ? "border-primary/30 bg-primary/5" :
+                stage.status === "canceled" ? "border-muted-foreground/30 bg-muted/5" : "border-border")}>
                 {stage.status === "done" ? <CheckCircle2 className="h-4 w-4 text-accent shrink-0" /> :
                  stage.status === "running" ? <Loader2 className="h-4 w-4 text-primary animate-spin shrink-0" /> :
+                 stage.status === "canceled" ? <X className="h-4 w-4 text-muted-foreground shrink-0" /> :
                  <Icon className="h-4 w-4 text-muted-foreground/40 shrink-0" />}
                 <span className={cn("text-sm", stage.status === "done" ? "text-foreground" :
                   stage.status === "running" ? "text-foreground font-medium" : "text-muted-foreground/50")}>{stage.label}</span>
               </div>
             );
           })}
+        </div>
+
+        {/* Cancel button */}
+        <div className="flex justify-center">
+          <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => {
+            abortRef.current?.abort();
+          }}>
+            <X className="h-4 w-4 mr-1" /> Прервать
+          </Button>
         </div>
       </div>
     );
@@ -1697,10 +1808,34 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
     const renderContent = () => {
       if (!activeArtifact || !pub) {
         return (
-          <div className="text-center py-16">
-            <Brain className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
-            <p className="text-sm text-muted-foreground">Нет контента. Нажмите «Следующий шаг».</p>
-          </div>
+          <Card className="border-destructive/30 bg-destructive/5">
+            <CardContent className="pt-5 space-y-3">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-destructive shrink-0" />
+                <p className="text-sm font-medium text-foreground">Гайд не готов или генерация не завершена</p>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Контент ещё не создан. Попробуйте повторить генерацию или вернитесь к источникам.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" onClick={() => handleRetryStage("generating")}>
+                  <RotateCcw className="h-3 w-3 mr-1" /> Повторить генерацию
+                </Button>
+                <Button variant="outline" size="sm" onClick={handleReplan}>
+                  <RefreshCw className="h-3 w-3 mr-1" /> REPLAN
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => {
+                  setPhase("intake");
+                  setIntakeStep(0);
+                  setGenStatus("idle");
+                  setPipelineError(null);
+                  setGenStages(INITIAL_GEN_STAGES.map(s => ({ ...s })));
+                }}>
+                  <ChevronLeft className="h-3 w-3 mr-1" /> Вернуться к источникам
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         );
       }
 

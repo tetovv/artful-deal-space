@@ -50,11 +50,13 @@ const GOAL_LABELS: Record<string, string> = {
 };
 
 /* ─── Guide status types ─── */
-type GuideStatus = "ready" | "error";
+type GuideStatus = "ready" | "error" | "generating" | "draft";
 
 function deriveStatus(proj: any): GuideStatus {
   const s = proj.status as string;
   if (s === "error" || s === "failed") return "error";
+  if (["generating", "ingesting", "planning"].includes(s)) return "generating";
+  if (s === "draft" || s === "uploaded" || s === "ingested") return "draft";
   return "ready";
 }
 
@@ -147,9 +149,12 @@ export const MyMaterials = ({ onResume, onNewProject }: MyMaterialsProps) => {
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2.5 min-w-0">
                     <div className={cn("h-9 w-9 rounded-lg flex items-center justify-center shrink-0",
-                      status === "error" ? "bg-destructive/10" : "bg-primary/10"
+                      status === "error" ? "bg-destructive/10" :
+                      status === "generating" ? "bg-primary/10 animate-pulse" :
+                      status === "draft" ? "bg-muted" : "bg-primary/10"
                     )}>
                       {status === "error" ? <AlertTriangle className="h-4 w-4 text-destructive" /> :
+                       status === "generating" ? <Loader2 className="h-4 w-4 text-primary animate-spin" /> :
                        <FormatIcon className="h-4 w-4 text-primary" />}
                     </div>
                     <div className="min-w-0">
@@ -203,6 +208,20 @@ export const MyMaterials = ({ onResume, onNewProject }: MyMaterialsProps) => {
                   </div>
                 )}
 
+                {status === "generating" && (
+                  <div className="flex items-center gap-2 text-[12px] text-primary">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    <span>Генерация…</span>
+                  </div>
+                )}
+
+                {status === "draft" && (
+                  <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
+                    <Clock className="h-3 w-3" />
+                    <span>Черновик</span>
+                  </div>
+                )}
+
                 {status === "ready" && roadmapSteps > 0 && (
                   <div className="space-y-1">
                     <div className="flex items-center justify-between text-[11px] text-muted-foreground">
@@ -219,7 +238,7 @@ export const MyMaterials = ({ onResume, onNewProject }: MyMaterialsProps) => {
                   </div>
                 )}
 
-                {/* Always show a single action button */}
+                {/* Action button */}
                 {status === "error" ? (
                   <Button
                     variant="destructive"
@@ -228,6 +247,24 @@ export const MyMaterials = ({ onResume, onNewProject }: MyMaterialsProps) => {
                     onClick={() => handleRetry(proj.id)}
                   >
                     <RotateCcw className="h-3 w-3" /> Повторить
+                  </Button>
+                ) : status === "generating" ? (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="w-full text-xs gap-1.5"
+                    disabled
+                  >
+                    <Loader2 className="h-3 w-3 animate-spin" /> Генерация…
+                  </Button>
+                ) : status === "draft" ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full text-xs gap-1.5"
+                    onClick={() => onResume(proj.id)}
+                  >
+                    <Wrench className="h-3 w-3" /> Продолжить настройку
                   </Button>
                 ) : (
                   <Button
