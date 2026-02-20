@@ -704,10 +704,10 @@ export function AdvertiserSettings() {
                     <div className="flex items-center gap-1.5">
                       <Input
                         value={showBankNumbers || !form.bank_account ? form.bank_account : form.bank_account.slice(0, 4) + " •••• •••• •••• " + form.bank_account.slice(-4)}
-                        onChange={showBankNumbers ? (e) => update("bank_account", e.target.value.replace(/\D/g, "").slice(0, 20)) : undefined}
-                        readOnly={!showBankNumbers}
+                        onChange={(e) => update("bank_account", e.target.value.replace(/\D/g, "").slice(0, 20))}
+                        onFocus={() => { if (!showBankNumbers) setShowBankNumbers(true); }}
                         placeholder="40802810..."
-                        className={`h-10 font-mono flex-1 ${!showBankNumbers && form.bank_account ? "bg-muted/30 cursor-not-allowed" : ""}`}
+                        className={`h-10 font-mono flex-1`}
                         maxLength={20}
                       />
                       {form.bank_account.length === 20 && (
