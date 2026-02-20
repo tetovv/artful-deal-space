@@ -762,34 +762,6 @@ function OrdTab({ campaign }: { campaign: Campaign }) {
         </CardContent>
       </Card>
 
-      {/* Delivery log */}
-      <Card>
-        <CardContent className="p-5 space-y-3">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-semibold text-card-foreground">Журнал отправок</p>
-            <Button size="sm" variant="ghost" className="h-8 text-sm gap-1.5 text-muted-foreground">
-              <Send className="h-3.5 w-3.5" />
-              Повторить отправку
-            </Button>
-          </div>
-          <div className="space-y-2">
-            {mockOrdEvents.map((ev, i) => (
-              <div key={i} className="flex items-center gap-3 text-sm py-1.5 border-b border-border/50 last:border-0">
-                {ev.status === "ok"
-                  ? <CheckCircle2 className="h-3.5 w-3.5 text-success flex-shrink-0" />
-                  : <AlertTriangle className="h-3.5 w-3.5 text-destructive flex-shrink-0" />}
-                <span className="flex-1 text-card-foreground text-xs">{ev.action}</span>
-                <span className="text-[10px] text-muted-foreground flex-shrink-0">{ev.date}</span>
-                {ev.status === "error" && (
-                  <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] text-destructive">
-                    Повторить
-                  </Button>
-                )}
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }
