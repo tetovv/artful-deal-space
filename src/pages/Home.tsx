@@ -476,7 +476,7 @@ function UserCatalog({ allItems, navigate }: { allItems: any[]; navigate: (p: st
       </div>
 
       {activeType === null ? (
-        <SelectTabPrompt />
+        <SelectTabPrompt onSelectType={setActiveType} />
       ) : activeType === "post" ? (
         <div className="space-y-4 max-w-2xl mx-auto">
           {filtered.map((item: any) => (
@@ -498,14 +498,14 @@ function UserCatalog({ allItems, navigate }: { allItems: any[]; navigate: (p: st
   );
 }
 
-export function SelectTabPrompt() {
-  const icons = [
-    { Icon: Video, label: "Видео", color: "text-destructive", bg: "bg-destructive/10" },
-    { Icon: Music, label: "Музыка", color: "text-primary", bg: "bg-primary/10" },
-    { Icon: FileText, label: "Посты", color: "text-accent-foreground", bg: "bg-accent/10" },
-    { Icon: Mic, label: "Подкасты", color: "text-primary", bg: "bg-primary/10" },
-    { Icon: BookOpen, label: "Книги", color: "text-foreground", bg: "bg-muted" },
-    { Icon: Layout, label: "Шаблоны", color: "text-muted-foreground", bg: "bg-muted" },
+export function SelectTabPrompt({ onSelectType }: { onSelectType?: (type: ContentType) => void } = {}) {
+  const icons: { Icon: React.ElementType; label: string; type: ContentType; color: string; bg: string }[] = [
+    { Icon: Video, label: "Видео", type: "video", color: "text-destructive", bg: "bg-destructive/10" },
+    { Icon: Music, label: "Музыка", type: "music", color: "text-primary", bg: "bg-primary/10" },
+    { Icon: FileText, label: "Посты", type: "post", color: "text-accent-foreground", bg: "bg-accent/10" },
+    { Icon: Mic, label: "Подкасты", type: "podcast", color: "text-primary", bg: "bg-primary/10" },
+    { Icon: BookOpen, label: "Книги", type: "book", color: "text-foreground", bg: "bg-muted" },
+    { Icon: Layout, label: "Шаблоны", type: "template", color: "text-muted-foreground", bg: "bg-muted" },
   ];
 
   return (
@@ -517,7 +517,7 @@ export function SelectTabPrompt() {
     >
       {/* Animated icon ring */}
       <div className="relative h-40 w-40">
-        {icons.map(({ Icon, bg, color, label }, i) => {
+        {icons.map(({ Icon, bg, color, label, type }, i) => {
           const angle = (360 / icons.length) * i - 90;
           const rad = (angle * Math.PI) / 180;
           const x = Math.cos(rad) * 64;
@@ -534,7 +534,10 @@ export function SelectTabPrompt() {
               <motion.div
                 animate={{ y: [0, -4, 0] }}
                 transition={{ duration: 2.5, repeat: Infinity, delay: i * 0.3, ease: "easeInOut" }}
-                className={cn("h-10 w-10 rounded-xl flex items-center justify-center shadow-sm border border-border", bg)}
+                whileHover={{ scale: 1.2 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => onSelectType?.(type)}
+                className={cn("h-10 w-10 rounded-xl flex items-center justify-center shadow-sm border border-border cursor-pointer hover:shadow-md transition-shadow", bg)}
                 title={label}
               >
                 <Icon className={cn("h-5 w-5", color)} />

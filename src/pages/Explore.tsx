@@ -63,7 +63,7 @@ const Explore = () => {
         {isLoading ? (
           <div className="text-center py-16 text-muted-foreground">Загрузка...</div>
         ) : activeType === null ? (
-          <SelectTabPrompt />
+          <SelectTabPrompt onSelectType={setActiveType} />
         ) : activeType === "post" ? (
           <div className="space-y-4 max-w-2xl mx-auto">
             {filtered.map((item: any) => (
