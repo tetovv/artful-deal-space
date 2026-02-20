@@ -456,17 +456,35 @@ function TermsTab({ dealId }: { dealId: string }) {
   const { data: dbTerms = [] } = useDealTerms(dealId);
   const acceptTerms = useAcceptTerms();
 
+  // Fetch deal to know role & status
+  const { data: deal } = useQuery({
+    queryKey: ["deal_detail", dealId],
+    queryFn: async () => {
+      const { data } = await supabase.from("deals").select("*").eq("id", dealId).single();
+      return data;
+    },
+    enabled: !!dealId,
+  });
+
+  const isAdvertiser = deal?.advertiser_id === user?.id;
+  const isNeedsChanges = deal?.status === "needs_changes";
+
   const termsVersions = dbTerms.length > 0
-    ? dbTerms.map((t: any) => ({
-        id: t.id,
-        version: t.version,
-        status: t.status as "accepted" | "draft" | "pending",
-        date: new Date(t.created_at).toLocaleDateString("ru-RU"),
-        acceptedBy: (t.deal_terms_acceptance || []).map(() => "Участник"),
-        fields: t.fields as Record<string, string>,
-        myAccepted: (t.deal_terms_acceptance || []).some((a: any) => a.user_id === user?.id),
-      }))
-    : mockTermsVersions.map((v) => ({ ...v, id: "", myAccepted: false }));
+    ? dbTerms.map((t: any) => {
+        const acceptances = t.deal_terms_acceptance || [];
+        return {
+          id: t.id,
+          version: t.version,
+          status: t.status as "accepted" | "draft" | "pending",
+          date: new Date(t.created_at).toLocaleDateString("ru-RU"),
+          acceptedBy: acceptances.map((a: any) => a.user_id === deal?.advertiser_id ? (deal?.advertiser_name || "Рекламодатель") : (deal?.creator_name || "Автор")),
+          acceptanceCount: acceptances.length,
+          fields: t.fields as Record<string, string>,
+          myAccepted: acceptances.some((a: any) => a.user_id === user?.id),
+          createdBy: (t as any).created_by,
+        };
+      })
+    : mockTermsVersions.map((v) => ({ ...v, id: "", myAccepted: false, acceptanceCount: v.acceptedBy.length, createdBy: "" }));
 
   const [selectedVersion, setSelectedVersion] = useState(termsVersions.length - 1);
   const [showChanges, setShowChanges] = useState(false);
@@ -490,6 +508,10 @@ function TermsTab({ dealId }: { dealId: string }) {
   const canAccept = (ver.status === "draft" || ver.status === "pending") && !ver.myAccepted;
   const hasAcceptedAndNoDraft = ver.status === "accepted" && selectedVersion === termsVersions.length - 1;
 
+  // Counter-offer accept/reject for advertiser
+  const [acceptingCounter, setAcceptingCounter] = useState(false);
+  const [rejectingCounter, setRejectingCounter] = useState(false);
+
   const handleAccept = () => {
     if (ver.id) {
       acceptTerms.mutate({ termsId: ver.id, dealId, version: ver.version });
@@ -498,8 +520,73 @@ function TermsTab({ dealId }: { dealId: string }) {
     }
   };
 
+  const handleAcceptCounterOffer = async () => {
+    if (!user || !ver.id) return;
+    setAcceptingCounter(true);
+    try {
+      // Accept the terms
+      await supabase.from("deal_terms_acceptance").insert({ terms_id: ver.id, user_id: user.id });
+      // Mark terms as accepted
+      await supabase.from("deal_terms").update({ status: "accepted" }).eq("id", ver.id);
+      // Update deal status to in_progress
+      await supabase.from("deals").update({ status: "in_progress" }).eq("id", dealId);
+      // Audit
+      await supabase.from("deal_audit_log").insert({ deal_id: dealId, user_id: user.id, action: `Рекламодатель принял контр-предложение v${ver.version}`, category: "terms" });
+      // Notify creator
+      if (deal?.creator_id) {
+        await supabase.from("notifications").insert({ user_id: deal.creator_id, title: "Контр-предложение принято", message: `Рекламодатель принял ваши условия v${ver.version}`, type: "deal", link: "/marketplace" });
+      }
+      toast.success("Контр-предложение принято, сделка переведена в работу");
+    } catch { toast.error("Ошибка"); } finally { setAcceptingCounter(false); }
+  };
+
+  const handleRejectCounterOffer = async () => {
+    if (!user) return;
+    setRejectingCounter(true);
+    try {
+      await supabase.from("deals").update({ status: "rejected" }).eq("id", dealId);
+      await supabase.from("deal_audit_log").insert({ deal_id: dealId, user_id: user.id, action: `Рекламодатель отклонил контр-предложение v${ver.version}`, category: "terms" });
+      if (deal?.creator_id) {
+        await supabase.from("notifications").insert({ user_id: deal.creator_id, title: "Контр-предложение отклонено", message: `Рекламодатель отклонил условия v${ver.version}`, type: "deal" });
+      }
+      toast.success("Контр-предложение отклонено");
+    } catch { toast.error("Ошибка"); } finally { setRejectingCounter(false); }
+  };
+
   return (
     <div className="p-5 space-y-4 max-w-[820px] mx-auto">
+      {/* Counter-offer banner for advertiser */}
+      {isNeedsChanges && isAdvertiser && (
+        <div className="bg-warning/10 border border-warning/30 rounded-lg p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-warning" />
+            <span className="text-[14px] font-semibold text-foreground">Автор предложил изменения</span>
+          </div>
+          {(ver.fields as any)?.counterMessage && (
+            <p className="text-[14px] text-foreground/80 bg-background/50 rounded-md px-3 py-2">
+              «{(ver.fields as any).counterMessage}»
+            </p>
+          )}
+          <div className="flex items-center gap-3 text-[14px]">
+            {(ver.fields as any)?.budget && (
+              <span className="text-muted-foreground">Бюджет: <span className="font-semibold text-foreground">{Number((ver.fields as any).budget).toLocaleString()} ₽</span></span>
+            )}
+            {(ver.fields as any)?.deadline && (
+              <span className="text-muted-foreground">Дедлайн: <span className="font-medium text-foreground">{(ver.fields as any).deadline}</span></span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <Button size="sm" className="text-[14px] h-9" onClick={handleAcceptCounterOffer} disabled={acceptingCounter}>
+              <CheckCircle2 className="h-4 w-4 mr-1.5" />
+              {acceptingCounter ? "Принятие…" : "Принять условия автора"}
+            </Button>
+            <Button size="sm" variant="outline" className="text-[14px] h-9 text-destructive border-destructive/30 hover:bg-destructive/10" onClick={handleRejectCounterOffer} disabled={rejectingCounter}>
+              {rejectingCounter ? "Отклонение…" : "Отклонить"}
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Version selector — compact */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
@@ -534,10 +621,17 @@ function TermsTab({ dealId }: { dealId: string }) {
         )}
       </div>
 
+      {/* Acceptance status */}
       {ver.acceptedBy.length > 0 && (
         <div className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
           <CheckCircle2 className="h-3.5 w-3.5 text-success" />
-          Подтвердили: {ver.acceptedBy.join(", ")} · {ver.date}
+          Подтвердили ({ver.acceptanceCount}/2): {ver.acceptedBy.join(", ")} · {ver.date}
+        </div>
+      )}
+      {ver.myAccepted && ver.status !== "accepted" && (
+        <div className="text-[13px] text-muted-foreground flex items-center gap-1.5">
+          <Clock className="h-3.5 w-3.5" />
+          Вы подтвердили. Ожидаем подтверждение второй стороны.
         </div>
       )}
 
@@ -580,18 +674,20 @@ function TermsTab({ dealId }: { dealId: string }) {
         })}
       </Accordion>
 
-      {/* Max 2 buttons */}
-      <div className="flex items-center gap-2 pt-1">
-        {canAccept && (
-          <Button size="sm" className="text-[14px] h-9" onClick={handleAccept} disabled={acceptTerms.isPending}>
-            <CheckCircle2 className="h-4 w-4 mr-1.5" />
-            {acceptTerms.isPending ? "Подтверждение…" : "Подтвердить условия"}
+      {/* Action buttons */}
+      {!isNeedsChanges && (
+        <div className="flex items-center gap-2 pt-1">
+          {canAccept && (
+            <Button size="sm" className="text-[14px] h-9" onClick={handleAccept} disabled={acceptTerms.isPending}>
+              <CheckCircle2 className="h-4 w-4 mr-1.5" />
+              {acceptTerms.isPending ? "Подтверждение…" : "Подтвердить условия"}
+            </Button>
+          )}
+          <Button size="sm" variant="outline" className="text-[14px] h-9">
+            Предложить изменения{hasAcceptedAndNoDraft ? ` (v${ver.version + 1})` : ""}
           </Button>
-        )}
-        <Button size="sm" variant="outline" className="text-[14px] h-9">
-          Предложить изменения{hasAcceptedAndNoDraft ? ` (v${ver.version + 1})` : ""}
-        </Button>
-      </div>
+        </div>
+      )}
     </div>
   );
 }
