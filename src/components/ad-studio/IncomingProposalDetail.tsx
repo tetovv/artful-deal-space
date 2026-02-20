@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -63,6 +64,7 @@ interface IncomingProposalDetailProps {
 export function IncomingProposalDetail({ open, onClose, deal, advertiserProfile, brand }: IncomingProposalDetailProps) {
   const { user, profile } = useAuth();
   const qc = useQueryClient();
+  const navigate = useNavigate();
 
   const { data: terms = [] } = useDealTerms(deal.id);
   const { data: files = [] } = useDealFiles(deal.id);
@@ -151,6 +153,8 @@ export function IncomingProposalDetail({ open, onClose, deal, advertiserProfile,
       toast.success("Предложение принято! Сделка переведена в работу.");
       qc.invalidateQueries({ queryKey: ["creator-incoming-deals"] });
       onClose();
+      // Navigate to deal workspace
+      navigate("/ad-studio", { state: { openDealId: deal.id } });
     } catch (err) {
       console.error(err);
       toast.error("Не удалось принять предложение");

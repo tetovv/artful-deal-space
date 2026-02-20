@@ -98,11 +98,11 @@ function getCreatorMeta(userId: string) {
   const safeDeal = hash % 3 !== 0;
 
   // Only 3 offer types: Video integration, Post, Podcast
-  const offers: { type: string; price: number }[] = [];
+  const offers: { type: string; price: number; turnaroundDays: number }[] = [];
   const priceBase = [5000, 10000, 15000, 25000, 50000][(hash) % 5];
-  if (hash % 3 !== 0) offers.push({ type: "Видео-интеграция", price: priceBase });
-  if (hash % 4 !== 0) offers.push({ type: "Пост", price: Math.round(priceBase * 0.4) });
-  if (hash % 5 === 0) offers.push({ type: "Подкаст", price: Math.round(priceBase * 0.7) });
+  if (hash % 3 !== 0) offers.push({ type: "Видео-интеграция", price: priceBase, turnaroundDays: [5, 7, 10, 14][(hash) % 4] });
+  if (hash % 4 !== 0) offers.push({ type: "Пост", price: Math.round(priceBase * 0.4), turnaroundDays: [1, 2, 3, 5][(hash) % 4] });
+  if (hash % 5 === 0) offers.push({ type: "Подкаст", price: Math.round(priceBase * 0.7), turnaroundDays: [7, 10, 14][(hash) % 3] });
 
   const minPrice = offers.length > 0 ? Math.min(...offers.map((o) => o.price)) : null;
 
@@ -213,12 +213,11 @@ function QuickViewModal({ creator, open, onClose, isVerified, categoryLabel, onP
   if (meta.dealsCount > 0) metrics.push({ icon: <Handshake className="h-4 w-4" />, label: "Сделки завершены", value: String(meta.dealsCount) });
   if (meta.responseHours > 0) metrics.push({ icon: <Clock className="h-4 w-4" />, label: "Среднее время ответа", value: `~${meta.responseHours} ч` });
 
-  // Turnaround estimates (simulated)
-  const turnaroundMap: Record<string, string> = {
-    "Видео-интеграция": "5–7 дн",
-    "Пост": "2–3 дн",
-    "Подкаст": "7–10 дн",
-  };
+  // Turnaround from offer data
+  const turnaroundMap = new Map<string, string>();
+  for (const o of meta.offers) {
+    turnaroundMap.set(o.type, `${o.turnaroundDays} дн`);
+  }
 
   // Best fit line from niches
   const niches = (creator.niche || []).slice(0, 4);
@@ -287,9 +286,9 @@ function QuickViewModal({ creator, open, onClose, isVerified, categoryLabel, onP
                   <div key={o.type} className="flex items-center justify-between bg-muted/30 rounded-lg px-4 py-2.5">
                     <span className="text-[15px] text-foreground font-medium">{o.type}</span>
                     <div className="flex items-center gap-4">
-                      {turnaroundMap[o.type] && (
+                      {turnaroundMap.get(o.type) && (
                         <span className="text-[13px] text-muted-foreground flex items-center gap-1">
-                          <Clock className="h-3.5 w-3.5" />{turnaroundMap[o.type]}
+                          <Clock className="h-3.5 w-3.5" />{turnaroundMap.get(o.type)}
                         </span>
                       )}
                       <span className="text-[15px] font-semibold text-foreground">от {o.price.toLocaleString("ru-RU")} ₽</span>

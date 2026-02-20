@@ -403,7 +403,12 @@ function CreatorOffers() {
     const deal = deals.find((d) => d.id === dealId);
     const { error } = await supabase.from("deals").update({ status: "briefing" }).eq("id", dealId);
     if (error) toast.error("Не удалось принять предложение");
-    else { if (deal) await sendNotification(deal, true); toast.success("Предложение принято!"); queryClient.invalidateQueries({ queryKey: ["creator-incoming-deals"] }); }
+    else {
+      if (deal) await sendNotification(deal, true);
+      toast.success("Предложение принято!");
+      queryClient.invalidateQueries({ queryKey: ["creator-incoming-deals"] });
+      navigate("/ad-studio", { state: { openDealId: dealId } });
+    }
     setActionLoading(null);
   };
 
