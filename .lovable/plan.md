@@ -1,80 +1,153 @@
 
 
-## Current State Assessment
+# Reliable Stage 2 Pipeline: No Hangs, No Empty Player
 
-The client-side extraction pipeline is **already correctly implemented**:
+## Problem Summary
 
-1. **`src/lib/clientExtract.ts`** -- uses `pdfjs-dist` v4 for PDF and `mammoth` for DOCX extraction directly in the browser
-2. **`runStageIngest` in GuidedWorkspace.tsx** -- reads original File objects from `extractFilesRef`, extracts text client-side, chunks it, and inserts directly into `project_chunks` table via Supabase SDK (no Edge Function call)
-3. **No call to `project_ingest` Edge Function** in the main pipeline path
+The pipeline has 6 critical bugs:
+1. Stage 2 (client extraction) can hang forever -- no watchdog timeout wraps `runStageIngest`
+2. No Cancel button -- user is trapped watching spinner
+3. Resume from "My Materials" blindly opens PLAYER regardless of project status (draft/error/generating all open empty player)
+4. PLAYER shows "No content. Click Next Step" when artifacts are missing due to pipeline failure
+5. `handleAddSources` still calls Edge Function `project_ingest` -- will hit WORKER_LIMIT
+6. PDF extraction doesn't yield to UI between pages -- causes UI freeze on large PDFs
 
-## Why I Cannot Test Directly
+## Changes Overview
 
-The AI Workspace requires authentication, and the browser tool cannot upload files through a file input. **You need to test this yourself** by:
+### File 1: `src/lib/clientExtract.ts`
 
-1. Log in to the app
-2. Navigate to `/ai-workspace`
-3. Upload the PDF file "Концессия 1397-р.pdf"
-4. Select a goal and proceed
-5. Watch the pipeline stages -- Stage 2 ("Извлечение и индексация") should complete without calling `project_ingest`
+**Add AbortSignal support and per-page yielding to PDF extraction**
 
-## Potential Issues to Harden
+- `extractPdfText(buffer, signal?)` -- check `signal.aborted` between pages, yield to UI every 5 pages
+- `extractTextFromFile(file, signal?)` -- pass signal through
+- Export `MAX_TEXT_CHARS`, `MAX_PDF_PAGES` constants for UI display
+- Add `onProgress?: (page: number, total: number) => void` callback for page-level progress
 
-If Stage 2 still fails, the likely causes are:
+### File 2: `src/components/guided/GuidedWorkspace.tsx`
 
-### 1. PDF.js worker loading failure
-The worker is loaded from CDN: `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`. If the CDN is blocked or the version string mismatches, extraction silently fails.
+**6 targeted changes:**
 
-**Fix**: Add a try/catch around `extractPdfText` with a clear error message, and add a fallback worker URL.
+1. **Add `"canceled"` to `GenStageStatus`** (line 33) and create `abortRef = useRef<AbortController | null>(null)`
 
-### 2. File object lost on retry
-If the user retries Stage 2, `extractFilesRef.current` may be empty (Map cleared on new generation). The fallback downloads from Storage, but `supabase.storage.download()` returns a `Blob`, not a `File` with the correct name extension.
+2. **Wrap `runStageIngest` in `withTimeout`** (line 943):
+   ```
+   case "ingesting":
+     await withTimeout(
+       runStageIngest(projId, sources, pastedText, abortRef.current!.signal),
+       STAGE_TIMEOUT_MS,  // 120s
+       "ingesting"
+     );
+   ```
 
-**Fix**: Ensure the fallback path correctly sets the file name for extension detection.
+3. **Pass AbortSignal through `runStageIngest`** -- check `signal.aborted` between file iterations and between batch inserts. Throw a dedicated `AbortError`-style EdgeError on cancellation.
 
-### 3. Large PDF memory pressure
-A large PDF (50+ pages) could strain browser memory during `pdfjs-dist` parsing.
+4. **Add Cancel button to progress screen** (after line 1681):
+   ```
+   <Button variant="ghost" size="sm" onClick={() => {
+     abortRef.current?.abort();
+     // Stage catch block handles status transition
+   }}>
+     Cancel
+   </Button>
+   ```
+   The catch block in `runPipelineFrom` detects abort and sets stage to `canceled`, genStatus to `error`, updates project status to `error`.
 
-**Fix**: Add progress reporting and catch OOM errors gracefully.
+5. **Fix resume logic** (lines 653-660):
+   ```
+   useEffect(() => {
+     if (!resumeProjectId || resumeProjectId === projectId) return;
+     // Fetch project to check status
+     supabase.from("projects").select("*").eq("id", resumeProjectId).single()
+       .then(({ data: proj }) => {
+         setProjectId(resumeProjectId);
+         if (proj?.status === "ready" && artifacts exist) {
+           setPhase("player");
+           setGenStatus("done");
+         } else if (proj?.status === "error") {
+           setPhase("generate");
+           setGenStatus("error");
+           setPipelineError({ functionName: "resume", status: 0, body: "Previous generation failed" });
+         } else {
+           // draft/ingesting/generating -- show progress screen
+           setPhase("generate");
+           setGenStatus("idle");
+         }
+         onResumeComplete?.();
+       });
+   }, [resumeProjectId]);
+   ```
 
-## Implementation Plan
+6. **Replace empty PLAYER state** (lines 1698-1704) with ErrorCard:
+   ```
+   if (!activeArtifact || !pub) {
+     return (
+       <Card className="border-destructive/30 bg-destructive/5">
+         <CardContent className="pt-5 space-y-3">
+           <AlertTriangle ... />
+           <p>Guide not ready or generation incomplete</p>
+           <Button onClick={() => handleRetryStage("generating")}>Retry generation</Button>
+           <Button onClick={handleReplan}>Replan</Button>
+           <Button onClick={backToSources}>Back to sources</Button>
+         </CardContent>
+       </Card>
+     );
+   }
+   ```
 
-### Step 1: Add robust error handling to `clientExtract.ts`
-- Wrap PDF extraction in try/catch with specific error messages
-- Add a console.log for debugging extracted text length
-- Handle the case where PDF.js worker fails to load
+7. **Fix `handleAddSources`** (line 1257): replace `callEdge("project_ingest", ...)` with client-side extraction using `extractTextFromFile` + `chunkText` + direct DB insert (same pattern as `runStageIngest`).
 
-### Step 2: Fix fallback path in `runStageIngest`
-- When downloading from Storage on retry, preserve file extension for correct extraction routing
+### File 3: `src/components/guided/MyMaterials.tsx`
 
-### Step 3: Add extraction progress feedback
-- Update stage label to show "Extracting file X of N..." during extraction
-- Show chunk count after completion
+**Fix `deriveStatus` to handle all project states:**
 
-### Step 4: Verify file type support
-- PDF: via pdfjs-dist (client)
-- DOCX: via mammoth (client)
-- TXT/MD/CSV: via TextDecoder (client)
-- Ensure unsupported formats show a clear error
+```
+type GuideStatus = "ready" | "error" | "generating" | "draft";
+
+function deriveStatus(proj: any): GuideStatus {
+  const s = proj.status as string;
+  if (s === "error" || s === "failed") return "error";
+  if (["generating", "ingesting", "planning"].includes(s)) return "generating";
+  if (s === "draft" || s === "uploaded" || s === "ingested") return "draft";
+  return "ready";  // "ready" or unknown
+}
+```
+
+**Add UI for `generating` status:**
+- Show spinner badge + "View progress" button (disabled, no PLAYER opening)
+- For `draft` status: show "Continue setup" button that goes back to generate phase
 
 ## Technical Details
 
-```text
-Pipeline Flow (no Edge Function):
+### Timeout values:
+- uploading: 60s
+- ingesting: 120s (large PDFs need time)
+- planning: 180s (LLM)
+- generating: 180s (LLM)
 
-[User uploads file] 
-    --> Storage upload (ai_sources bucket)
-    --> File object kept in extractFilesRef
-    --> extractTextFromFile(file) [browser, pdfjs/mammoth]
-    --> chunkText(text, 1200, 150)
-    --> supabase.from("project_chunks").insert(batches)
-    --> project status = "ingested"
+### Cancel flow:
+```
+User clicks "Cancel"
+  -> abortRef.current.abort()
+  -> runStageIngest checks signal.aborted between files
+  -> throws EdgeError with functionName="canceled"
+  -> catch block sets stage="canceled", genStatus="error"
+  -> project.status updated to "error" in DB
+  -> UI shows error screen with "Retry" + "Back to sources"
 ```
 
-**Limits**:
-- Max file size: 20MB (Storage limit)
-- Max text: 500,000 characters (truncated)
-- Max PDF pages: 50
-- Chunk size: 1,200 chars with 150 overlap
-- Batch insert: 50 chunks per DB call
+### Limits (displayed in intake and error screens):
+- Max file size: 20 MB per file (Storage limit)
+- Max PDF pages: 50 (truncated with warning)
+- Max text: 500,000 characters (truncated with warning)
+- Min text for quality: 200 characters
+
+### Resume flow (fixed):
+```
+MyMaterials -> onResume(projectId)
+  -> GuidedWorkspace fetches project status
+  -> error -> show error screen with retry
+  -> generating/ingesting -> show read-only progress screen
+  -> draft -> show intake/generate screen
+  -> ready + has artifacts -> open PLAYER
+```
 
