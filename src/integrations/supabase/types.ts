@@ -80,6 +80,135 @@ export type Database = {
         }
         Relationships: []
       }
+      artifact_private: {
+        Row: {
+          artifact_id: string
+          created_at: string
+          id: string
+          private_json: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          artifact_id: string
+          created_at?: string
+          id?: string
+          private_json?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          artifact_id?: string
+          created_at?: string
+          id?: string
+          private_json?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "artifact_private_artifact_id_fkey"
+            columns: ["artifact_id"]
+            isOneToOne: false
+            referencedRelation: "artifacts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      artifacts: {
+        Row: {
+          created_at: string
+          id: string
+          project_id: string
+          public_json: Json
+          roadmap_step_id: string | null
+          sort_order: number | null
+          status: string
+          title: string
+          type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          project_id: string
+          public_json?: Json
+          roadmap_step_id?: string | null
+          sort_order?: number | null
+          status?: string
+          title: string
+          type: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          project_id?: string
+          public_json?: Json
+          roadmap_step_id?: string | null
+          sort_order?: number | null
+          status?: string
+          title?: string
+          type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "artifacts_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      attempts: {
+        Row: {
+          answers: Json
+          artifact_id: string
+          completed_at: string | null
+          created_at: string
+          feedback: Json | null
+          id: string
+          score: number | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          answers?: Json
+          artifact_id: string
+          completed_at?: string | null
+          created_at?: string
+          feedback?: Json | null
+          id?: string
+          score?: number | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          answers?: Json
+          artifact_id?: string
+          completed_at?: string | null
+          created_at?: string
+          feedback?: Json | null
+          id?: string
+          score?: number | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attempts_artifact_id_fkey"
+            columns: ["artifact_id"]
+            isOneToOne: false
+            referencedRelation: "artifacts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bookmarks: {
         Row: {
           content_id: string
@@ -609,6 +738,146 @@ export type Database = {
           updated_at?: string
           user_id?: string
           verified?: boolean | null
+        }
+        Relationships: []
+      }
+      project_chunks: {
+        Row: {
+          content: string
+          created_at: string
+          embedding: string | null
+          id: string
+          metadata: Json | null
+          project_id: string
+          source_id: string
+          token_count: number | null
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          embedding?: string | null
+          id?: string
+          metadata?: Json | null
+          project_id: string
+          source_id: string
+          token_count?: number | null
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          embedding?: string | null
+          id?: string
+          metadata?: Json | null
+          project_id?: string
+          source_id?: string
+          token_count?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_chunks_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_chunks_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "project_sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_sources: {
+        Row: {
+          chunk_count: number | null
+          created_at: string
+          file_name: string
+          file_size: number | null
+          file_type: string
+          id: string
+          project_id: string
+          status: string
+          storage_path: string
+          user_id: string
+        }
+        Insert: {
+          chunk_count?: number | null
+          created_at?: string
+          file_name: string
+          file_size?: number | null
+          file_type?: string
+          id?: string
+          project_id: string
+          status?: string
+          storage_path: string
+          user_id: string
+        }
+        Update: {
+          chunk_count?: number | null
+          created_at?: string
+          file_name?: string
+          file_size?: number | null
+          file_type?: string
+          id?: string
+          project_id?: string
+          status?: string
+          storage_path?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_sources_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      projects: {
+        Row: {
+          assistant_menu_policy: Json | null
+          audience: string | null
+          created_at: string
+          description: string | null
+          goal: string | null
+          id: string
+          roadmap: Json | null
+          status: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          assistant_menu_policy?: Json | null
+          audience?: string | null
+          created_at?: string
+          description?: string | null
+          goal?: string | null
+          id?: string
+          roadmap?: Json | null
+          status?: string
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          assistant_menu_policy?: Json | null
+          audience?: string | null
+          created_at?: string
+          description?: string | null
+          goal?: string | null
+          id?: string
+          roadmap?: Json | null
+          status?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
