@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { deals, messages as allMessages } from "@/data/mockData";
 import { useRealtimeMessages } from "@/hooks/useRealtimeMessages";
 import { useAdvertiserScores } from "@/hooks/useAdvertiserScores";
@@ -229,51 +229,157 @@ function DealSidebar({
 }
 
 /* ═══════════════════════════════════════════════════════
-   CHAT TAB
+   CHAT TAB — grouped messages, date separators, summary bar
    ═══════════════════════════════════════════════════════ */
-function ChatTab({ deal }: { deal: Deal }) {
+
+function formatDateSeparator(dateStr: string): string {
+  const d = new Date(dateStr);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterday = new Date(today.getTime() - 86400000);
+  const msgDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  if (msgDay.getTime() === today.getTime()) return "Сегодня";
+  if (msgDay.getTime() === yesterday.getTime()) return "Вчера";
+  return d.toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" });
+}
+
+function ChatTab({ deal, onOpenTerms }: { deal: Deal; onOpenTerms?: () => void }) {
   useRealtimeMessages(deal.id);
   const dealMessages = allMessages.filter((m) => m.dealId === deal.id);
   const [newMsg, setNewMsg] = useState("");
+  const [summaryOpen, setSummaryOpen] = useState(true);
+
+  const latestTerms = mockTermsVersions[mockTermsVersions.length - 1];
+  const termsStatusText = latestTerms.status === "accepted" ? "согласовано" : latestTerms.status === "draft" ? "черновик" : "ожидает";
 
   return (
     <div className="flex flex-col h-full">
+      {/* Pinned summary bar (collapsible) */}
+      <Collapsible open={summaryOpen} onOpenChange={setSummaryOpen}>
+        <div className="border-b border-border/50 bg-card">
+          <div className="max-w-[820px] mx-auto px-4">
+            <CollapsibleTrigger className="w-full flex items-center justify-between py-1.5 text-[12px] text-muted-foreground hover:text-foreground transition-colors">
+              <span className="flex items-center gap-1.5">
+                {summaryOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                Сводка сделки
+              </span>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="flex items-center gap-3 pb-2 text-[13px] flex-wrap">
+                <span className="text-muted-foreground">
+                  Этап: <span className="text-card-foreground font-medium">{statusLabels[deal.status]}</span>
+                </span>
+                <span className="text-border">·</span>
+                {deal.deadline && (
+                  <>
+                    <span className="text-muted-foreground">
+                      Дедлайн: <span className="text-card-foreground font-medium">{new Date(deal.deadline).toLocaleDateString("ru-RU")}</span>
+                    </span>
+                    <span className="text-border">·</span>
+                  </>
+                )}
+                <span className="text-muted-foreground">
+                  Условия v{latestTerms.version} — <span className="text-card-foreground font-medium">{termsStatusText}</span>
+                </span>
+                {onOpenTerms && (
+                  <button
+                    onClick={onOpenTerms}
+                    className="text-primary hover:underline text-[12px] flex items-center gap-1 ml-auto"
+                  >
+                    Открыть условия <ChevronRight className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+            </CollapsibleContent>
+          </div>
+        </div>
+      </Collapsible>
+
+      {/* Messages with grouping and date separators */}
       <div className="flex-1 overflow-y-auto py-3">
-        <div className="max-w-[820px] mx-auto px-4 space-y-2">
-          {dealMessages.map((msg) => {
+        <div className="max-w-[820px] mx-auto px-4">
+          {dealMessages.length === 0 && (
+            <div className="text-center text-[14px] text-muted-foreground py-16">Нет сообщений</div>
+          )}
+          {dealMessages.map((msg, i) => {
             const isMe = msg.senderId === "u1";
+            const prev = i > 0 ? dealMessages[i - 1] : null;
+            const isSameSender = prev?.senderId === msg.senderId;
+
+            // Date separator
+            const msgDate = new Date(msg.timestamp).toDateString();
+            const prevDate = prev ? new Date(prev.timestamp).toDateString() : null;
+            const showDateSep = msgDate !== prevDate;
+
             return (
-              <div key={msg.id} className={cn("flex", isMe ? "justify-end" : "justify-start")}>
-                <div
-                  className={cn(
-                    "max-w-[65%] rounded-2xl px-3.5 py-2",
-                    isMe
-                      ? "bg-primary text-primary-foreground rounded-br-md"
-                      : "bg-secondary text-secondary-foreground rounded-bl-md"
-                  )}
-                >
-                  <p className="text-[11px] font-semibold mb-0.5 opacity-70">{msg.senderName}</p>
-                  <p className="text-[15px] leading-relaxed">{msg.content}</p>
-                  {msg.attachment && (
-                    <div className="mt-1.5 flex items-center gap-2 text-[13px]">
-                      <Paperclip className="h-3 w-3 opacity-60" />
-                      <a href="#" className="underline hover:no-underline truncate">{msg.attachment}</a>
-                      <button className="opacity-60 hover:opacity-100 shrink-0"><Download className="h-3 w-3" /></button>
-                    </div>
-                  )}
-                  <p className="text-[10px] opacity-50 mt-0.5 text-right">
-                    {new Date(msg.timestamp).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}
-                  </p>
+              <div key={msg.id}>
+                {showDateSep && (
+                  <div className="flex items-center gap-3 my-3">
+                    <div className="flex-1 h-px bg-border/50" />
+                    <span className="text-[12px] text-muted-foreground font-medium">{formatDateSeparator(msg.timestamp)}</span>
+                    <div className="flex-1 h-px bg-border/50" />
+                  </div>
+                )}
+                <div className={cn(
+                  "flex",
+                  isMe ? "justify-end" : "justify-start",
+                  isSameSender && !showDateSep ? "mt-0.5" : "mt-2"
+                )}>
+                  <div
+                    className={cn(
+                      "max-w-[63%] px-3.5 py-2",
+                      isMe
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-secondary text-secondary-foreground",
+                      // Rounded corners: full rounding, but flatten adjacent corners for grouped messages
+                      isSameSender && !showDateSep
+                        ? isMe ? "rounded-2xl rounded-tr-md rounded-br-md" : "rounded-2xl rounded-tl-md rounded-bl-md"
+                        : isMe ? "rounded-2xl rounded-br-md" : "rounded-2xl rounded-bl-md"
+                    )}
+                  >
+                    {/* Sender name: only show on first of a group */}
+                    {(!isSameSender || showDateSep) && (
+                      <p className={cn(
+                        "text-[13px] font-semibold mb-0.5",
+                        isMe ? "opacity-80" : "opacity-75"
+                      )}>{msg.senderName}</p>
+                    )}
+                    <p className="text-[15px] leading-relaxed">{msg.content}</p>
+                    {/* Attachment: compact file chip */}
+                    {msg.attachment && (
+                      <div className="mt-1.5 flex items-center gap-1.5 px-2 py-1 rounded-md bg-background/10 max-w-fit">
+                        <FileText className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                        <a
+                          href="#"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[13px] font-medium underline hover:no-underline truncate max-w-[180px]"
+                        >
+                          {msg.attachment}
+                        </a>
+                        <button
+                          className="opacity-60 hover:opacity-100 shrink-0 ml-1"
+                          title="Скачать"
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    )}
+                    <p className={cn(
+                      "text-[12px] mt-0.5 text-right",
+                      isMe ? "opacity-60" : "text-muted-foreground"
+                    )}>
+                      {new Date(msg.timestamp).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}
+                    </p>
+                  </div>
                 </div>
               </div>
             );
           })}
-          {dealMessages.length === 0 && (
-            <div className="text-center text-[14px] text-muted-foreground py-16">Нет сообщений</div>
-          )}
         </div>
       </div>
 
+      {/* Composer */}
       <div className="px-4 py-2 border-t border-border bg-card">
         <div className="max-w-[820px] mx-auto flex gap-2 items-center">
           <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0">
@@ -283,7 +389,7 @@ function ChatTab({ deal }: { deal: Deal }) {
             value={newMsg}
             onChange={(e) => setNewMsg(e.target.value)}
             placeholder="Написать сообщение..."
-            className="flex-1 h-9 text-[14px] bg-background"
+            className="flex-1 h-9 text-[15px] bg-background"
           />
           <Button size="icon" className="h-8 w-8 shrink-0">
             <Send className="h-4 w-4" />
@@ -757,7 +863,7 @@ export function DealWorkspace() {
 
         {/* ── Tab content ── */}
         <div className="flex-1 overflow-y-auto">
-          {activeSubTab === "chat" && <ChatTab deal={selectedDeal} />}
+          {activeSubTab === "chat" && <ChatTab deal={selectedDeal} onOpenTerms={() => setActiveSubTab("terms")} />}
           {activeSubTab === "terms" && <TermsTab />}
           {activeSubTab === "files" && <FilesTab />}
           {activeSubTab === "payment" && <PaymentTab />}
