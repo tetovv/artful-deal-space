@@ -48,6 +48,41 @@ const defaults: AdvSettings = {
 };
 
 type VerifyState = "idle" | "loading" | "success" | "error";
+type SectionStatus = "empty" | "filled" | "verified";
+
+// ─── Helpers ───
+function getLegalConfig(type: string | null) {
+  switch (type) {
+    case "self":
+      return { showName: true, nameLabel: "ФИО *", namePlaceholder: "Иванов Иван Иванович", innLen: 12, showOgrn: false, ogrnLen: 0, ogrnLabel: "" };
+    case "ip":
+      return { showName: true, nameLabel: "ФИО предпринимателя *", namePlaceholder: "Иванов Иван Иванович", innLen: 12, showOgrn: true, ogrnLen: 15, ogrnLabel: "ОГРНИП" };
+    case "ooo":
+    case "ul":
+      return { showName: true, nameLabel: "Наименование организации *", namePlaceholder: 'ООО "Компания"', innLen: 10, showOgrn: true, ogrnLen: 13, ogrnLabel: "ОГРН" };
+    default:
+      return { showName: false, nameLabel: "", namePlaceholder: "", innLen: 12, showOgrn: false, ogrnLen: 0, ogrnLabel: "" };
+  }
+}
+
+function isLegalFieldsValid(form: AdvSettings): boolean {
+  const cfg = getLegalConfig(form.business_type);
+  if (!form.business_type) return false;
+  if (!form.business_name.trim()) return false;
+  if (form.business_inn.length !== cfg.innLen) return false;
+  if (cfg.showOgrn && form.business_ogrn.length !== cfg.ogrnLen) return false;
+  return true;
+}
+
+function isBankFieldsValid(form: AdvSettings): boolean {
+  return form.bank_bik.length === 9 && form.bank_account.length === 20;
+}
+
+function getSectionStatus(fieldsValid: boolean, verified: boolean): SectionStatus {
+  if (verified && fieldsValid) return "verified";
+  if (fieldsValid) return "filled";
+  return "empty";
+}
 
 // ─── Shared UI pieces ───
 function PrivacyLabel({ isPublic }: { isPublic: boolean }) {
@@ -65,10 +100,20 @@ function VerifyResult({ state, successText, errorText }: { state: VerifyState; s
   return null;
 }
 
-function SectionCheck({ done, label }: { done: boolean; label: string }) {
+function StatusBadge({ status }: { status: SectionStatus }) {
+  if (status === "verified") return <Badge variant="outline" className="text-[9px] border-success/30 text-success bg-success/10 ml-2">Подтверждено</Badge>;
+  if (status === "filled") return <Badge variant="outline" className="text-[9px] border-warning/30 text-warning bg-warning/10 ml-2">Не проверено</Badge>;
+  return <Badge variant="outline" className="text-[9px] border-muted-foreground/30 text-muted-foreground ml-2">Не заполнено</Badge>;
+}
+
+function SectionCheck({ status, label }: { status: SectionStatus; label: string }) {
+  const done = status === "verified";
+  const partial = status === "filled";
   return (
     <div className="flex items-center gap-2 text-xs">
-      {done ? <CheckCircle2 className="h-3.5 w-3.5 text-success flex-shrink-0" /> : <div className="h-3.5 w-3.5 rounded-full border border-muted-foreground/40 flex-shrink-0" />}
+      {done ? <CheckCircle2 className="h-3.5 w-3.5 text-success flex-shrink-0" />
+        : partial ? <Clock className="h-3.5 w-3.5 text-warning flex-shrink-0" />
+        : <div className="h-3.5 w-3.5 rounded-full border border-muted-foreground/40 flex-shrink-0" />}
       <span className={done ? "text-card-foreground" : "text-muted-foreground"}>{label}</span>
     </div>
   );
@@ -141,6 +186,20 @@ export function AdvertiserSettings() {
         next.business_verified = false;
         setVerifyStates((s) => ({ ...s, business: "idle" }));
       }
+      // When business_type changes, clear fields that don't apply
+      if (key === "business_type") {
+        const cfg = getLegalConfig(value);
+        // Trim INN if too long for new type
+        if (next.business_inn.length > cfg.innLen) {
+          next.business_inn = next.business_inn.slice(0, cfg.innLen);
+        }
+        // Clear OGRN if not needed
+        if (!cfg.showOgrn) {
+          next.business_ogrn = "";
+        } else if (next.business_ogrn.length > cfg.ogrnLen) {
+          next.business_ogrn = next.business_ogrn.slice(0, cfg.ogrnLen);
+        }
+      }
       if (["bank_name", "bank_bik", "bank_account", "bank_corr_account"].includes(key)) {
         next.bank_verified = false;
         setVerifyStates((s) => ({ ...s, bank: "idle" }));
@@ -149,6 +208,21 @@ export function AdvertiserSettings() {
         next.ord_verified = false;
         setVerifyStates((s) => ({ ...s, ord: "idle" }));
       }
+      return next;
+    });
+  }, []);
+
+  // BIK auto-fill bank name
+  const handleBikChange = useCallback((rawValue: string) => {
+    const v = rawValue.replace(/\D/g, "").slice(0, 9);
+    setForm((prev) => {
+      const next = { ...prev, bank_bik: v, bank_verified: false };
+      if (v.length === 9) {
+        next.bank_name = "Банк (определяется по БИК)";
+      } else {
+        next.bank_name = "";
+      }
+      setVerifyStates((s) => ({ ...s, bank: "idle" }));
       return next;
     });
   }, []);
@@ -172,37 +246,32 @@ export function AdvertiserSettings() {
   });
 
   const mockVerify = useCallback(async (type: "business" | "bank" | "ord") => {
-    // If dirty, save first
     if (dirty) {
-      try {
-        await save.mutateAsync();
-      } catch {
-        return;
-      }
+      try { await save.mutateAsync(); } catch { return; }
     }
     setVerifyStates((s) => ({ ...s, [type]: "loading" }));
-    // Simulate async verification
     await new Promise((r) => setTimeout(r, 1200));
 
     if (type === "business") {
-      if (!form.business_type || !form.business_name || !form.business_inn) {
+      if (!isLegalFieldsValid(form)) {
         setVerifyStates((s) => ({ ...s, business: "error" }));
-        toast.error("Заполните обязательные поля реквизитов");
-        return;
-      }
-      const innLen = form.business_type === "ip" || form.business_type === "self" ? 12 : 10;
-      if (form.business_inn.length !== innLen) {
-        setVerifyStates((s) => ({ ...s, business: "error" }));
-        toast.error(`ИНН должен содержать ${innLen} цифр для ${form.business_type === "ip" || form.business_type === "self" ? "ИП" : "ООО"}`);
+        toast.error("Заполните все обязательные поля реквизитов корректно");
         return;
       }
       setForm((f) => ({ ...f, business_verified: true }));
       setVerifyStates((s) => ({ ...s, business: "success" }));
       toast.success("Реквизиты подтверждены (тест)");
     } else if (type === "bank") {
-      if (!form.bank_bik || form.bank_bik.length !== 9) { setVerifyStates((s) => ({ ...s, bank: "error" })); toast.error("БИК должен содержать 9 цифр"); return; }
-      if (!form.bank_account || form.bank_account.length !== 20) { setVerifyStates((s) => ({ ...s, bank: "error" })); toast.error("Расчётный счёт должен содержать 20 цифр"); return; }
-      if (form.bank_corr_account && form.bank_corr_account.length !== 20) { setVerifyStates((s) => ({ ...s, bank: "error" })); toast.error("Корр. счёт должен содержать 20 цифр"); return; }
+      if (!isBankFieldsValid(form)) {
+        setVerifyStates((s) => ({ ...s, bank: "error" }));
+        toast.error("Заполните БИК (9 цифр) и расчётный счёт (20 цифр)");
+        return;
+      }
+      if (form.bank_corr_account && form.bank_corr_account.length !== 20) {
+        setVerifyStates((s) => ({ ...s, bank: "error" }));
+        toast.error("Корр. счёт должен содержать 20 цифр");
+        return;
+      }
       setForm((f) => ({ ...f, bank_verified: true }));
       setVerifyStates((s) => ({ ...s, bank: "success" }));
       toast.success("Банк подтверждён (тест)");
@@ -214,27 +283,27 @@ export function AdvertiserSettings() {
     }
   }, [form, dirty, save]);
 
-  // ─── Readiness ───
-  const brandReady = !!(form.brand_name);
-  const legalReady = !!(form.business_verified);
-  const bankReady = !!(form.bank_verified);
-  const ordReady = !!(form.ord_verified);
-  const readinessItems = [
-    { done: brandReady, label: "Бренд", hint: "Обязательно для сделок" },
-    { done: legalReady, label: "Реквизиты", hint: "Обязательно для сделок" },
-    { done: bankReady, label: "Банк", hint: "Для выплат" },
-    { done: ordReady, label: "ОРД", hint: "Для маркировки рекламы" },
-  ];
-  const readiness = readinessItems.filter((i) => i.done).length;
-  const readinessPercent = (readiness / readinessItems.length) * 100;
+  // ─── Section statuses ───
+  const legalCfg = getLegalConfig(form.business_type);
+  const legalStatus = getSectionStatus(isLegalFieldsValid(form), form.business_verified);
+  const bankStatus = getSectionStatus(isBankFieldsValid(form), form.bank_verified);
+  const brandStatus: SectionStatus = form.brand_name ? "verified" : "empty"; // brand has no server verification
+  const ordStatus = getSectionStatus(!!form.ord_identifier, form.ord_verified);
 
-  // ─── Legal field config based on business type ───
-  const isIP = form.business_type === "ip" || form.business_type === "self";
-  const innMax = isIP ? 12 : 10;
-  const ogrnMax = isIP ? 15 : 13;
-  const ogrnLabel = isIP ? "ОГРНИП" : "ОГРН";
-  const nameLabel = isIP ? "ФИО предпринимателя *" : "Наименование организации *";
-  const namePlaceholder = isIP ? "Иванов Иван Иванович" : 'ООО "Компания"';
+  const readinessItems = [
+    { status: brandStatus, label: "Бренд", hint: "Обязательно для сделок" },
+    { status: legalStatus, label: "Реквизиты", hint: "Обязательно для сделок" },
+    { status: bankStatus, label: "Банк", hint: "Для выплат" },
+    { status: ordStatus, label: "ОРД", hint: "Для маркировки рекламы" },
+  ];
+  // Readiness: brand just needs name, others need verified
+  const readinessScore = [
+    !!form.brand_name,
+    form.business_verified && isLegalFieldsValid(form),
+    form.bank_verified && isBankFieldsValid(form),
+    form.ord_verified && !!form.ord_identifier,
+  ].filter(Boolean).length;
+  const readinessPercent = (readinessScore / 4) * 100;
 
   if (isLoading) {
     return <div className="p-8 text-center text-sm text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />Загрузка…</div>;
@@ -266,13 +335,13 @@ export function AdvertiserSettings() {
         <div className="rounded-xl border border-border bg-card p-4 space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-card-foreground">Готовность профиля</span>
-            <span className="text-xs text-muted-foreground">{readiness} / {readinessItems.length}</span>
+            <span className="text-xs text-muted-foreground">{readinessScore} / 4</span>
           </div>
           <Progress value={readinessPercent} className="h-1.5" />
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {readinessItems.map((item) => (
               <div key={item.label} className="space-y-0.5">
-                <SectionCheck done={item.done} label={item.label} />
+                <SectionCheck status={item.status} label={item.label} />
                 <p className="text-[10px] text-muted-foreground pl-5">{item.hint}</p>
               </div>
             ))}
@@ -338,9 +407,14 @@ export function AdvertiserSettings() {
                     </button>
                   </div>
                 ) : (
-                  <div className="h-9 w-9 rounded border border-dashed border-border flex items-center justify-center flex-shrink-0">
-                    <ImageIcon className="h-4 w-4 text-muted-foreground" />
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="h-9 w-9 rounded border border-dashed border-border flex items-center justify-center flex-shrink-0 hover:border-primary/50 hover:bg-muted/30 transition-colors cursor-pointer"
+                    title="Загрузить логотип"
+                  >
+                    <Upload className="h-3.5 w-3.5 text-muted-foreground" />
+                  </button>
                 )}
                 <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={async (e) => {
                   const file = e.target.files?.[0];
@@ -363,7 +437,7 @@ export function AdvertiserSettings() {
                 <Button type="button" size="sm" variant="outline" className="h-9 text-xs gap-1.5" disabled={uploading}
                   onClick={() => fileInputRef.current?.click()}>
                   <Upload className="h-3.5 w-3.5" />
-                  {uploading ? "Загрузка…" : "Загрузить"}
+                  {uploading ? "Загрузка…" : form.brand_logo_url ? "Заменить" : "Загрузить"}
                 </Button>
               </div>
             </div>
@@ -375,6 +449,7 @@ export function AdvertiserSettings() {
           <CardHeader className="pb-1 pt-3 px-4">
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
               <Building2 className="h-4 w-4 text-primary" /> Реквизиты
+              <StatusBadge status={legalStatus} />
               <PrivacyLabel isPublic={false} />
             </CardTitle>
           </CardHeader>
@@ -385,46 +460,52 @@ export function AdvertiserSettings() {
                 <Select value={form.business_type || ""} onValueChange={(v) => update("business_type", v)}>
                   <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Выберите тип" /></SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="self">Самозанятый (НПД)</SelectItem>
                     <SelectItem value="ip">ИП</SelectItem>
                     <SelectItem value="ooo">ООО</SelectItem>
-                    <SelectItem value="self">Самозанятый</SelectItem>
                     <SelectItem value="ul">Юр. лицо (иное)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1">
-                <Label className="text-xs">{nameLabel}</Label>
-                <Input value={form.business_name} onChange={(e) => update("business_name", e.target.value)}
-                  placeholder={namePlaceholder} className="text-sm h-9" maxLength={200} />
-              </div>
+              {form.business_type && legalCfg.showName && (
+                <div className="space-y-1">
+                  <Label className="text-xs">{legalCfg.nameLabel}</Label>
+                  <Input value={form.business_name} onChange={(e) => update("business_name", e.target.value)}
+                    placeholder={legalCfg.namePlaceholder} className="text-sm h-9" maxLength={200} />
+                </div>
+              )}
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs">ИНН * <span className="text-muted-foreground font-normal">({innMax} цифр)</span></Label>
-                <Input value={form.business_inn} onChange={(e) => update("business_inn", e.target.value.replace(/\D/g, "").slice(0, innMax))}
-                  placeholder={"0".repeat(innMax)} className="text-sm h-9 font-mono" maxLength={innMax} />
-                {form.business_inn.length > 0 && form.business_inn.length !== innMax && (
-                  <p className="text-[10px] text-warning">{form.business_inn.length}/{innMax} цифр</p>
+            {form.business_type && (
+              <div className={`grid gap-3 ${legalCfg.showOgrn ? "grid-cols-2" : "grid-cols-1"}`}>
+                <div className="space-y-1">
+                  <Label className="text-xs">ИНН * <span className="text-muted-foreground font-normal">({legalCfg.innLen} цифр)</span></Label>
+                  <Input value={form.business_inn} onChange={(e) => update("business_inn", e.target.value.replace(/\D/g, "").slice(0, legalCfg.innLen))}
+                    placeholder={"0".repeat(legalCfg.innLen)} className="text-sm h-9 font-mono" maxLength={legalCfg.innLen} />
+                  {form.business_inn.length > 0 && form.business_inn.length !== legalCfg.innLen && (
+                    <p className="text-[10px] text-warning">{form.business_inn.length}/{legalCfg.innLen} цифр</p>
+                  )}
+                </div>
+                {legalCfg.showOgrn && (
+                  <div className="space-y-1">
+                    <Label className="text-xs">{legalCfg.ogrnLabel} * <span className="text-muted-foreground font-normal">({legalCfg.ogrnLen} цифр)</span></Label>
+                    <Input value={form.business_ogrn} onChange={(e) => update("business_ogrn", e.target.value.replace(/\D/g, "").slice(0, legalCfg.ogrnLen))}
+                      placeholder={"0".repeat(legalCfg.ogrnLen)} className="text-sm h-9 font-mono" maxLength={legalCfg.ogrnLen} />
+                    {form.business_ogrn.length > 0 && form.business_ogrn.length !== legalCfg.ogrnLen && (
+                      <p className="text-[10px] text-warning">{form.business_ogrn.length}/{legalCfg.ogrnLen} цифр</p>
+                    )}
+                  </div>
                 )}
               </div>
-              <div className="space-y-1">
-                <Label className="text-xs">{ogrnLabel} <span className="text-muted-foreground font-normal">({ogrnMax} цифр)</span></Label>
-                <Input value={form.business_ogrn} onChange={(e) => update("business_ogrn", e.target.value.replace(/\D/g, "").slice(0, ogrnMax))}
-                  placeholder={"0".repeat(ogrnMax)} className="text-sm h-9 font-mono" maxLength={ogrnMax} />
-                {form.business_ogrn.length > 0 && form.business_ogrn.length !== ogrnMax && (
-                  <p className="text-[10px] text-warning">{form.business_ogrn.length}/{ogrnMax} цифр</p>
-                )}
-              </div>
-            </div>
+            )}
+            {!form.business_type && (
+              <p className="text-xs text-muted-foreground py-2">Выберите форму собственности, чтобы заполнить реквизиты</p>
+            )}
             <VerifyResult state={verifyStates.business} successText="Реквизиты подтверждены" errorText="Проверьте заполнение полей" />
-            {verifyStates.business !== "success" && !form.business_verified && (
+            {legalStatus === "filled" && !form.business_verified && verifyStates.business !== "success" && (
               <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" onClick={() => mockVerify("business")} disabled={verifyStates.business === "loading"}>
                 <ShieldCheck className="h-3.5 w-3.5" />
                 {dirty ? "Сохранить и проверить" : "Проверить"}
               </Button>
-            )}
-            {form.business_verified && verifyStates.business !== "loading" && (
-              <VerifyResult state="success" successText="Реквизиты подтверждены" />
             )}
           </CardContent>
         </Card>
@@ -434,6 +515,7 @@ export function AdvertiserSettings() {
           <CardHeader className="pb-1 pt-3 px-4">
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
               <Landmark className="h-4 w-4 text-primary" /> Банковские реквизиты
+              <StatusBadge status={bankStatus} />
               <PrivacyLabel isPublic={false} />
             </CardTitle>
           </CardHeader>
@@ -441,14 +523,7 @@ export function AdvertiserSettings() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs">БИК * <span className="text-muted-foreground font-normal">(9 цифр)</span></Label>
-                <Input value={form.bank_bik} onChange={(e) => {
-                  const v = e.target.value.replace(/\D/g, "").slice(0, 9);
-                  update("bank_bik", v);
-                  // Auto-fill hint
-                  if (v.length === 9 && !form.bank_name) {
-                    update("bank_name", "Банк (определяется по БИК)");
-                  }
-                }}
+                <Input value={form.bank_bik} onChange={(e) => handleBikChange(e.target.value)}
                   placeholder="044525974" className="text-sm h-9 font-mono" maxLength={9} />
                 {form.bank_bik.length > 0 && form.bank_bik.length !== 9 && (
                   <p className="text-[10px] text-warning">{form.bank_bik.length}/9 цифр</p>
@@ -456,9 +531,10 @@ export function AdvertiserSettings() {
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Банк</Label>
-                <Input value={form.bank_name} onChange={(e) => update("bank_name", e.target.value)}
-                  placeholder="Заполняется из БИК или вручную" className="text-sm h-9" maxLength={200} />
-                <p className="text-[10px] text-muted-foreground"><Info className="h-2.5 w-2.5 inline mr-0.5 -mt-px" />При вводе БИК банк определится автоматически</p>
+                <Input value={form.bank_name} readOnly
+                  placeholder={form.bank_bik.length === 9 ? "Определяется…" : "Заполнится автоматически по БИК"}
+                  className="text-sm h-9 bg-muted/30 cursor-not-allowed" />
+                <p className="text-[10px] text-muted-foreground"><Info className="h-2.5 w-2.5 inline mr-0.5 -mt-px" />Определяется автоматически по БИК</p>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -480,14 +556,11 @@ export function AdvertiserSettings() {
               </div>
             </div>
             <VerifyResult state={verifyStates.bank} successText="Банк подтверждён" errorText="Проверьте заполнение" />
-            {verifyStates.bank !== "success" && !form.bank_verified && (
+            {bankStatus === "filled" && !form.bank_verified && verifyStates.bank !== "success" && (
               <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" onClick={() => mockVerify("bank")} disabled={verifyStates.bank === "loading"}>
                 <ShieldCheck className="h-3.5 w-3.5" />
                 {dirty ? "Сохранить и проверить" : "Проверить"}
               </Button>
-            )}
-            {form.bank_verified && verifyStates.bank !== "loading" && (
-              <VerifyResult state="success" successText="Банк подтверждён" />
             )}
           </CardContent>
         </Card>
@@ -497,12 +570,12 @@ export function AdvertiserSettings() {
           <CardHeader className="pb-1 pt-3 px-4">
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
               <ShieldCheck className="h-4 w-4 text-primary" /> ОРД — Маркировка рекламы
+              <StatusBadge status={ordStatus} />
               <PrivacyLabel isPublic={false} />
             </CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-3 space-y-3 flex-1">
             {!form.ord_verified && verifyStates.ord !== "success" ? (
-              /* Not connected state */
               <>
                 <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2">
                   <p className="text-xs text-muted-foreground leading-relaxed">
@@ -535,13 +608,13 @@ export function AdvertiserSettings() {
                   </div>
                 </div>
                 <VerifyResult state={verifyStates.ord} successText="ОРД подключён" errorText="Проверьте идентификатор" />
-                <Button size="sm" className="gap-1.5 h-9 text-xs" onClick={() => mockVerify("ord")} disabled={verifyStates.ord === "loading"}>
+                <Button size="sm" className="gap-1.5 h-9 text-xs" onClick={() => mockVerify("ord")}
+                  disabled={verifyStates.ord === "loading" || !form.ord_identifier}>
                   <PlugZap className="h-3.5 w-3.5" />
                   {dirty ? "Сохранить и подключить" : "Подключить ОРД"}
                 </Button>
               </>
             ) : (
-              /* Connected state */
               <>
                 <div className="rounded-lg border border-success/20 bg-success/5 p-3 space-y-2">
                   <div className="flex items-center justify-between">
