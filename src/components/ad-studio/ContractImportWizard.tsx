@@ -100,29 +100,39 @@ function confidenceLabel(c: number): string {
   return "Низкая";
 }
 
-// ─── Text extraction from files ───
-async function extractTextFromFile(file: File): Promise<string> {
-  if (file.name.endsWith(".docx")) {
-    const mammoth = await import("mammoth");
-    const arrayBuffer = await file.arrayBuffer();
-    const result = await mammoth.extractRawText({ arrayBuffer });
-    return result.value;
+// ─── Server-side extraction (no client-side PDF.js / CDN dependency) ───
+async function serverExtractContract(
+  file: File,
+  redactSensitive: boolean,
+  onProgress: (stage: "uploading" | "parsing" | "extracting" | "validating", pct: number) => void,
+): Promise<{ fields: Record<string, any>; textLength: number }> {
+  onProgress("uploading", 10);
+
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("redactSensitive", String(redactSensitive));
+
+  onProgress("uploading", 30);
+
+  const { data, error } = await supabase.functions.invoke("extract-contract", {
+    body: formData,
+  });
+
+  if (error) {
+    // supabase SDK wraps non-2xx as error
+    const msg = (error as any)?.message || String(error);
+    throw new Error(msg);
   }
-  // PDF extraction
-  if (file.type === "application/pdf") {
-    const pdfjs = await import("pdfjs-dist");
-    pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
-    const arrayBuffer = await file.arrayBuffer();
-    const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
-    const pages: string[] = [];
-    for (let i = 1; i <= Math.min(pdf.numPages, 30); i++) {
-      const page = await pdf.getPage(i);
-      const content = await page.getTextContent();
-      pages.push(content.items.map((item: any) => item.str).join(" "));
-    }
-    return pages.join("\n\n");
+  if (data?.error) {
+    const err = new Error(data.error) as any;
+    err._debug = data._debug;
+    throw err;
   }
-  return await file.text();
+  if (!data?.fields) {
+    throw new Error("Сервер не вернул данные. Попробуйте ещё раз.");
+  }
+
+  return { fields: data.fields, textLength: data.textLength ?? 0 };
 }
 
 // ─── Step indicator ───
@@ -276,82 +286,83 @@ function ExtractionStep({ onNext, file, redactSensitive, onFieldsExtracted, onTe
   onTextExtracted?: (text: string) => void;
 }) {
   const [progress, setProgress] = useState(0);
-  const [stage, setStage] = useState<"parsing" | "extracting" | "validating" | "done" | "error">("parsing");
+  const [stage, setStage] = useState<"uploading" | "parsing" | "extracting" | "validating" | "done" | "error">("uploading");
   const [errorMsg, setErrorMsg] = useState("");
+  const [errorDebug, setErrorDebug] = useState("");
+  const [showDebug, setShowDebug] = useState(false);
   const [fieldsCount, setFieldsCount] = useState(0);
   const started = useRef(false);
+
+  const runExtraction = useCallback(async () => {
+    setStage("uploading");
+    setProgress(5);
+    setErrorMsg("");
+    setErrorDebug("");
+
+    try {
+      const result = await serverExtractContract(file, redactSensitive, (s, pct) => {
+        setStage(s);
+        setProgress(pct);
+      });
+
+      // Stage: extracting (server did this, simulate locally)
+      setStage("extracting");
+      setProgress(60);
+
+      const extracted = result.fields;
+
+      // Stage: validating
+      setStage("validating");
+      setProgress(85);
+
+      const mappedFields: ExtractedField[] = fieldMeta.map((fm) => {
+        const aiField = extracted[fm.key];
+        return {
+          key: fm.key,
+          label: fm.label,
+          value: aiField?.value || "",
+          confidence: aiField?.confidence || 0,
+          sourceSnippet: aiField?.sourceSnippet || "",
+          editable: true,
+          category: fm.category,
+        };
+      }).filter((f) => f.value || f.sourceSnippet);
+
+      setFieldsCount(mappedFields.length);
+      onFieldsExtracted(mappedFields);
+
+      // Store text length info for audit (no actual text stored client-side)
+      if (result.textLength > 0) {
+        onTextExtracted?.(`[Извлечено на сервере, ${result.textLength} символов]`);
+      }
+
+      setStage("done");
+      setProgress(100);
+    } catch (e: any) {
+      console.error("Extraction error:", e);
+      setStage("error");
+      setErrorMsg(e.message || "Произошла ошибка при обработке документа.");
+      setErrorDebug(e._debug || e.stack || "");
+      toast.error("Ошибка извлечения данных");
+    }
+  }, [file, redactSensitive, onFieldsExtracted, onTextExtracted]);
 
   useEffect(() => {
     if (started.current) return;
     started.current = true;
+    runExtraction();
+  }, [runExtraction]);
 
-    (async () => {
-      try {
-        // Stage 1: Parse document
-        setStage("parsing");
-        setProgress(20);
-        const text = await extractTextFromFile(file);
-
-        if (!text || text.trim().length < 50) {
-          throw new Error("Не удалось извлечь текст из документа. Убедитесь, что файл содержит текст.");
-        }
-
-        onTextExtracted?.(text);
-
-        // Stage 2: AI extraction
-        setStage("extracting");
-        setProgress(50);
-
-        const { data, error } = await supabase.functions.invoke("extract-contract", {
-          body: { text, redactSensitive },
-        });
-
-        if (error) throw new Error(error.message || "Ошибка вызова AI");
-        if (data?.error) throw new Error(data.error);
-
-        const extracted = data.fields;
-        if (!extracted) throw new Error("AI не вернул данные");
-
-        // Stage 3: Map to fields
-        setStage("validating");
-        setProgress(85);
-
-        const mappedFields: ExtractedField[] = fieldMeta.map((fm) => {
-          const aiField = extracted[fm.key];
-          return {
-            key: fm.key,
-            label: fm.label,
-            value: aiField?.value || "",
-            confidence: aiField?.confidence || 0,
-            sourceSnippet: aiField?.sourceSnippet || "",
-            editable: true,
-            category: fm.category,
-          };
-        }).filter((f) => f.value || f.sourceSnippet);
-
-        setFieldsCount(mappedFields.length);
-        onFieldsExtracted(mappedFields);
-
-        setStage("done");
-        setProgress(100);
-      } catch (e: any) {
-        console.error("Extraction error:", e);
-        setStage("error");
-        setErrorMsg(e.message || "Неизвестная ошибка");
-        toast.error("Ошибка извлечения данных из договора");
-      }
-    })();
-  }, [file, redactSensitive, onFieldsExtracted]);
-
-  const stageLabels = {
-    parsing: "Разбор документа…",
+  const stageLabels: Record<string, string> = {
+    uploading: "Загрузка документа на сервер…",
+    parsing: "Разбор структуры документа…",
     extracting: "AI извлекает ключевые поля…",
     validating: "Валидация данных…",
     done: "Извлечение завершено",
     error: "Ошибка извлечения",
   };
 
-  const stagesOrder = ["parsing", "extracting", "validating", "done"] as const;
+  const stagesOrder = ["uploading", "parsing", "extracting", "validating", "done"] as const;
 
   return (
     <div className="space-y-5">
@@ -374,28 +385,46 @@ function ExtractionStep({ onNext, file, redactSensitive, onFieldsExtracted, onTe
           {stage !== "error" && <Progress value={progress} className="h-2" />}
 
           {stage === "error" && (
-            <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4">
+            <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 space-y-3">
               <p className="text-sm text-destructive font-medium">{errorMsg}</p>
-              <p className="text-xs text-muted-foreground mt-1">Попробуйте другой файл или повторите попытку позже.</p>
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => { started.current = false; runExtraction(); }}>
+                  <ArrowRight className="h-3 w-3" />
+                  Повторить
+                </Button>
+                <span className="text-xs text-muted-foreground">или загрузите другой файл</span>
+              </div>
+              {errorDebug && (
+                <div>
+                  <button type="button" className="text-[11px] text-muted-foreground underline" onClick={() => setShowDebug(!showDebug)}>
+                    {showDebug ? "Скрыть детали" : "Показать детали"}
+                  </button>
+                  {showDebug && (
+                    <pre className="mt-1.5 text-[10px] text-muted-foreground/70 bg-background/50 rounded p-2 overflow-x-auto max-h-24 whitespace-pre-wrap">{errorDebug}</pre>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
           <div className="space-y-2">
             {stagesOrder.map((s) => {
-              const icons = {
+              const icons: Record<string, any> = {
+                uploading: Upload,
                 parsing: FileText,
                 extracting: Sparkles,
                 validating: ShieldCheck,
                 done: CheckCircle2,
               };
-              const labels = {
+              const labels: Record<string, string> = {
+                uploading: "Загрузка документа на сервер",
                 parsing: "Разбор структуры документа",
                 extracting: "AI-извлечение ключевых полей",
                 validating: "Валидация ИНН, ОГРН, дат",
                 done: "Готово к проверке",
               };
-              const Icon = icons[s];
-              const currentIdx = stagesOrder.indexOf(stage === "error" ? "extracting" : stage as any);
+              const Icon = icons[s] || FileText;
+              const currentIdx = stagesOrder.indexOf(stage === "error" ? "uploading" : stage as any);
               const sIdx = stagesOrder.indexOf(s);
               const isDone = sIdx < currentIdx || stage === "done";
               const isActive = sIdx === currentIdx && stage !== "done" && stage !== "error";
