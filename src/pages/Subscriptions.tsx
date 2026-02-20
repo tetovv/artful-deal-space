@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { SelectTabPrompt } from "@/pages/Home";
+
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -267,8 +267,6 @@ export default function Subscriptions() {
                   </Button>
                 </motion.div>
               </motion.div>
-            ) : !activeType ? (
-              <SelectTabPrompt onSelectType={setActiveType} />
             ) : feedLoading ? (
               <div className="text-center py-16 text-muted-foreground">Загрузка ленты...</div>
             ) : filteredFeed.length === 0 ? (
