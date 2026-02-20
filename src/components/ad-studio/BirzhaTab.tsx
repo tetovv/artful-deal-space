@@ -15,9 +15,10 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   CheckCircle2, AlertTriangle,
   Search, MapPin, Users, Filter, MessageSquarePlus, Eye, X, Loader2, RotateCcw, Globe, Clock,
-  Handshake, Zap, ExternalLink, ShieldCheck, Tag, Lock,
+  Handshake, Zap, ExternalLink, ShieldCheck, Tag, Lock, Sparkles, ArrowLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { BriefWizard, type BriefData } from "./BriefWizard";
 
 const NICHES = ["Образование", "Технологии", "Дизайн", "Фото", "Музыка", "Подкасты", "Бизнес", "Видео", "Motion"];
 const GEOS = ["Россия", "Беларусь", "Казахстан", "Украина"];
@@ -332,8 +333,8 @@ function MetricCell({ icon, label, value }: { icon: React.ReactNode; label: stri
 }
 
 /* ── Creator Card ── */
-function CreatorCard({ creator, isVerified, categoryLabel }: {
-  creator: ProfileRow; isVerified: boolean; categoryLabel?: string;
+function CreatorCard({ creator, isVerified, categoryLabel, matchReasons }: {
+  creator: ProfileRow; isVerified: boolean; categoryLabel?: string; matchReasons?: string[];
 }) {
   const [quickView, setQuickView] = useState(false);
   const meta = getCreatorMeta(creator.user_id);
@@ -419,6 +420,17 @@ function CreatorCard({ creator, isVerified, categoryLabel }: {
             </div>
           )}
 
+          {/* Match reasons (brief results mode) */}
+          {matchReasons && matchReasons.length > 0 && (
+            <div className="bg-primary/5 border border-primary/20 rounded-md px-3 py-2 space-y-0.5">
+              {matchReasons.map((reason, i) => (
+                <p key={i} className="text-[12px] text-primary flex items-center gap-1.5">
+                  <CheckCircle2 className="h-3 w-3 shrink-0" />{reason}
+                </p>
+              ))}
+            </div>
+          )}
+
           {/* Footer actions */}
           <div className="flex items-center justify-between pt-1.5 border-t border-border/50">
             <div className="flex items-center gap-1.5">
@@ -449,6 +461,83 @@ function CreatorCard({ creator, isVerified, categoryLabel }: {
   );
 }
 
+/* ── Brief matching logic ── */
+const PLACEMENT_TYPE_MAP: Record<string, string> = {
+  video: "Видео-интеграция",
+  post: "Пост",
+  podcast: "Подкаст",
+};
+
+function getMatchReasons(creator: ProfileRow, brief: BriefData): string[] {
+  const meta = getCreatorMeta(creator.user_id);
+  const reasons: string[] = [];
+  const targetType = PLACEMENT_TYPE_MAP[brief.placementType];
+
+  // Check if creator has the requested offer type within budget
+  const matchingOffer = meta.offers.find((o) => o.type === targetType);
+  if (matchingOffer) {
+    if (brief.budgetMax > 0 && matchingOffer.price <= brief.budgetMax) {
+      reasons.push(`${targetType} в рамках бюджета (от ${matchingOffer.price.toLocaleString("ru-RU")} ₽)`);
+    } else {
+      reasons.push(`Предлагает ${targetType}`);
+    }
+  }
+
+  // Niche match
+  if (brief.niches.length > 0) {
+    const matching = (creator.niche || []).filter((n) => brief.niches.includes(n));
+    if (matching.length > 0) reasons.push(`Ниша совпадает: ${matching.slice(0, 2).join(", ")}`);
+  }
+
+  // Geo match
+  if (brief.geos.length > 0 && creator.geo && brief.geos.includes(creator.geo)) {
+    reasons.push(`Регион: ${creator.geo}`);
+  }
+
+  // Response time match
+  if (brief.turnaroundDays > 0 && meta.responseHours <= brief.turnaroundDays * 24) {
+    if (meta.responseHours <= 12) reasons.push(`Быстрый ответ (~${meta.responseHours} ч)`);
+  }
+
+  return reasons.slice(0, 2); // max 2 reasons
+}
+
+function matchesBrief(creator: ProfileRow, brief: BriefData): boolean {
+  const meta = getCreatorMeta(creator.user_id);
+  const targetType = PLACEMENT_TYPE_MAP[brief.placementType];
+
+  // Must have the requested offer type
+  const hasOffer = meta.offers.some((o) => o.type === targetType);
+  if (!hasOffer && meta.offers.length > 0) return false; // has offers but not the right type — skip
+  // If no offers at all, still include (price on request)
+
+  // Budget filter
+  if (brief.budgetMax > 0 && brief.budgetMax < 500000) {
+    const matchingOffer = meta.offers.find((o) => o.type === targetType);
+    if (matchingOffer && matchingOffer.price > brief.budgetMax) return false;
+  }
+
+  // Niche filter
+  if (brief.niches.length > 0) {
+    const match = (creator.niche || []).some((n) => brief.niches.includes(n));
+    if (!match) return false;
+  }
+
+  // Geo filter
+  if (brief.geos.length > 0) {
+    if (!creator.geo || !brief.geos.includes(creator.geo)) return false;
+  }
+
+  // Audience size
+  if (brief.audienceMin > 0 && (creator.followers || 0) < brief.audienceMin) return false;
+  if (brief.audienceMax < 1000000 && (creator.followers || 0) > brief.audienceMax) return false;
+
+  // Exclude no analytics
+  if (brief.excludeNoAnalytics && meta.platforms.length === 0) return false;
+
+  return true;
+}
+
 /* ── Main BirzhaTab ── */
 export function BirzhaTab({ isVerified, onGoToSettings }: { isVerified: boolean; onGoToSettings: () => void }) {
   const [searchQuery, setSearchQuery] = useState("");
@@ -459,6 +548,10 @@ export function BirzhaTab({ isVerified, onGoToSettings }: { isVerified: boolean;
   const [filters, setFilters] = useState<FilterState>({ ...defaultFilters });
   const [appliedFilters, setAppliedFilters] = useState<FilterState>({ ...defaultFilters });
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // Brief wizard state
+  const [briefOpen, setBriefOpen] = useState(false);
+  const [activeBrief, setActiveBrief] = useState<BriefData | null>(null);
 
   useEffect(() => {
     const fetchProfiles = async () => {
@@ -505,6 +598,14 @@ export function BirzhaTab({ isVerified, onGoToSettings }: { isVerified: boolean;
     setFilters(updater);
   };
 
+  const handleBriefSubmit = (brief: BriefData) => {
+    setActiveBrief(brief);
+    setBriefOpen(false);
+  };
+
+  const clearBrief = () => setActiveBrief(null);
+
+  // Normal filtered list
   const filtered = useMemo(() => {
     let result = [...profiles];
     const f = appliedFilters;
@@ -542,85 +643,160 @@ export function BirzhaTab({ isVerified, onGoToSettings }: { isVerified: boolean;
     return result;
   }, [searchQuery, appliedFilters, sortBy, profiles, brandCategories]);
 
+  // Brief-matched list
+  const briefResults = useMemo(() => {
+    if (!activeBrief) return [];
+    return profiles
+      .filter((c) => matchesBrief(c, activeBrief))
+      .sort((a, b) => {
+        // Sort by number of match reasons (most relevant first)
+        return getMatchReasons(b, activeBrief!).length - getMatchReasons(a, activeBrief!).length;
+      });
+  }, [activeBrief, profiles]);
+
   const activeChips = getActiveChips(appliedFilters);
   const filtersActive = hasActiveFilters(appliedFilters);
   const filterCount = activeChips.length;
+
+  const showBriefResults = activeBrief !== null;
 
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="max-w-[1200px] mx-auto px-4 py-4 space-y-3">
         {!isVerified && <VerificationBanner onGoToSettings={onGoToSettings} />}
 
-        {/* Search bar */}
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Поиск по имени, нише, платформе..." className="pl-9 bg-background h-10" />
-          </div>
-          <Select value={sortBy} onValueChange={setSortBy}>
-            <SelectTrigger className="w-52 h-10"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {SORT_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
-            <SheetTrigger asChild>
-              <Button variant="outline" className="h-10 gap-1.5 relative">
-                <Filter className="h-4 w-4" />Фильтры
-                {filterCount > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center font-semibold">
-                    {filterCount}
-                  </span>
-                )}
-              </Button>
-            </SheetTrigger>
-            <SheetContent className="w-[340px] sm:w-[380px] flex flex-col">
-              <SheetHeader><SheetTitle>Фильтры</SheetTitle></SheetHeader>
-              <FilterDrawerContent filters={filters} setFilters={setFilters} onApply={applyFilters} onReset={resetFilters} />
-            </SheetContent>
-          </Sheet>
-        </div>
+        {/* Brief results header */}
+        {showBriefResults ? (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Button variant="ghost" size="sm" onClick={clearBrief} className="gap-1.5 text-[13px] h-8">
+                  <ArrowLeft className="h-3.5 w-3.5" />Назад к каталогу
+                </Button>
+                <Separator orientation="vertical" className="h-5" />
+                <div>
+                  <p className="text-[15px] font-semibold text-foreground flex items-center gap-1.5">
+                    <Sparkles className="h-4 w-4 text-primary" />
+                    Результаты по брифу
+                  </p>
+                  <p className="text-[12px] text-muted-foreground">
+                    {PLACEMENT_TYPE_MAP[activeBrief.placementType]}
+                    {activeBrief.budgetMax < 500000 && ` • до ${activeBrief.budgetMax.toLocaleString("ru-RU")} ₽`}
+                    {activeBrief.niches.length > 0 && ` • ${activeBrief.niches.slice(0, 2).join(", ")}`}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[13px] text-muted-foreground">
+                  Найдено: <span className="font-medium text-foreground">{briefResults.length}</span>
+                </span>
+                <Button variant="outline" size="sm" onClick={() => { clearBrief(); setBriefOpen(true); }} className="text-[12px] h-8">
+                  Изменить бриф
+                </Button>
+              </div>
+            </div>
 
-        {/* Result count + chips */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[13px] text-muted-foreground">
-            Найдено: <span className="font-medium text-foreground">{filtered.length}</span>
-          </span>
-          {activeChips.map((chip) => (
-            <Badge key={chip.key} variant="secondary" className="text-[11px] gap-1 pr-1 cursor-pointer hover:bg-destructive/10"
-              onClick={() => removeChip(chip.key)}>
-              {chip.label}<X className="h-3 w-3" />
-            </Badge>
-          ))}
-          {filtersActive && (
-            <button className="text-[12px] text-primary hover:underline ml-1" onClick={resetFilters}>Сбросить все</button>
-          )}
-        </div>
-
-        {/* Grid */}
-        {loading ? (
-          <div className="text-center py-20 flex flex-col items-center gap-2 text-muted-foreground">
-            <Loader2 className="h-6 w-6 animate-spin" /><span className="text-sm">Загрузка авторов...</span>
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="text-center py-20 space-y-3">
-            <p className="text-sm text-muted-foreground">Авторы не найдены по вашим критериям.</p>
-            {filtersActive && (
-              <Button variant="outline" size="sm" onClick={resetFilters}>
-                <RotateCcw className="h-3.5 w-3.5 mr-1.5" />Сбросить фильтры
-              </Button>
+            {/* Brief results grid */}
+            {briefResults.length === 0 ? (
+              <div className="text-center py-20 space-y-3">
+                <p className="text-sm text-muted-foreground">Авторы не найдены по вашему брифу.</p>
+                <Button variant="outline" size="sm" onClick={() => { clearBrief(); setBriefOpen(true); }}>
+                  <RotateCcw className="h-3.5 w-3.5 mr-1.5" />Изменить критерии
+                </Button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                {briefResults.map((creator) => (
+                  <CreatorCard
+                    key={creator.user_id}
+                    creator={creator}
+                    isVerified={isVerified}
+                    categoryLabel={brandCategories[creator.user_id] ? BUSINESS_CATEGORIES[brandCategories[creator.user_id]] || brandCategories[creator.user_id] : undefined}
+                    matchReasons={getMatchReasons(creator, activeBrief)}
+                  />
+                ))}
+              </div>
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            {filtered.map((creator) => (
-              <CreatorCard key={creator.user_id} creator={creator} isVerified={isVerified}
-                categoryLabel={brandCategories[creator.user_id] ? BUSINESS_CATEGORIES[brandCategories[creator.user_id]] || brandCategories[creator.user_id] : undefined} />
-            ))}
-          </div>
+          <>
+            {/* Search bar */}
+            <div className="flex items-center gap-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Поиск по имени, нише, платформе..." className="pl-9 bg-background h-10" />
+              </div>
+              <Button variant="outline" className="h-10 gap-1.5 shrink-0" onClick={() => setBriefOpen(true)}>
+                <Sparkles className="h-4 w-4" />Подобрать по брифу
+              </Button>
+              <Select value={sortBy} onValueChange={setSortBy}>
+                <SelectTrigger className="w-48 h-10"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {SORT_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
+                <SheetTrigger asChild>
+                  <Button variant="outline" className="h-10 gap-1.5 relative">
+                    <Filter className="h-4 w-4" />Фильтры
+                    {filterCount > 0 && (
+                      <span className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center font-semibold">
+                        {filterCount}
+                      </span>
+                    )}
+                  </Button>
+                </SheetTrigger>
+                <SheetContent className="w-[340px] sm:w-[380px] flex flex-col">
+                  <SheetHeader><SheetTitle>Фильтры</SheetTitle></SheetHeader>
+                  <FilterDrawerContent filters={filters} setFilters={setFilters} onApply={applyFilters} onReset={resetFilters} />
+                </SheetContent>
+              </Sheet>
+            </div>
+
+            {/* Result count + chips */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[13px] text-muted-foreground">
+                Найдено: <span className="font-medium text-foreground">{filtered.length}</span>
+              </span>
+              {activeChips.map((chip) => (
+                <Badge key={chip.key} variant="secondary" className="text-[11px] gap-1 pr-1 cursor-pointer hover:bg-destructive/10"
+                  onClick={() => removeChip(chip.key)}>
+                  {chip.label}<X className="h-3 w-3" />
+                </Badge>
+              ))}
+              {filtersActive && (
+                <button className="text-[12px] text-primary hover:underline ml-1" onClick={resetFilters}>Сбросить все</button>
+              )}
+            </div>
+
+            {/* Grid */}
+            {loading ? (
+              <div className="text-center py-20 flex flex-col items-center gap-2 text-muted-foreground">
+                <Loader2 className="h-6 w-6 animate-spin" /><span className="text-sm">Загрузка авторов...</span>
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="text-center py-20 space-y-3">
+                <p className="text-sm text-muted-foreground">Авторы не найдены по вашим критериям.</p>
+                {filtersActive && (
+                  <Button variant="outline" size="sm" onClick={resetFilters}>
+                    <RotateCcw className="h-3.5 w-3.5 mr-1.5" />Сбросить фильтры
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                {filtered.map((creator) => (
+                  <CreatorCard key={creator.user_id} creator={creator} isVerified={isVerified}
+                    categoryLabel={brandCategories[creator.user_id] ? BUSINESS_CATEGORIES[brandCategories[creator.user_id]] || brandCategories[creator.user_id] : undefined} />
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
+
+      <BriefWizard open={briefOpen} onClose={() => setBriefOpen(false)} onSubmit={handleBriefSubmit} />
     </div>
   );
 }
