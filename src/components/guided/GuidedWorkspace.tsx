@@ -146,16 +146,25 @@ function formatToActionType(format: OutputFormat): string {
 
 /** Call edge function with detailed error reporting */
 async function callEdge(fnName: string, body: any): Promise<any> {
+  const payloadSize = JSON.stringify(body).length;
+  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${fnName}`;
+
   const { data, error } = await supabase.functions.invoke(fnName, { body });
+
   if (error) {
-    // Try to extract detailed info
-    const edgeErr: EdgeError = {
-      functionName: fnName,
-      status: (error as any)?.status || 0,
-      body: typeof error === "string" ? error : (error as any)?.message || JSON.stringify(error).slice(0, 2000),
-    };
-    throw edgeErr;
+    const status = (error as any)?.status ?? 0;
+    let detail = typeof error === "string"
+      ? error
+      : (error as any)?.message || (error as any)?.details || (error as any)?.context || JSON.stringify(error).slice(0, 2000);
+
+    // HTTP 0 — no response at all (CORS / network / payload too large)
+    if (status === 0 || !status) {
+      detail = `Запрос не получил ответ (возможно: CORS, сеть или слишком большой payload ~${Math.round(payloadSize / 1024)}KB).\n\nОткрой DevTools → Network/Console для деталей.\n\nURL: ${url}\nPayload size: ~${Math.round(payloadSize / 1024)}KB\n\nОригинальная ошибка: ${detail}`;
+    }
+
+    throw { functionName: fnName, status, body: detail, payloadSize, url } as EdgeError & { payloadSize: number; url: string };
   }
+
   if (data?.error) {
     throw { functionName: fnName, status: data.status || 400, body: data.error } as EdgeError;
   }
@@ -165,7 +174,15 @@ async function callEdge(fnName: string, body: any): Promise<any> {
 /* ═══════════════ Error Card ═══════════════ */
 const EdgeErrorCard = ({ error, onRetry }: { error: EdgeError; onRetry?: () => void }) => {
   const [open, setOpen] = useState(false);
-  const report = `Function: ${error.functionName}\nStatus: ${error.status}\nBody: ${error.body}`;
+  const extra = error as EdgeError & { payloadSize?: number; url?: string };
+  const report = [
+    `Function: ${error.functionName}`,
+    `Status: ${error.status}`,
+    extra.url ? `URL: ${extra.url}` : null,
+    extra.payloadSize ? `Payload: ~${Math.round(extra.payloadSize / 1024)}KB` : null,
+    `Body: ${error.body}`,
+  ].filter(Boolean).join("\n");
+
   return (
     <Card className="border-destructive/30 bg-destructive/5">
       <CardContent className="pt-5 space-y-3">
@@ -174,6 +191,11 @@ const EdgeErrorCard = ({ error, onRetry }: { error: EdgeError; onRetry?: () => v
           <p className="text-sm font-medium text-foreground">Ошибка: {error.functionName}</p>
         </div>
         <p className="text-xs text-muted-foreground">HTTP {error.status}</p>
+        {error.status === 0 && (
+          <p className="text-xs text-yellow-600 bg-yellow-500/10 p-2 rounded">
+            💡 Запрос не получил ответ. Откройте DevTools → Network/Console для диагностики.
+          </p>
+        )}
         <Collapsible open={open} onOpenChange={setOpen}>
           <CollapsibleTrigger asChild>
             <Button variant="ghost" size="sm" className="text-xs">
@@ -588,13 +610,13 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
   }, []);
 
   /* ─── Generate pipeline ─── */
-  const runPipeline = async (projId: string, documents: { text: string; file_name: string }[], format: OutputFormat) => {
+  const runPipeline = async (projId: string, sources: { source_id: string; storage_path: string; file_name: string; mime: string }[], format: OutputFormat) => {
     setPipelineError(null);
 
     try {
-      // Ingest
+      // Ingest via storage references (no large text in payload)
       setGenStatus("ingesting");
-      await callEdge("project_ingest", { project_id: projId, documents });
+      await callEdge("project_ingest", { project_id: projId, sources });
 
       // Plan
       setGenStatus("planning");
@@ -650,24 +672,47 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
       if (projErr) throw { functionName: "create_project", status: 0, body: projErr.message };
       setProjectId(proj.id);
 
-      // Extract texts
-      const documents: { text: string; file_name: string }[] = [];
+      // Extract text on client, upload as .txt to Storage, collect source refs
+      const sources: { source_id: string; storage_path: string; file_name: string; mime: string }[] = [];
+
       for (const file of intake.files) {
         try {
           const text = await extractText(file);
-          documents.push({ text, file_name: file.name });
-          const storagePath = `${user.id}/${proj.id}/raw/${file.name}`;
-          await supabase.storage.from("ai_sources").upload(storagePath, file, { upsert: true });
+          if (!text.trim()) continue;
+
+          // Upload extracted text as .txt (small payload to Storage)
+          const txtBlob = new Blob([text], { type: "text/plain" });
+          const baseName = file.name.replace(/\.\w+$/, "");
+          const storagePath = `${user.id}/${proj.id}/extracted/${baseName}.txt`;
+          const { error: uploadErr } = await supabase.storage
+            .from("ai_sources")
+            .upload(storagePath, txtBlob, { upsert: true, contentType: "text/plain" });
+
+          if (uploadErr) {
+            console.warn(`Upload failed ${file.name}:`, uploadErr);
+            continue;
+          }
+
+          sources.push({
+            source_id: proj.id,
+            storage_path: storagePath,
+            file_name: file.name,
+            mime: file.type || "text/plain",
+          });
+
+          // Also upload original file for reference
+          const rawPath = `${user.id}/${proj.id}/raw/${file.name}`;
+          await supabase.storage.from("ai_sources").upload(rawPath, file, { upsert: true });
         } catch (e) {
           console.warn(`Extraction failed ${file.name}:`, e);
         }
       }
 
-      if (!documents.length || !documents.some((d) => d.text.trim())) {
+      if (!sources.length) {
         throw { functionName: "extractText", status: 0, body: "Не удалось извлечь текст ни из одного файла" } as EdgeError;
       }
 
-      await runPipeline(proj.id, documents, selectedFormat);
+      await runPipeline(proj.id, sources, selectedFormat);
     } catch (e: any) {
       console.error("Generate error:", e);
       setGenStatus("error");
@@ -732,7 +777,12 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
 
       const demoText = `TypeScript — язык программирования от Microsoft, надмножество JavaScript с статической типизацией.\n\nОсновные типы: string, number, boolean, any, void, null, undefined, never.\n\nИнтерфейсы описывают структуру объектов:\ninterface User { name: string; age: number; email?: string; }\n\nДженерики обеспечивают переиспользование:\nfunction identity<T>(arg: T): T { return arg; }\n\nEnum — именованные константы:\nenum Direction { Up, Down, Left, Right }\n\nUnion и Intersection типы:\ntype StringOrNumber = string | number;\ntype NamedAndAged = Named & Aged;`;
 
-      await runPipeline(proj.id, [{ text: demoText, file_name: "typescript.md" }], "COURSE_LEARN");
+      // Upload demo text to storage and pass as sources
+      const txtBlob = new Blob([demoText], { type: "text/plain" });
+      const storagePath = `${user.id}/${proj.id}/extracted/typescript.txt`;
+      await supabase.storage.from("ai_sources").upload(storagePath, txtBlob, { upsert: true, contentType: "text/plain" });
+
+      await runPipeline(proj.id, [{ source_id: proj.id, storage_path: storagePath, file_name: "typescript.md", mime: "text/plain" }], "COURSE_LEARN");
     } catch (e: any) {
       setGenStatus("error");
       setPipelineError(e.functionName ? e : { functionName: "unknown", status: 0, body: e.message || String(e) });
