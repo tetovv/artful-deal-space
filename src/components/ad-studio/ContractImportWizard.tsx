@@ -114,18 +114,26 @@ async function serverExtractContract(
 
   onProgress("uploading", 30);
 
-  const { data, error } = await supabase.functions.invoke("extract-contract", {
+  // Use raw fetch to get the actual JSON error body instead of SDK's generic message
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+  const { data: { session } } = await supabase.auth.getSession();
+
+  const resp = await fetch(`${supabaseUrl}/functions/v1/extract-contract`, {
+    method: "POST",
+    headers: {
+      "apikey": supabaseKey,
+      ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
+    },
     body: formData,
   });
 
-  if (error) {
-    // supabase SDK wraps non-2xx as error
-    const msg = (error as any)?.message || String(error);
-    throw new Error(msg);
-  }
-  if (data?.error) {
-    const err = new Error(data.error) as any;
-    err._debug = data._debug;
+  let data: any;
+  try { data = await resp.json(); } catch { data = null; }
+
+  if (!resp.ok || data?.error) {
+    const err = new Error(data?.error || "Ошибка обработки документа. Попробуйте ещё раз.") as any;
+    err._debug = data?._debug || `HTTP ${resp.status}`;
     throw err;
   }
   if (!data?.fields) {

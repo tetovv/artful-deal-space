@@ -46,23 +46,31 @@ const fieldNames = [
   "ordRequirements", "paymentTerms", "cancellationClause",
 ];
 
-// ─── PDF text extraction using pdf-parse ───
+// ─── PDF text extraction ───
 async function extractPdfText(data: Uint8Array): Promise<string> {
   try {
-    const pdfParse = (await import("npm:pdf-parse@1.1.1")).default;
-    const result = await pdfParse(Buffer.from(data));
-    return result.text || "";
+    // Use pdfjs-serverless which works in Deno/edge without Node Buffer
+    const { getDocument } = await import("https://esm.sh/pdfjs-serverless@0.6.0");
+    const doc = await getDocument(data).promise;
+    const pages: string[] = [];
+    for (let i = 1; i <= Math.min(doc.numPages, 30); i++) {
+      const page = await doc.getPage(i);
+      const content = await page.getTextContent();
+      pages.push(content.items.map((item: any) => item.str).join(" "));
+    }
+    return pages.join("\n\n");
   } catch (e) {
     console.error("PDF parse error:", e);
     throw new Error("PDF_PARSE_FAILED");
   }
 }
 
-// ─── DOCX text extraction using mammoth ───
+// ─── DOCX text extraction ───
 async function extractDocxText(data: Uint8Array): Promise<string> {
   try {
     const mammoth = await import("npm:mammoth@1.8.0");
-    const result = await mammoth.extractRawText({ buffer: Buffer.from(data) });
+    // mammoth accepts arrayBuffer in Deno
+    const result = await mammoth.extractRawText({ arrayBuffer: data.buffer });
     return result.value || "";
   } catch (e) {
     console.error("DOCX parse error:", e);
