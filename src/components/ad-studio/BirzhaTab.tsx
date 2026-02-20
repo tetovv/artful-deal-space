@@ -200,94 +200,117 @@ function QuickViewModal({ creator, open, onClose, isVerified, categoryLabel }: {
   creator: ProfileRow; open: boolean; onClose: () => void; isVerified: boolean; categoryLabel?: string;
 }) {
   const meta = getCreatorMeta(creator.user_id);
-  const reachStr = fmt(creator.reach);
-  const followersStr = fmt(creator.followers);
+
+  // Build metrics that have data
+  const metrics: { icon: React.ReactNode; label: string; value: string }[] = [];
+  const tgPlatform = meta.platforms.find((p) => p.name === "TG");
+  const ytPlatform = meta.platforms.find((p) => p.name === "YT");
+  if (tgPlatform) metrics.push({ icon: <Users className="h-4 w-4" />, label: "TG подписчики", value: tgPlatform.metric });
+  if (ytPlatform) metrics.push({ icon: <Eye className="h-4 w-4" />, label: "YT avg views", value: ytPlatform.metric });
+  if (meta.dealsCount > 0) metrics.push({ icon: <Handshake className="h-4 w-4" />, label: "Сделки завершены", value: String(meta.dealsCount) });
+  if (meta.responseHours > 0) metrics.push({ icon: <Clock className="h-4 w-4" />, label: "Среднее время ответа", value: `~${meta.responseHours} ч` });
+
+  // Turnaround estimates (simulated)
+  const turnaroundMap: Record<string, string> = {
+    "Видео-интеграция": "5–7 дн",
+    "Пост": "2–3 дн",
+    "Подкаст": "7–10 дн",
+  };
+
+  // Best fit line from niches
+  const niches = (creator.niche || []).slice(0, 4);
+  const bestFitLine = niches.length > 0 ? `Подходит для: ${niches.join(" / ")}` : null;
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-[760px]">
+        {/* 1) Header */}
         <DialogHeader>
           <DialogTitle className="flex items-center gap-3">
-            <img src={creator.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${creator.user_id}`}
-              alt="" className="h-10 w-10 rounded-full bg-muted object-cover" />
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-base font-semibold">{creator.display_name}</span>
-                {creator.verified && <CheckCircle2 className="h-4 w-4 text-primary" />}
+            <img
+              src={creator.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${creator.user_id}`}
+              alt="" className="h-12 w-12 rounded-full bg-muted object-cover shrink-0"
+            />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-lg font-semibold leading-tight">{creator.display_name}</span>
+                {creator.verified && <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />}
+                <Badge variant="outline" className="text-[11px] gap-1 border-primary/40 text-primary h-5">
+                  <Lock className="h-3 w-3" />Platform-only
+                </Badge>
+                {meta.safeDeal && (
+                  <Badge variant="outline" className="text-[11px] gap-1 border-green-500/40 text-green-400 h-5">
+                    <ShieldCheck className="h-3 w-3" />Safe deal
+                  </Badge>
+                )}
               </div>
-              {creator.bio && <p className="text-xs text-muted-foreground font-normal">{creator.bio}</p>}
+              {creator.bio && (
+                <p className="text-[13px] text-muted-foreground font-normal mt-0.5 line-clamp-1">{creator.bio}</p>
+              )}
+              <div className="flex flex-wrap gap-1.5 mt-1.5">
+                {niches.slice(0, 3).map((n) => (
+                  <Badge key={n} variant="secondary" className="text-[12px]">{n}</Badge>
+                ))}
+                {categoryLabel && <Badge variant="outline" className="text-[12px]">{categoryLabel}</Badge>}
+              </div>
             </div>
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4 mt-2">
-          {/* Badges */}
-          <div className="flex flex-wrap gap-1.5">
-            <Badge variant="outline" className="text-[11px] gap-1 border-primary/40 text-primary">
-              <Lock className="h-3 w-3" />Platform-only
-            </Badge>
-            {meta.safeDeal && (
-              <Badge variant="outline" className="text-[11px] gap-1 border-green-500/40 text-green-400">
-                <ShieldCheck className="h-3 w-3" />Safe deal
-              </Badge>
-            )}
-            {(creator.niche || []).slice(0, 3).map((n) => (
-              <Badge key={n} variant="secondary" className="text-xs">{n}</Badge>
-            ))}
-            {categoryLabel && <Badge variant="outline" className="text-xs">{categoryLabel}</Badge>}
-          </div>
-
-          {/* Platforms */}
-          {meta.platforms.length > 0 ? (
-            <div className="space-y-1.5">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Платформы</p>
-              <div className="flex gap-3">
-                {meta.platforms.map((p) => (
-                  <div key={p.name} className="flex items-center gap-1.5 bg-muted/50 rounded-md px-2.5 py-1.5">
-                    <span className="text-xs font-semibold text-foreground">{p.name}</span>
-                    <span className="text-xs text-muted-foreground">{p.metric}</span>
+        <div className="space-y-5 mt-3">
+          {/* 2) Metrics grid — only cells with data */}
+          {metrics.length > 0 ? (
+            <div className="grid grid-cols-2 gap-2.5">
+              {metrics.map((m) => (
+                <div key={m.label} className="flex items-center gap-3 bg-muted/30 rounded-lg px-3 py-2.5">
+                  <span className="text-muted-foreground">{m.icon}</span>
+                  <div className="min-w-0">
+                    <p className="text-[12px] text-muted-foreground leading-tight">{m.label}</p>
+                    <p className="text-[15px] font-semibold text-foreground leading-tight">{m.value}</p>
                   </div>
-                ))}
-              </div>
+                </div>
+              ))}
             </div>
           ) : (
-            <p className="text-xs text-muted-foreground italic">Аналитика не подключена</p>
+            <p className="text-[13px] text-muted-foreground/60 italic">Аналитика не подключена</p>
           )}
 
-          {/* Metrics grid (no rating) */}
-          <div className="grid grid-cols-2 gap-2">
-            <MetricCell icon={<Eye className="h-3.5 w-3.5" />} label="Охват" value={reachStr} />
-            <MetricCell icon={<Users className="h-3.5 w-3.5" />} label="Подписчики" value={followersStr} />
-            <MetricCell icon={<Clock className="h-3.5 w-3.5" />} label="Ответ" value={meta.responseHours ? `~${meta.responseHours} ч` : null} />
-            <MetricCell icon={<Handshake className="h-3.5 w-3.5" />} label="Сделки" value={meta.dealsCount > 0 ? String(meta.dealsCount) : null} />
-          </div>
-
-          {/* Offers preview (only 3 types) */}
-          {meta.offers.length > 0 ? (
-            <div className="space-y-1.5">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Размещения</p>
-              <div className="space-y-1">
+          {/* 3) Offers preview — Video / Post / Podcast only */}
+          <div className="space-y-2">
+            <p className="text-[12px] font-semibold text-muted-foreground uppercase tracking-wider">Размещения</p>
+            {meta.offers.length > 0 ? (
+              <div className="space-y-1.5">
                 {meta.offers.map((o) => (
-                  <div key={o.type} className="flex items-center justify-between bg-muted/30 rounded px-3 py-1.5 text-sm">
-                    <span className="text-foreground">{o.type}</span>
-                    <span className="text-muted-foreground font-medium">от {o.price.toLocaleString("ru-RU")} ₽</span>
+                  <div key={o.type} className="flex items-center justify-between bg-muted/30 rounded-lg px-4 py-2.5">
+                    <span className="text-[15px] text-foreground font-medium">{o.type}</span>
+                    <div className="flex items-center gap-4">
+                      {turnaroundMap[o.type] && (
+                        <span className="text-[13px] text-muted-foreground flex items-center gap-1">
+                          <Clock className="h-3.5 w-3.5" />{turnaroundMap[o.type]}
+                        </span>
+                      )}
+                      <span className="text-[15px] font-semibold text-foreground">от {o.price.toLocaleString("ru-RU")} ₽</span>
+                    </div>
                   </div>
                 ))}
               </div>
-            </div>
-          ) : (
-            <div className="bg-muted/30 rounded px-3 py-2 text-sm text-muted-foreground">Цена по запросу</div>
+            ) : (
+              <div className="bg-muted/30 rounded-lg px-4 py-3 text-[15px] text-muted-foreground">Цена по запросу</div>
+            )}
+          </div>
+
+          {/* 4) Best fit line */}
+          {bestFitLine && (
+            <p className="text-[13px] text-muted-foreground italic">{bestFitLine}</p>
           )}
 
-          {/* Actions */}
-          <div className="flex gap-2 pt-2 border-t border-border">
-            <Button className="flex-1" disabled={!isVerified}>
-              <MessageSquarePlus className="h-4 w-4 mr-1.5" />Предложить сделку
+          {/* Footer actions */}
+          <div className="flex gap-3 pt-3 border-t border-border">
+            <Button className="flex-1 h-10 text-[15px]" disabled={!isVerified}>
+              <MessageSquarePlus className="h-4 w-4 mr-2" />Предложить сделку
             </Button>
-            <Button variant="outline" className="flex-1" asChild>
-              <a href={`/creator/${creator.user_id}`}>
-                <ExternalLink className="h-4 w-4 mr-1.5" />Открыть профиль
-              </a>
+            <Button variant="outline" className="flex-1 h-10 text-[15px]" asChild>
+              <a href={`/creator/${creator.user_id}`}>Открыть профиль</a>
             </Button>
           </div>
         </div>
