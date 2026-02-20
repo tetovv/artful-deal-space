@@ -934,13 +934,15 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
       for (let i = 0; i < allChunks.length; i += 50) {
         if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
 
-        const batch = allChunks.slice(i, i + 50).map((c) => ({
-          project_id: projId,
-          user_id: user.id,
-          content: c.content,
-          metadata: c.metadata as Record<string, string | number>,
-          source_id: c.source_id || projId,
-        }));
+        const batch = allChunks.slice(i, i + 50)
+          .filter((c) => !!c.source_id) // FK requires valid source_id
+          .map((c) => ({
+            project_id: projId,
+            user_id: user.id,
+            content: c.content,
+            metadata: c.metadata as Record<string, string | number>,
+            source_id: c.source_id!,
+          }));
 
         const { error: insertErr } = await supabase.from("project_chunks").insert(batch);
         if (insertErr) {
@@ -1186,9 +1188,19 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
         if (r) extractedDocs.push(r);
       }
 
-      // Add pasted text if any
+      // Add pasted text if any — must create a project_sources record for FK
       if (intake.pastedText.trim()) {
-        extractedDocs.push({ text: intake.pastedText.trim(), file_name: "pasted_text.txt" });
+        const pastedText = intake.pastedText.trim();
+        const { data: srcRec } = await supabase.from("project_sources").insert({
+          project_id: proj.id,
+          user_id: user.id,
+          file_name: "pasted_text.txt",
+          file_type: "txt",
+          storage_path: `${user.id}/${proj.id}/pasted_text.txt`,
+          status: "uploaded",
+          file_size: pastedText.length,
+        }).select("id").single();
+        extractedDocs.push({ text: pastedText, file_name: "pasted_text.txt", source_id: srcRec?.id });
       }
 
       // Check that we have at least something to process
