@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Save, Building2, Landmark, ShieldCheck, CheckCircle2, Clock, Palette, Globe } from "lucide-react";
+import { Save, Building2, Landmark, ShieldCheck, CheckCircle2, Clock, Palette, Globe, Upload, X, ImageIcon } from "lucide-react";
 import { toast } from "sonner";
 
 interface AdvSettings {
@@ -93,6 +93,8 @@ export function AdvertiserSettings() {
   const qc = useQueryClient();
   const [form, setForm] = useState<AdvSettings>(defaults);
   const [dirty, setDirty] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: settings, isLoading } = useQuery({
     queryKey: ["studio-settings", user?.id],
@@ -225,9 +227,45 @@ export function AdvertiserSettings() {
                   placeholder="Кратко опишите бренд и сферу деятельности…" className="text-sm min-h-[52px] resize-none" maxLength={500} />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Логотип (URL)</Label>
-                <Input value={form.brand_logo_url} onChange={(e) => update("brand_logo_url", e.target.value)}
-                  placeholder="https://example.com/logo.png" className="text-sm h-9" maxLength={500} />
+                <Label className="text-xs">Логотип</Label>
+                <div className="flex items-center gap-2">
+                  {form.brand_logo_url ? (
+                    <div className="relative h-9 w-9 rounded border border-border overflow-hidden flex-shrink-0">
+                      <img src={form.brand_logo_url} alt="Logo" className="h-full w-full object-cover" />
+                      <button type="button" onClick={() => update("brand_logo_url", "")}
+                        className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center">
+                        <X className="h-2.5 w-2.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="h-9 w-9 rounded border border-dashed border-border flex items-center justify-center flex-shrink-0">
+                      <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  )}
+                  <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file || !user) return;
+                    setUploading(true);
+                    try {
+                      const ext = file.name.split(".").pop();
+                      const path = `${user.id}/${Date.now()}.${ext}`;
+                      const { error } = await supabase.storage.from("brand-logos").upload(path, file, { upsert: true });
+                      if (error) throw error;
+                      const { data: urlData } = supabase.storage.from("brand-logos").getPublicUrl(path);
+                      update("brand_logo_url", urlData.publicUrl);
+                      toast.success("Логотип загружен");
+                    } catch {
+                      toast.error("Ошибка загрузки");
+                    } finally {
+                      setUploading(false);
+                    }
+                  }} />
+                  <Button type="button" size="sm" variant="outline" className="h-9 text-xs gap-1.5" disabled={uploading}
+                    onClick={() => fileInputRef.current?.click()}>
+                    <Upload className="h-3.5 w-3.5" />
+                    {uploading ? "Загрузка…" : "Загрузить"}
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
