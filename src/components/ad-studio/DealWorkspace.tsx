@@ -10,6 +10,12 @@ import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import {
+  Accordion, AccordionContent, AccordionItem, AccordionTrigger,
+} from "@/components/ui/accordion";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -401,92 +407,199 @@ function ChatTab({ deal, onOpenTerms }: { deal: Deal; onOpenTerms?: () => void }
 }
 
 /* ═══════════════════════════════════════════════════════
-   TERMS TAB
+   TERMS TAB — versioned, accordion sections, minimal noise
    ═══════════════════════════════════════════════════════ */
+
+type TermFieldRow = { label: string; key: string };
+
+const termsSections: { title: string; fields: TermFieldRow[] }[] = [
+  {
+    title: "Размещение",
+    fields: [
+      { label: "Тип", key: "deliverable" },
+      { label: "Платформа", key: "platform" },
+      { label: "Формат", key: "format" },
+    ],
+  },
+  {
+    title: "Сроки и доставка",
+    fields: [
+      { label: "Дедлайн", key: "deadline" },
+    ],
+  },
+  {
+    title: "Оплата",
+    fields: [
+      { label: "Стоимость", key: "price" },
+      { label: "Этапы", key: "paymentMilestones" },
+    ],
+  },
+  {
+    title: "Приёмка и правки",
+    fields: [
+      { label: "Критерии", key: "acceptanceCriteria" },
+    ],
+  },
+  {
+    title: "Отмена и споры",
+    fields: [
+      { label: "Правила", key: "cancellation" },
+    ],
+  },
+  {
+    title: "Маркировка",
+    fields: [
+      { label: "Ответственность", key: "eridResponsibility" },
+    ],
+  },
+];
+
 function TermsTab() {
   const [selectedVersion, setSelectedVersion] = useState(mockTermsVersions.length - 1);
+  const [showChanges, setShowChanges] = useState(false);
   const ver = mockTermsVersions[selectedVersion];
+  const prevVer = selectedVersion > 0 ? mockTermsVersions[selectedVersion - 1] : null;
 
-  const statusLabel = ver.status === "accepted" ? "Согласовано" : ver.status === "draft" ? "Черновик" : "Ожидает";
-  const statusColor = ver.status === "accepted" ? "bg-success/15 text-success border-success/30" : ver.status === "draft" ? "bg-muted text-muted-foreground border-muted-foreground/20" : "bg-warning/15 text-warning border-warning/30";
+  const statusLabel = ver.status === "accepted" ? "Согласовано" : ver.status === "draft" ? "Черновик" : "Ожидает подтверждения";
+  const statusColor = ver.status === "accepted"
+    ? "bg-success/15 text-success border-success/30"
+    : ver.status === "draft"
+      ? "bg-muted text-muted-foreground border-muted-foreground/20"
+      : "bg-warning/15 text-warning border-warning/30";
 
-  const fieldLabels: Record<string, string> = {
-    deliverable: "Размещение", platform: "Платформа", format: "Формат",
-    price: "Стоимость", deadline: "Дедлайн", paymentMilestones: "Этапы оплаты",
-    acceptanceCriteria: "Критерии приёмки", eridResponsibility: "Маркировка",
-    cancellation: "Отмена",
-  };
+  const changedKeys = new Set<string>();
+  if (prevVer) {
+    for (const key of Object.keys(ver.fields)) {
+      if ((ver.fields as any)[key] !== (prevVer.fields as any)[key]) changedKeys.add(key);
+    }
+  }
+
+  const canAccept = ver.status === "draft" || (ver.status as string) === "pending";
+  const hasAcceptedAndNoDraft = ver.status === "accepted" && selectedVersion === mockTermsVersions.length - 1;
 
   return (
     <div className="p-4 space-y-3 max-w-[820px] mx-auto">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
-          {mockTermsVersions.map((v, i) => (
-            <button
-              key={v.version}
-              onClick={() => setSelectedVersion(i)}
-              className={cn(
-                "px-2 py-0.5 rounded text-[12px] font-medium transition-colors border",
-                selectedVersion === i
-                  ? "bg-primary/15 text-primary border-primary/30"
-                  : "text-muted-foreground border-border hover:text-foreground"
-              )}
-            >
-              v{v.version}
-            </button>
-          ))}
-        </div>
-        <span className={cn("text-[11px] font-medium px-2 py-0.5 rounded border", statusColor)}>
-          {statusLabel}
-        </span>
-      </div>
-
+      {/* Header: version selector + status */}
       <Card>
-        <CardContent className="p-3 space-y-0">
-          {Object.entries(ver.fields).map(([key, value], i) => (
-            <div key={key} className={cn("flex items-start justify-between py-1.5", i > 0 && "border-t border-border/50")}>
-              <span className="text-[13px] text-muted-foreground w-36 shrink-0">{fieldLabels[key] || key}</span>
-              <span className="text-[14px] font-medium text-card-foreground text-right flex-1">{value}</span>
+        <CardContent className="p-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-[13px] text-muted-foreground">Версия:</span>
+              <Select
+                value={String(selectedVersion)}
+                onValueChange={(v) => { setSelectedVersion(Number(v)); setShowChanges(false); }}
+              >
+                <SelectTrigger className="h-7 w-20 text-[13px] bg-background border-border">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {mockTermsVersions.map((v, i) => (
+                    <SelectItem key={v.version} value={String(i)}>v{v.version}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <span className={cn("text-[11px] font-medium px-2 py-0.5 rounded border", statusColor)}>
+                {statusLabel}
+              </span>
             </div>
-          ))}
+            {prevVer && changedKeys.size > 0 && (
+              <button
+                onClick={() => setShowChanges(!showChanges)}
+                className={cn(
+                  "text-[12px] font-medium transition-colors",
+                  showChanges ? "text-primary" : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {showChanges ? "Все поля" : "Показать изменения"}
+              </button>
+            )}
+          </div>
+          {ver.acceptedBy.length > 0 && (
+            <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground mt-2">
+              <CheckCircle2 className="h-3.5 w-3.5 text-success" />
+              Подтвердили: {ver.acceptedBy.join(", ")} · {ver.date}
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {ver.acceptedBy.length > 0 && (
-        <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
-          <CheckCircle2 className="h-3.5 w-3.5 text-success" />
-          Подтвердили: {ver.acceptedBy.join(", ")}
-        </div>
-      )}
+      {/* Accordion sections */}
+      <Accordion type="multiple" defaultValue={termsSections.map((_, i) => `s${i}`)}>
+        {termsSections.map((section, si) => {
+          const visibleFields = showChanges
+            ? section.fields.filter((f) => changedKeys.has(f.key))
+            : section.fields;
+          if (showChanges && visibleFields.length === 0) return null;
 
-      {ver.status === "draft" && (
-        <Button size="sm" className="text-[13px] h-8">
-          <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
-          Подтвердить условия
-        </Button>
-      )}
-      {ver.status === "accepted" && (
+          return (
+            <AccordionItem key={si} value={`s${si}`} className="border-border/50">
+              <AccordionTrigger className="py-2 px-1 text-[14px] font-semibold text-card-foreground hover:no-underline">
+                {section.title}
+              </AccordionTrigger>
+              <AccordionContent className="pb-2 px-1">
+                <div className="space-y-0">
+                  {visibleFields.map((field, fi) => {
+                    const value = (ver.fields as any)[field.key] || "—";
+                    const changed = changedKeys.has(field.key);
+                    return (
+                      <div
+                        key={field.key}
+                        className={cn(
+                          "flex items-start justify-between py-1.5",
+                          fi > 0 && "border-t border-border/30",
+                          changed && showChanges && "bg-primary/5 -mx-1 px-1 rounded"
+                        )}
+                      >
+                        <span className="text-[13px] text-muted-foreground w-32 shrink-0">{field.label}</span>
+                        <span className="text-[15px] font-medium text-card-foreground text-right flex-1">{value}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          );
+        })}
+      </Accordion>
+
+      {/* Actions: max 2 */}
+      <div className="flex items-center gap-2 pt-1">
+        {canAccept && (
+          <Button size="sm" className="text-[13px] h-8">
+            <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+            Подтвердить условия
+          </Button>
+        )}
         <Button size="sm" variant="outline" className="text-[13px] h-8">
-          Предложить изменения (v{ver.version + 1})
+          Предложить изменения{hasAcceptedAndNoDraft ? ` (v${ver.version + 1})` : ""}
         </Button>
-      )}
-
-      <div className="flex items-center gap-4 pt-1">
-        <button className="text-[12px] text-primary hover:underline flex items-center gap-1">
-          <Radio className="h-3 w-3" /> Маркировка (ОРД) →
-        </button>
-        <button className="text-[12px] text-primary hover:underline flex items-center gap-1">
-          <ScrollText className="h-3 w-3" /> Журнал действий →
-        </button>
       </div>
 
-      <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
-        Платформа фиксирует согласованные условия и подтверждения обеих сторон. Каждое изменение создаёт новую версию.
+      {/* Additional links — collapsed */}
+      <Collapsible>
+        <CollapsibleTrigger className="flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground transition-colors">
+          <ChevronRight className="h-3 w-3" />
+          Дополнительно
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="flex items-center gap-4 pt-1.5 pl-4">
+            <button className="text-[12px] text-primary hover:underline flex items-center gap-1">
+              <Radio className="h-3 w-3" /> Маркировка (ОРД) →
+            </button>
+            <button className="text-[12px] text-primary hover:underline flex items-center gap-1">
+              <ScrollText className="h-3 w-3" /> Журнал действий →
+            </button>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+
+      {/* Footer note */}
+      <p className="text-[11px] text-muted-foreground/40 leading-relaxed">
+        Платформа фиксирует версионные условия и подтверждения сторон.
       </p>
     </div>
   );
 }
-
 /* ═══════════════════════════════════════════════════════
    FILES TAB
    ═══════════════════════════════════════════════════════ */
