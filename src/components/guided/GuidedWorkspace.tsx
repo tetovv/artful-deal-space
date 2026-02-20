@@ -4,8 +4,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   Upload, Brain, Loader2, CheckCircle2, BookOpen, HelpCircle,
-  FileText, AlertCircle, ChevronRight, Map, Play, Send,
-  MessageSquare, Lightbulb, Layers, RotateCcw, Bug, X, FileSearch
+  FileText, AlertCircle, ChevronRight, ChevronLeft, Play, Send,
+  Lightbulb, Layers, RotateCcw, X, FileSearch, Sparkles,
+  GraduationCap, CreditCard, Presentation, Zap, Clock,
+  BarChart3, ArrowRight, ChevronDown, MessageSquare, Eye,
+  Bookmark, RefreshCw, Target, Award, Bug
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -19,15 +22,19 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-/* ═══════════════ Types ═══════════════ */
-interface GuidedProject {
-  id: string;
-  title: string;
-  description: string | null;
-  status: string;
-  roadmap: any[];
-  assistant_menu_policy: any;
-  created_at: string;
+/* ═══════════════ TYPES ═══════════════ */
+type GuidedPhase = "intake" | "recommendation" | "generate" | "work" | "checkin" | "finish";
+type OutputFormat = "COURSE_LEARN" | "EXAM_PREP" | "QUIZ_ONLY" | "FLASHCARDS" | "PRESENTATION";
+type IntakeStep = 0 | 1 | 2 | 3 | 4 | 5;
+
+interface IntakeData {
+  files: File[];
+  goal: string;
+  knowledgeLevel: string;
+  depth: string;
+  deadline: string;
+  hoursPerWeek: string;
+  preferences: string[];
 }
 
 interface Artifact {
@@ -39,9 +46,41 @@ interface Artifact {
   roadmap_step_id: string | null;
 }
 
-type GuidedView = "list" | "wizard" | "dashboard" | "player";
+const OUTPUT_FORMATS: { value: OutputFormat; label: string; icon: React.ElementType; desc: string }[] = [
+  { value: "COURSE_LEARN", label: "Курс", icon: BookOpen, desc: "Уроки + практика + проверки" },
+  { value: "EXAM_PREP", label: "Подготовка к экзамену", icon: GraduationCap, desc: "Диагностика + разбор ошибок + ремедиация" },
+  { value: "QUIZ_ONLY", label: "Тесты", icon: HelpCircle, desc: "Банк вопросов + варианты + тренировка" },
+  { value: "FLASHCARDS", label: "Карточки", icon: CreditCard, desc: "Карточки для запоминания + quiz me" },
+  { value: "PRESENTATION", label: "Презентация", icon: Presentation, desc: "Слайды + заметки + Q&A репетиция" },
+];
 
-/* ═══════════════ File extraction utils ═══════════════ */
+const GOAL_OPTIONS = [
+  { value: "self_learn", label: "Учусь для себя" },
+  { value: "exam_prep", label: "Готовлюсь к экзамену/собеседованию" },
+  { value: "quiz_only", label: "Хочу только квиз/диагностику" },
+  { value: "flashcards", label: "Хочу карточки" },
+  { value: "presentation", label: "Готовлю выступление/презентацию" },
+];
+
+const KNOWLEDGE_LEVELS = [
+  { value: "zero", label: "Ноль", desc: "Не знаю ничего" },
+  { value: "basic", label: "База", desc: "Слышал, но не уверен" },
+  { value: "confident", label: "Уверенно", desc: "Хорошо знаю основы" },
+];
+
+const DEPTH_OPTIONS = [
+  { value: "shallow", label: "Поверхностно" },
+  { value: "normal", label: "Нормально" },
+  { value: "deep", label: "Глубоко" },
+];
+
+const PREF_OPTIONS = [
+  { value: "practice", label: "Больше практики" },
+  { value: "tests", label: "Больше тестов" },
+  { value: "examples", label: "Больше примеров" },
+];
+
+/* ═══════════════ File extraction ═══════════════ */
 async function extractText(file: File): Promise<string> {
   const ext = file.name.toLowerCase().split(".").pop();
   if (ext === "txt" || ext === "md") {
@@ -66,7 +105,7 @@ async function extractText(file: File): Promise<string> {
       }
       return pages.join("\n\n");
     } catch (e) {
-      console.warn("PDF.js extraction failed, falling back to text:", e);
+      console.warn("PDF.js extraction failed:", e);
       return new Promise((resolve, reject) => {
         const r = new FileReader(); r.onload = () => resolve(r.result as string); r.onerror = reject; r.readAsText(file);
       });
@@ -85,13 +124,31 @@ async function extractText(file: File): Promise<string> {
       });
     }
   }
-  // Fallback
   return new Promise((resolve, reject) => {
     const r = new FileReader(); r.onload = () => resolve(r.result as string); r.onerror = reject; r.readAsText(file);
   });
 }
 
-/* ═══════════════ COMPONENT REGISTRY RENDERERS ═══════════════ */
+/* ═══════════════ Recommend format from intake ═══════════════ */
+function recommendFormat(intake: IntakeData): OutputFormat {
+  if (intake.goal === "presentation") return "PRESENTATION";
+  if (intake.goal === "flashcards") return "FLASHCARDS";
+  if (intake.goal === "quiz_only") return "QUIZ_ONLY";
+  if (intake.goal === "exam_prep") return "EXAM_PREP";
+  return "COURSE_LEARN";
+}
+
+function formatToActionType(format: OutputFormat): string {
+  switch (format) {
+    case "COURSE_LEARN": return "generate_lesson_blocks";
+    case "EXAM_PREP": return "generate_quiz";
+    case "QUIZ_ONLY": return "generate_quiz";
+    case "FLASHCARDS": return "generate_flashcards";
+    case "PRESENTATION": return "generate_slides";
+  }
+}
+
+/* ═══════════════ RENDERERS ═══════════════ */
 const BlockRenderer = ({ block, onTermClick }: { block: any; onTermClick?: (term: string) => void }) => {
   const handleTextSelect = () => {
     const selection = window.getSelection()?.toString().trim();
@@ -99,39 +156,32 @@ const BlockRenderer = ({ block, onTermClick }: { block: any; onTermClick?: (term
       onTermClick(selection);
     }
   };
-
   if (!block) return null;
 
-  // Text block
-  if (block.type === "text" || block.type === "explanation" || block.type === "expansion" || block.type === "example" || block.type === "feedback") {
-    return (
-      <div className="p-4 rounded-lg border border-border bg-card space-y-2" onMouseUp={handleTextSelect}>
-        <h4 className="font-semibold text-sm text-foreground">{block.title}</h4>
-        <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">{block.content}</p>
-      </div>
-    );
-  }
-
-  // Lesson
-  if (block.content && block.title) {
-    return (
-      <div className="p-4 rounded-lg border border-border bg-card space-y-2" onMouseUp={handleTextSelect}>
+  return (
+    <div className="p-4 rounded-lg border border-border bg-card space-y-2" onMouseUp={handleTextSelect}>
+      {block.title && (
         <div className="flex items-center gap-2">
           <BookOpen className="h-4 w-4 text-primary" />
           <h4 className="font-semibold text-sm text-foreground">{block.title}</h4>
         </div>
-        <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">{block.content}</p>
-      </div>
-    );
-  }
-
-  return <div className="p-3 rounded-lg border border-border bg-muted/20 text-xs text-muted-foreground">Неизвестный блок</div>;
+      )}
+      {block.content && <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">{block.content}</p>}
+    </div>
+  );
 };
 
-const QuizPlayer = ({ questions, onSubmit }: { questions: any[]; onSubmit: (answers: { block_id: string; value: string | string[] }[]) => void }) => {
+const QuizPlayer = ({ questions, onSubmit, submitted, feedback, score }: {
+  questions: any[];
+  onSubmit: (answers: { block_id: string; value: string | string[] }[]) => void;
+  submitted: boolean;
+  feedback: any;
+  score: number | null;
+}) => {
   const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
 
   const handleSelect = (qId: string, optId: string, isMulti: boolean) => {
+    if (submitted) return;
     setAnswers((prev) => {
       if (isMulti) {
         const current = (prev[qId] as string[]) || [];
@@ -141,32 +191,46 @@ const QuizPlayer = ({ questions, onSubmit }: { questions: any[]; onSubmit: (answ
     });
   };
 
-  const handleSubmit = () => {
-    const result = questions.map((q) => ({ block_id: q.id, value: answers[q.id] || "" }));
-    onSubmit(result);
-  };
-
   return (
     <div className="space-y-4">
-      {questions.map((q, qi) => (
-        <div key={q.id} className="p-4 rounded-lg border border-border bg-card space-y-3">
-          <p className="text-sm font-medium text-foreground">{qi + 1}. {q.text}</p>
-          <div className="space-y-2">
-            {(q.options || []).map((opt: any) => {
-              const isMulti = q.type === "multiple_choice";
-              const isSelected = isMulti ? ((answers[q.id] as string[]) || []).includes(opt.id) : answers[q.id] === opt.id;
-              return (
-                <button key={opt.id} onClick={() => handleSelect(q.id, opt.id, isMulti)}
-                  className={cn("w-full text-left p-3 rounded-lg border transition-all text-sm",
-                    isSelected ? "border-primary bg-primary/10 text-foreground" : "border-border hover:border-primary/30 text-muted-foreground")}>
-                  {opt.text}
-                </button>
-              );
-            })}
+      {submitted && feedback && (
+        <div className={cn("p-4 rounded-lg border space-y-2",
+          feedback.passed ? "border-accent/30 bg-accent/5" : "border-destructive/30 bg-destructive/5")}>
+          <div className="flex items-center gap-2">
+            {feedback.passed ? <CheckCircle2 className="h-5 w-5 text-accent" /> : <AlertCircle className="h-5 w-5 text-destructive" />}
+            <span className="font-semibold text-sm text-foreground">{feedback.passed ? "Пройдено!" : "Попробуйте ещё"}</span>
+            {score !== null && <Badge variant={feedback.passed ? "default" : "secondary"}>{score}%</Badge>}
           </div>
         </div>
-      ))}
-      <Button onClick={handleSubmit} className="w-full"><Send className="h-4 w-4 mr-2" /> Отправить ответы</Button>
+      )}
+      {questions.map((q, qi) => {
+        const qFeedback = submitted && feedback?.questions?.[q.id];
+        return (
+          <div key={q.id} className={cn("p-4 rounded-lg border bg-card space-y-3",
+            qFeedback?.correct === true ? "border-accent/30" : qFeedback?.correct === false ? "border-destructive/30" : "border-border")}>
+            <p className="text-sm font-medium text-foreground">{qi + 1}. {q.text}</p>
+            <div className="space-y-2">
+              {(q.options || []).map((opt: any) => {
+                const isMulti = q.type === "multiple_choice";
+                const isSelected = isMulti ? ((answers[q.id] as string[]) || []).includes(opt.id) : answers[q.id] === opt.id;
+                return (
+                  <button key={opt.id} onClick={() => handleSelect(q.id, opt.id, isMulti)}
+                    className={cn("w-full text-left p-3 rounded-lg border transition-all text-sm",
+                      isSelected ? "border-primary bg-primary/10 text-foreground" : "border-border hover:border-primary/30 text-muted-foreground",
+                      submitted && "pointer-events-none")}>
+                    {opt.text}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+      {!submitted && (
+        <Button onClick={() => onSubmit(questions.map((q) => ({ block_id: q.id, value: answers[q.id] || "" })))} className="w-full">
+          <Send className="h-4 w-4 mr-2" /> Отправить ответы
+        </Button>
+      )}
     </div>
   );
 };
@@ -178,11 +242,12 @@ const FlashcardsPlayer = ({ cards }: { cards: any[] }) => {
   if (!card) return null;
   return (
     <div className="space-y-4">
-      <div onClick={() => setFlipped(!flipped)} className="cursor-pointer p-8 rounded-xl border-2 border-border bg-card text-center min-h-[200px] flex items-center justify-center transition-all hover:border-primary/30">
+      <div onClick={() => setFlipped(!flipped)}
+        className="cursor-pointer p-8 rounded-xl border-2 border-border bg-card text-center min-h-[200px] flex items-center justify-center transition-all hover:border-primary/30">
         <div>
           <p className="text-lg font-medium text-foreground">{flipped ? card.back : card.front}</p>
           {!flipped && card.hint && <p className="text-xs text-muted-foreground mt-2">Подсказка: {card.hint}</p>}
-          <p className="text-xs text-muted-foreground mt-4">{flipped ? "Нажмите, чтобы увидеть вопрос" : "Нажмите, чтобы увидеть ответ"}</p>
+          <p className="text-xs text-muted-foreground mt-4">{flipped ? "← Вопрос" : "→ Ответ"}</p>
         </div>
       </div>
       <div className="flex items-center justify-between">
@@ -194,79 +259,146 @@ const FlashcardsPlayer = ({ cards }: { cards: any[] }) => {
   );
 };
 
-const FeedbackPanel = ({ feedback, score }: { feedback: any; score: number | null }) => {
-  if (!feedback) return null;
-  const passed = feedback.passed;
+const SlidesPlayer = ({ slides }: { slides: any[] }) => {
+  const [idx, setIdx] = useState(0);
+  const slide = slides[idx];
+  if (!slide) return null;
   return (
-    <div className={cn("p-4 rounded-lg border space-y-3", passed ? "border-accent/30 bg-accent/5" : "border-destructive/30 bg-destructive/5")}>
-      <div className="flex items-center gap-2">
-        {passed ? <CheckCircle2 className="h-5 w-5 text-accent" /> : <AlertCircle className="h-5 w-5 text-destructive" />}
-        <span className="font-semibold text-sm text-foreground">{passed ? "Тест пройден!" : "Попробуйте ещё раз"}</span>
-        {score !== null && <Badge variant={passed ? "default" : "secondary"}>{score}%</Badge>}
+    <div className="space-y-4">
+      <div className="p-6 rounded-xl border-2 border-border bg-card min-h-[280px]">
+        <Badge variant="outline" className="text-[10px] mb-3">{slide.type}</Badge>
+        <h3 className="text-xl font-bold text-foreground mb-3">{slide.title}</h3>
+        {slide.content && <p className="text-sm text-muted-foreground mb-3">{slide.content}</p>}
+        {slide.bullets && (
+          <ul className="space-y-1.5">
+            {slide.bullets.map((b: string, i: number) => (
+              <li key={i} className="text-sm text-muted-foreground flex gap-2"><span className="text-primary">•</span>{b}</li>
+            ))}
+          </ul>
+        )}
       </div>
-      {feedback.questions && (
-        <div className="space-y-1">
-          {Object.entries(feedback.questions as Record<string, { correct: boolean; earned: number; max: number }>).map(([qId, qf]) => (
-            <div key={qId} className="flex items-center gap-2 text-xs">
-              {qf.correct ? <CheckCircle2 className="h-3 w-3 text-accent" /> : <X className="h-3 w-3 text-destructive" />}
-              <span className="text-muted-foreground">{qId}: {qf.earned}/{qf.max}</span>
-            </div>
-          ))}
+      {slide.notes && (
+        <div className="p-3 rounded-lg bg-muted/30 border border-border">
+          <p className="text-xs font-medium text-muted-foreground mb-1">Заметки спикера:</p>
+          <p className="text-xs text-muted-foreground">{slide.notes}</p>
         </div>
       )}
+      <div className="flex items-center justify-between">
+        <Button variant="outline" size="sm" disabled={idx === 0} onClick={() => setIdx(idx - 1)}>← Назад</Button>
+        <span className="text-sm text-muted-foreground">{idx + 1} / {slides.length}</span>
+        <Button variant="outline" size="sm" disabled={idx === slides.length - 1} onClick={() => setIdx(idx + 1)}>Далее →</Button>
+      </div>
     </div>
   );
 };
 
-/* ═══════════════ MAIN ═══════════════ */
+/* ═══════════════ DYNAMIC ASSISTANT MENU ═══════════════ */
+function getAssistantActions(format: OutputFormat, artifactKind: string | null, submitted: boolean, hasSelection: boolean): { id: string; label: string; action: string }[] {
+  const items: { id: string; label: string; action: string }[] = [];
+
+  // Common: sources always available
+  items.push({ id: "sources", label: "📄 Показать источники", action: "show_sources" });
+
+  if (format === "COURSE_LEARN" || artifactKind === "course" || artifactKind === "lesson_blocks") {
+    if (hasSelection) {
+      items.unshift({ id: "explain", label: "💡 Объяснить", action: "explain_term" });
+      items.unshift({ id: "expand", label: "📖 Расширить", action: "expand_selection" });
+      items.unshift({ id: "example", label: "📝 Пример", action: "give_example" });
+    } else {
+      items.unshift({ id: "flashcards", label: "🃏 Сделать карточки", action: "generate_flashcards" });
+      items.unshift({ id: "quiz", label: "✅ Мини-квиз", action: "generate_quiz" });
+    }
+  }
+
+  if (format === "EXAM_PREP" || format === "QUIZ_ONLY" || artifactKind === "quiz") {
+    if (!submitted) {
+      items.unshift({ id: "hint", label: "💡 Подсказка", action: "give_example" });
+    } else {
+      items.unshift({ id: "remediate", label: "📚 Доп.практика", action: "remediate_topic" });
+      items.unshift({ id: "explain_err", label: "🔍 Разобрать ошибку", action: "explain_term" });
+    }
+  }
+
+  if (format === "FLASHCARDS" || artifactKind === "flashcards") {
+    items.unshift({ id: "quiz_me", label: "✅ Quiz me", action: "generate_quiz" });
+    items.unshift({ id: "add_cards", label: "➕ Добавить карточек", action: "generate_flashcards" });
+    if (hasSelection) {
+      items.unshift({ id: "explain_fc", label: "💡 Объяснить термин", action: "explain_term" });
+    }
+  }
+
+  if (format === "PRESENTATION" || artifactKind === "slides") {
+    items.unshift({ id: "qa", label: "🎤 Q&A репетиция", action: "generate_quiz" });
+    items.unshift({ id: "improve_notes", label: "📝 Улучшить заметки", action: "expand_selection" });
+    items.unshift({ id: "strengthen", label: "💪 Усилить структуру", action: "generate_slides" });
+  }
+
+  return items;
+}
+
+/* ═══════════════ MAIN COMPONENT ═══════════════ */
 export const GuidedWorkspace = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [view, setView] = useState<GuidedView>("list");
-  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
-  const [activeArtifact, setActiveArtifact] = useState<Artifact | null>(null);
-  const [sidePanel, setSidePanel] = useState<any>(null);
-  const [submitFeedback, setSubmitFeedback] = useState<any>(null);
-  const [submitScore, setSubmitScore] = useState<number | null>(null);
-
-  // Wizard state
-  const [wizardTitle, setWizardTitle] = useState("");
-  const [wizardFiles, setWizardFiles] = useState<File[]>([]);
-  const [wizardLoading, setWizardLoading] = useState(false);
-  const [wizardStep, setWizardStep] = useState<"upload" | "processing">("upload");
-
-  /* ─── Queries ─── */
-  const { data: projects = [], isLoading: projectsLoading } = useQuery({
-    queryKey: ["guided-projects", user?.id],
-    queryFn: async () => {
-      if (!user) return [];
-      const { data, error } = await supabase.from("projects").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
-      if (error) throw error;
-      return data as GuidedProject[];
-    },
-    enabled: !!user,
+  // State machine
+  const [phase, setPhase] = useState<GuidedPhase>("intake");
+  const [intakeStep, setIntakeStep] = useState<IntakeStep>(0);
+  const [intake, setIntake] = useState<IntakeData>({
+    files: [], goal: "", knowledgeLevel: "", depth: "", deadline: "", hoursPerWeek: "", preferences: [],
   });
 
-  const activeProject = projects.find((p) => p.id === activeProjectId) || null;
+  // Recommendation
+  const [selectedFormat, setSelectedFormat] = useState<OutputFormat>("COURSE_LEARN");
+  const [recommendedFormat, setRecommendedFormat] = useState<OutputFormat>("COURSE_LEARN");
+
+  // Generate
+  const [genStatus, setGenStatus] = useState<"idle" | "ingesting" | "planning" | "generating" | "done" | "error">("idle");
+  const [projectId, setProjectId] = useState<string | null>(null);
+
+  // Work
+  const [activeArtifact, setActiveArtifact] = useState<Artifact | null>(null);
+  const [sidePanel, setSidePanel] = useState<any>(null);
+  const [quizSubmitted, setQuizSubmitted] = useState(false);
+  const [submitFeedback, setSubmitFeedback] = useState<any>(null);
+  const [submitScore, setSubmitScore] = useState<number | null>(null);
+  const [hasSelection, setHasSelection] = useState(false);
+  const [completedSteps, setCompletedSteps] = useState(0);
+
+  // Checkin
+  const [checkinAnswers, setCheckinAnswers] = useState({ hardTopics: "", pace: "normal", addMore: "" });
+
+  // Roadmap & artifacts from DB
+  const { data: project } = useQuery({
+    queryKey: ["guided-project", projectId],
+    queryFn: async () => {
+      if (!projectId) return null;
+      const { data, error } = await supabase.from("projects").select("*").eq("id", projectId).single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!projectId,
+  });
 
   const { data: artifacts = [] } = useQuery({
-    queryKey: ["guided-artifacts", activeProjectId],
+    queryKey: ["guided-artifacts", projectId],
     queryFn: async () => {
-      if (!activeProjectId) return [];
-      const { data, error } = await supabase.from("artifacts").select("*").eq("project_id", activeProjectId).order("sort_order", { ascending: true });
+      if (!projectId) return [];
+      const { data, error } = await supabase.from("artifacts").select("*").eq("project_id", projectId).order("sort_order", { ascending: true });
       if (error) throw error;
       return data as Artifact[];
     },
-    enabled: !!activeProjectId,
+    enabled: !!projectId,
   });
+
+  const roadmap = (project?.roadmap as any[]) || [];
 
   /* ─── Mutations ─── */
   const actMutation = useMutation({
     mutationFn: async (params: { action_type: string; target?: any; context?: string }) => {
       const { data, error } = await supabase.functions.invoke("artifact_act", {
-        body: { project_id: activeProjectId, ...params },
+        body: { project_id: projectId, ...params },
       });
       if (error) throw error;
       return data;
@@ -274,14 +406,21 @@ export const GuidedWorkspace = () => {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["guided-artifacts"] });
       if (data.artifact_id) {
-        // Load the new artifact
         supabase.from("artifacts").select("*").eq("id", data.artifact_id).single().then(({ data: art }) => {
-          if (art) setActiveArtifact(art as Artifact);
+          if (art) {
+            setActiveArtifact(art as Artifact);
+            setQuizSubmitted(false);
+            setSubmitFeedback(null);
+            setSubmitScore(null);
+          }
         });
       }
-      toast.success("Контент сгенерирован");
+      if (data.public_payload && !data.artifact_id) {
+        setSidePanel({ type: "result", payload: data.public_payload, source_refs: data.source_refs });
+      }
+      toast.success("Готово");
     },
-    onError: (e) => { toast.error(`Ошибка: ${e.message}`); },
+    onError: (e) => toast.error(`Ошибка: ${e.message}`),
   });
 
   const submitMutation = useMutation({
@@ -291,174 +430,155 @@ export const GuidedWorkspace = () => {
       return data;
     },
     onSuccess: (data) => {
+      setQuizSubmitted(true);
       setSubmitFeedback(data.feedback);
       setSubmitScore(data.score);
-      toast.success("Ответы проверены!");
+      toast.success("Проверено!");
     },
-    onError: (e) => { toast.error(`Ошибка: ${e.message}`); },
+    onError: (e) => toast.error(`Ошибка: ${e.message}`),
   });
 
-  /* ─── Wizard ─── */
-  const handleWizardCreate = async () => {
-    if (!user || !wizardFiles.length) return;
-    setWizardLoading(true);
-    setWizardStep("processing");
+  /* ─── Text selection tracking ─── */
+  const handleMouseUp = useCallback(() => {
+    const sel = window.getSelection()?.toString().trim();
+    setHasSelection(!!(sel && sel.length > 2 && sel.length < 100));
+  }, []);
+
+  /* ─── Generate pipeline ─── */
+  const handleGenerate = async () => {
+    if (!user) return;
+    setPhase("generate");
+    setGenStatus("ingesting");
 
     try {
-      // 1. Create project
-      const { data: project, error: projErr } = await supabase.from("projects").insert({
+      // Create project
+      const { data: proj, error: projErr } = await supabase.from("projects").insert({
         user_id: user.id,
-        title: wizardTitle || `Проект ${new Date().toLocaleDateString("ru-RU")}`,
+        title: intake.files[0]?.name?.replace(/\.\w+$/, "") || `Проект ${new Date().toLocaleDateString("ru-RU")}`,
+        goal: intake.goal,
+        audience: intake.knowledgeLevel,
+        description: `depth=${intake.depth}, prefs=${intake.preferences.join(",")}`,
         status: "draft",
       }).select().single();
       if (projErr) throw projErr;
+      setProjectId(proj.id);
 
-      // 2. Extract text from files
+      // Extract & upload
       const documents: { text: string; file_name: string }[] = [];
-      for (const file of wizardFiles) {
+      for (const file of intake.files) {
         try {
           const text = await extractText(file);
           documents.push({ text, file_name: file.name });
-
-          // Upload to storage
-          const storagePath = `${user.id}/${project.id}/raw/${file.name}`;
+          const storagePath = `${user.id}/${proj.id}/raw/${file.name}`;
           await supabase.storage.from("ai_sources").upload(storagePath, file, { upsert: true });
         } catch (e) {
-          console.warn(`Failed to extract ${file.name}:`, e);
+          console.warn(`Extraction failed ${file.name}:`, e);
         }
       }
 
       if (!documents.length || !documents.some((d) => d.text.trim())) {
-        toast.error("Не удалось извлечь текст из файлов");
-        setWizardLoading(false);
-        setWizardStep("upload");
+        toast.error("Не удалось извлечь текст");
+        setGenStatus("error");
         return;
       }
 
-      // 3. Ingest
-      toast.info("Индексация текста...");
+      // Ingest
+      setGenStatus("ingesting");
       const { error: ingestErr } = await supabase.functions.invoke("project_ingest", {
-        body: { project_id: project.id, documents },
+        body: { project_id: proj.id, documents },
       });
       if (ingestErr) throw ingestErr;
 
-      // 4. Plan
-      toast.info("Создание учебного плана...");
+      // Plan
+      setGenStatus("planning");
       const { error: planErr } = await supabase.functions.invoke("project_plan", {
-        body: { project_id: project.id },
+        body: { project_id: proj.id },
       });
       if (planErr) throw planErr;
 
-      queryClient.invalidateQueries({ queryKey: ["guided-projects"] });
-      setActiveProjectId(project.id);
-      setView("dashboard");
-      setWizardTitle("");
-      setWizardFiles([]);
-      toast.success("Проект создан!");
-    } catch (e) {
-      console.error("Wizard error:", e);
-      toast.error("Ошибка создания проекта");
-    } finally {
-      setWizardLoading(false);
-      setWizardStep("upload");
+      // Generate first artifact
+      setGenStatus("generating");
+      const actionType = formatToActionType(selectedFormat);
+      const { data: actData, error: actErr } = await supabase.functions.invoke("artifact_act", {
+        body: { project_id: proj.id, action_type: actionType, context: `Format: ${selectedFormat}` },
+      });
+      if (actErr) throw actErr;
+
+      // Load artifact
+      queryClient.invalidateQueries({ queryKey: ["guided-project", proj.id] });
+      queryClient.invalidateQueries({ queryKey: ["guided-artifacts", proj.id] });
+
+      if (actData?.artifact_id) {
+        const { data: art } = await supabase.from("artifacts").select("*").eq("id", actData.artifact_id).single();
+        if (art) setActiveArtifact(art as Artifact);
+      }
+
+      setGenStatus("done");
+      setPhase("work");
+      toast.success("Первый результат готов!");
+    } catch (e: any) {
+      console.error("Generate error:", e);
+      setGenStatus("error");
+      toast.error(`Ошибка: ${e.message || "Неизвестная ошибка"}`);
     }
   };
 
   /* ─── Demo project ─── */
-  const createDemoProject = async () => {
+  const handleDemo = async () => {
     if (!user) return;
-    setWizardLoading(true);
+    setIntake({
+      files: [], goal: "self_learn", knowledgeLevel: "basic", depth: "normal",
+      deadline: "", hoursPerWeek: "", preferences: ["examples"],
+    });
+    setSelectedFormat("COURSE_LEARN");
+    setPhase("generate");
+    setGenStatus("ingesting");
+
     try {
-      // Create project
-      const { data: project, error } = await supabase.from("projects").insert({
-        user_id: user.id,
-        title: "Demo: Основы TypeScript",
-        description: "Демонстрационный проект",
-        status: "draft",
+      const { data: proj, error } = await supabase.from("projects").insert({
+        user_id: user.id, title: "Demo: TypeScript", status: "draft",
       }).select().single();
       if (error) throw error;
+      setProjectId(proj.id);
 
-      // Ingest demo content
-      const demoText = `
-TypeScript — это язык программирования, разработанный Microsoft. Он является надмножеством JavaScript и добавляет статическую типизацию.
+      const demoText = `TypeScript — язык программирования от Microsoft, надмножество JavaScript с статической типизацией.\n\nОсновные типы: string, number, boolean, any, void, null, undefined, never.\n\nИнтерфейсы описывают структуру объектов:\ninterface User { name: string; age: number; email?: string; }\n\nДженерики обеспечивают переиспользование:\nfunction identity<T>(arg: T): T { return arg; }\n\nEnum — именованные константы:\nenum Direction { Up, Down, Left, Right }\n\nUnion и Intersection типы:\ntype StringOrNumber = string | number;\ntype NamedAndAged = Named & Aged;`;
 
-Основные типы в TypeScript:
-- string — строки
-- number — числа
-- boolean — логические значения
-- any — любой тип
-- void — отсутствие значения
-- null и undefined
-- never — тип, который никогда не возникает
-
-Интерфейсы позволяют описывать структуру объектов:
-interface User {
-  name: string;
-  age: number;
-  email?: string;
-}
-
-Дженерики обеспечивают переиспользование кода с разными типами:
-function identity<T>(arg: T): T {
-  return arg;
-}
-
-Enum (перечисления) — способ определения именованных констант:
-enum Direction {
-  Up, Down, Left, Right
-}
-
-Типы Union и Intersection:
-type StringOrNumber = string | number;
-type NamedAndAged = Named & Aged;
-
-Декораторы — специальные функции для аннотирования классов и их членов.
-Модули позволяют организовать код в отдельные файлы.
-Namespaces — способ группировки связанного кода.
-      `.trim();
-
-      await supabase.functions.invoke("project_ingest", {
-        body: { project_id: project.id, documents: [{ text: demoText, file_name: "typescript-basics.md" }] },
+      const { error: ie } = await supabase.functions.invoke("project_ingest", {
+        body: { project_id: proj.id, documents: [{ text: demoText, file_name: "typescript.md" }] },
       });
+      if (ie) throw ie;
 
-      toast.info("Создание плана...");
-      await supabase.functions.invoke("project_plan", { body: { project_id: project.id } });
+      setGenStatus("planning");
+      const { error: pe } = await supabase.functions.invoke("project_plan", { body: { project_id: proj.id } });
+      if (pe) throw pe;
 
-      queryClient.invalidateQueries({ queryKey: ["guided-projects"] });
-      setActiveProjectId(project.id);
-      setView("dashboard");
-      toast.success("Demo проект создан!");
-    } catch (e) {
-      console.error(e);
-      toast.error("Ошибка создания demo");
-    } finally {
-      setWizardLoading(false);
-    }
-  };
+      setGenStatus("generating");
+      const { data: actData, error: ae } = await supabase.functions.invoke("artifact_act", {
+        body: { project_id: proj.id, action_type: "generate_lesson_blocks", context: "Demo course" },
+      });
+      if (ae) throw ae;
 
-  /* ─── Assistant menu ─── */
-  const getMenuItems = () => {
-    const policy = activeProject?.assistant_menu_policy as any;
-    if (!policy?.items?.length) {
-      return [
-        { id: "explain", label: "Объясни термин", action: "explain_term", enabled: true },
-        { id: "example", label: "Покажи пример", action: "give_example", enabled: true },
-        { id: "quiz", label: "Проверь знания", action: "generate_quiz", enabled: true },
-        { id: "flashcards", label: "Карточки", action: "generate_flashcards", enabled: true },
-      ];
-    }
-    // Apply integrity rules
-    let items = [...policy.items].filter((i: any) => i.visible !== false);
-    const rules = policy.integrity_rules || [];
-    for (const rule of rules) {
-      if (rule.action === "hide" && submitFeedback === null && rule.condition?.includes("attempt.status != completed")) {
-        // Before submission: hide explain_mistake type items
+      queryClient.invalidateQueries({ queryKey: ["guided-project", proj.id] });
+      queryClient.invalidateQueries({ queryKey: ["guided-artifacts", proj.id] });
+      if (actData?.artifact_id) {
+        const { data: art } = await supabase.from("artifacts").select("*").eq("id", actData.artifact_id).single();
+        if (art) setActiveArtifact(art as Artifact);
       }
+      setGenStatus("done");
+      setPhase("work");
+      toast.success("Demo готов!");
+    } catch (e: any) {
+      setGenStatus("error");
+      toast.error(e.message);
     }
-    return items.filter((i: any) => i.enabled !== false);
   };
 
+  /* ─── Assistant action handler ─── */
   const handleAssistantAction = (action: string) => {
+    if (action === "show_sources") {
+      setSidePanel({ type: "sources", refs: activeArtifact?.public_json?.source_refs || [] });
+      return;
+    }
     const selection = window.getSelection()?.toString().trim();
     actMutation.mutate({
       action_type: action,
@@ -473,363 +593,564 @@ Namespaces — способ группировки связанного кода
       { action_type: "explain_term", target: { term }, context: activeArtifact?.title },
       {
         onSuccess: (data) => {
-          setSidePanel({ type: "explain", term, payload: data.public_payload });
+          setSidePanel({ type: "explain", term, payload: data.public_payload, source_refs: data.source_refs });
         },
       }
     );
   };
 
-  /* ─── Roadmap ─── */
-  const roadmap = (activeProject?.roadmap || []) as any[];
-  const nextAvailableStep = roadmap.find((s: any) => s.status === "available");
-
-  const handleRunStep = (step: any) => {
-    const actionMap: Record<string, string> = {
-      course: "generate_lesson_blocks",
-      quiz: "generate_quiz",
-      flashcards: "generate_flashcards",
-      slides: "generate_slides",
-      method_pack: "generate_method_pack",
-    };
-    const action = actionMap[step.artifact_type] || "generate_lesson_blocks";
-    actMutation.mutate({
-      action_type: action,
-      target: { topic_id: step.id },
-      context: step.title,
-    });
-    setView("player");
+  /* ─── Check-in ─── */
+  const handleCheckin = async () => {
+    if (!projectId) return;
+    try {
+      await supabase.functions.invoke("project_checkin", {
+        body: {
+          project_id: projectId,
+          answers: { hard_topics: checkinAnswers.hardTopics.split(",").map((s) => s.trim()).filter(Boolean), pace: checkinAnswers.pace, add_more: checkinAnswers.addMore },
+        },
+      });
+      queryClient.invalidateQueries({ queryKey: ["guided-project", projectId] });
+      setPhase("work");
+      setCompletedSteps((c) => c + 1);
+      toast.success("Roadmap обновлён");
+    } catch (e: any) {
+      toast.error(e.message);
+    }
   };
 
-  /* ─── Artifact renderer ─── */
-  const renderArtifactContent = () => {
-    if (!activeArtifact) return null;
-    const pub = activeArtifact.public_json as any;
-    if (!pub) return <p className="text-sm text-muted-foreground">Пустой артефакт</p>;
-
-    const kind = pub.kind;
-
-    if (kind === "quiz" && pub.questions) {
-      return submitFeedback ? (
-        <div className="space-y-4">
-          <FeedbackPanel feedback={submitFeedback} score={submitScore} />
-          <Button variant="outline" onClick={() => { setSubmitFeedback(null); setSubmitScore(null); }}>
-            <RotateCcw className="h-4 w-4 mr-2" /> Попробовать снова
-          </Button>
-        </div>
-      ) : (
-        <QuizPlayer questions={pub.questions} onSubmit={(answers) => submitMutation.mutate({ artifact_id: activeArtifact.id, answers })} />
-      );
+  /* ─── Next step from roadmap ─── */
+  const handleNextStep = () => {
+    const nextStep = roadmap.find((s: any) => s.status === "available");
+    if (nextStep) {
+      const actionMap: Record<string, string> = {
+        course: "generate_lesson_blocks", quiz: "generate_quiz",
+        flashcards: "generate_flashcards", slides: "generate_slides",
+        method_pack: "generate_method_pack",
+      };
+      actMutation.mutate({
+        action_type: actionMap[nextStep.artifact_type] || formatToActionType(selectedFormat),
+        target: { topic_id: nextStep.id },
+        context: nextStep.title,
+      });
+    } else {
+      setPhase("finish");
     }
-
-    if (kind === "flashcards" && pub.cards) return <FlashcardsPlayer cards={pub.cards} />;
-
-    if (kind === "course" && pub.modules) {
-      return (
-        <div className="space-y-4">
-          {pub.modules.map((mod: any) => (
-            <div key={mod.id} className="space-y-2">
-              <h3 className="font-semibold text-sm text-foreground">{mod.title}</h3>
-              {(mod.lessons || []).map((lesson: any) => (
-                <BlockRenderer key={lesson.id} block={lesson} onTermClick={handleTermClick} />
-              ))}
-            </div>
-          ))}
-        </div>
-      );
-    }
-
-    if (kind === "slides" && pub.slides) {
-      return (
-        <div className="space-y-3">
-          {pub.slides.map((slide: any) => (
-            <div key={slide.id} className="p-4 rounded-lg border border-border bg-card">
-              <Badge variant="outline" className="text-[10px] mb-2">{slide.type}</Badge>
-              <h4 className="font-semibold text-sm text-foreground">{slide.title}</h4>
-              {slide.content && <p className="text-sm text-muted-foreground mt-1">{slide.content}</p>}
-              {slide.bullets && <ul className="mt-2 space-y-1">{slide.bullets.map((b: string, i: number) => <li key={i} className="text-sm text-muted-foreground flex gap-2"><span className="text-primary">•</span>{b}</li>)}</ul>}
-            </div>
-          ))}
-        </div>
-      );
-    }
-
-    if (kind === "method_pack" && pub.blocks) {
-      return (
-        <div className="space-y-3">
-          {pub.blocks.map((block: any) => <BlockRenderer key={block.id} block={block} onTermClick={handleTermClick} />)}
-        </div>
-      );
-    }
-
-    return <pre className="text-xs bg-muted/30 p-4 rounded-lg overflow-auto max-h-96">{JSON.stringify(pub, null, 2)}</pre>;
   };
 
-  /* ═══════════════ VIEWS ═══════════════ */
+  /* ═══════════════ RENDER ═══════════════ */
 
-  // LIST VIEW
-  if (view === "list") {
+  /* ─── INTAKE ─── */
+  if (phase === "intake") {
+    const canProceed = (() => {
+      if (intakeStep === 0) return intake.files.length > 0;
+      if (intakeStep === 1) return !!intake.goal;
+      if (intakeStep === 2) return !!intake.knowledgeLevel;
+      if (intakeStep === 3) return !!intake.depth;
+      return true;
+    })();
+
+    const stepTitles = ["Загрузка файлов", "Цель", "Уровень знаний", "Глубина", "Ограничения", "Предпочтения"];
+
     return (
-      <div className="space-y-6">
+      <div className="space-y-6 max-w-xl mx-auto">
         <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-bold text-foreground">Мои проекты</h2>
-            <p className="text-sm text-muted-foreground">Guided AI — адаптивное обучение</p>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={createDemoProject} disabled={wizardLoading}>
-              <Bug className="h-4 w-4 mr-2" /> Demo проект
-            </Button>
-            <Button size="sm" onClick={() => setView("wizard")}>
-              <Upload className="h-4 w-4 mr-2" /> Новый проект
-            </Button>
-          </div>
+          <h2 className="text-lg font-bold text-foreground">Новый проект</h2>
+          <Button variant="ghost" size="sm" onClick={handleDemo}><Bug className="h-4 w-4 mr-1" /> Demo</Button>
         </div>
 
-        {projectsLoading ? (
-          <div className="text-center py-12"><Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" /></div>
-        ) : projects.length === 0 ? (
-          <div className="text-center py-16 text-muted-foreground">
-            <Brain className="h-12 w-12 mx-auto mb-4 opacity-30" />
-            <p className="text-sm">Нет проектов. Загрузите файлы для создания первого.</p>
+        {/* Progress */}
+        <div className="space-y-2">
+          <div className="flex justify-between text-xs text-muted-foreground">
+            <span>{stepTitles[intakeStep]}</span>
+            <span>{intakeStep + 1}/6</span>
           </div>
-        ) : (
-          <div className="grid gap-3">
-            {projects.map((p) => (
-              <div key={p.id} onClick={() => { setActiveProjectId(p.id); setView("dashboard"); }}
-                className="rounded-xl border border-border bg-card p-4 cursor-pointer hover:border-primary/30 transition-all group">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                      <Map className="h-5 w-5 text-primary" />
+          <Progress value={((intakeStep + 1) / 6) * 100} className="h-1.5" />
+        </div>
+
+        {/* Step 0: Upload */}
+        {intakeStep === 0 && (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">Загрузите материалы для обучения (PDF, DOCX, TXT, MD). Без файлов продолжить нельзя.</p>
+            <div onClick={() => fileInputRef.current?.click()}
+              className="rounded-xl border-2 border-dashed border-border bg-card p-8 text-center cursor-pointer hover:border-primary/40 transition-all">
+              {intake.files.length > 0 ? (
+                <div className="space-y-2">
+                  {intake.files.map((f, i) => (
+                    <div key={i} className="flex items-center gap-2 justify-center">
+                      <FileText className="h-4 w-4 text-primary" />
+                      <span className="text-sm text-foreground">{f.name}</span>
+                      <button onClick={(e) => { e.stopPropagation(); setIntake((p) => ({ ...p, files: p.files.filter((_, j) => j !== i) })); }}
+                        className="text-muted-foreground hover:text-destructive"><X className="h-3 w-3" /></button>
                     </div>
-                    <div>
-                      <h3 className="font-medium text-sm text-foreground">{p.title}</h3>
-                      <p className="text-xs text-muted-foreground">{new Date(p.created_at).toLocaleDateString("ru-RU")} · {p.status}</p>
-                    </div>
-                  </div>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                  ))}
+                  <p className="text-xs text-muted-foreground">Нажмите, чтобы добавить ещё</p>
                 </div>
-              </div>
+              ) : (
+                <>
+                  <Upload className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">PDF, TXT, MD, DOCX</p>
+                </>
+              )}
+            </div>
+            <input ref={fileInputRef} type="file" accept=".pdf,.txt,.md,.docx" multiple className="hidden"
+              onChange={(e) => { if (e.target.files?.length) setIntake((p) => ({ ...p, files: [...p.files, ...Array.from(e.target.files!)] })); e.target.value = ""; }} />
+          </div>
+        )}
+
+        {/* Step 1: Goal */}
+        {intakeStep === 1 && (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">Зачем вам этот материал?</p>
+            {GOAL_OPTIONS.map((opt) => (
+              <button key={opt.value} onClick={() => setIntake((p) => ({ ...p, goal: opt.value }))}
+                className={cn("w-full text-left p-4 rounded-lg border transition-all text-sm",
+                  intake.goal === opt.value ? "border-primary bg-primary/10 text-foreground" : "border-border hover:border-primary/30 text-muted-foreground")}>
+                {opt.label}
+              </button>
             ))}
           </div>
         )}
-      </div>
-    );
-  }
 
-  // WIZARD VIEW
-  if (view === "wizard") {
-    return (
-      <div className="space-y-6 max-w-xl mx-auto">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" onClick={() => setView("list")}>← Назад</Button>
-          <h2 className="text-lg font-bold text-foreground">Новый проект</h2>
-        </div>
-
-        {wizardStep === "processing" ? (
-          <div className="text-center py-16 space-y-4">
-            <Loader2 className="h-10 w-10 text-primary animate-spin mx-auto" />
-            <p className="text-sm text-muted-foreground">Извлечение текста, индексация, создание плана...</p>
-            <p className="text-xs text-muted-foreground">Это может занять 30–60 секунд</p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Название проекта</label>
-              <Input value={wizardTitle} onChange={(e) => setWizardTitle(e.target.value)} placeholder="Например: Основы машинного обучения" />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Загрузите файлы с учебным материалом *</label>
-              <div onClick={() => fileInputRef.current?.click()}
-                className="rounded-xl border-2 border-dashed border-border bg-card p-8 text-center cursor-pointer hover:border-primary/40 transition-all">
-                {wizardFiles.length > 0 ? (
-                  <div className="space-y-2">
-                    {wizardFiles.map((f, i) => (
-                      <div key={i} className="flex items-center gap-2 justify-center">
-                        <FileText className="h-4 w-4 text-primary" />
-                        <span className="text-sm text-foreground">{f.name}</span>
-                        <button onClick={(e) => { e.stopPropagation(); setWizardFiles((prev) => prev.filter((_, j) => j !== i)); }}
-                          className="text-muted-foreground hover:text-destructive"><X className="h-3 w-3" /></button>
-                      </div>
-                    ))}
-                    <p className="text-xs text-muted-foreground">Нажмите, чтобы добавить ещё</p>
-                  </div>
-                ) : (
-                  <>
-                    <Upload className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-                    <p className="text-sm text-muted-foreground">PDF, TXT, MD, DOCX</p>
-                  </>
-                )}
-              </div>
-              <input ref={fileInputRef} type="file" accept=".pdf,.txt,.md,.docx" multiple className="hidden"
-                onChange={(e) => { if (e.target.files?.length) setWizardFiles((prev) => [...prev, ...Array.from(e.target.files!)]); e.target.value = ""; }} />
-            </div>
-
-            <Button onClick={handleWizardCreate} disabled={wizardFiles.length === 0 || wizardLoading} className="w-full">
-              <Brain className="h-4 w-4 mr-2" /> Создать проект
-            </Button>
+        {/* Step 2: Knowledge level */}
+        {intakeStep === 2 && (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">Ваш текущий уровень знаний по теме?</p>
+            {KNOWLEDGE_LEVELS.map((opt) => (
+              <button key={opt.value} onClick={() => setIntake((p) => ({ ...p, knowledgeLevel: opt.value }))}
+                className={cn("w-full text-left p-4 rounded-lg border transition-all",
+                  intake.knowledgeLevel === opt.value ? "border-primary bg-primary/10" : "border-border hover:border-primary/30")}>
+                <span className="text-sm font-medium text-foreground">{opt.label}</span>
+                <p className="text-xs text-muted-foreground">{opt.desc}</p>
+              </button>
+            ))}
           </div>
         )}
+
+        {/* Step 3: Depth */}
+        {intakeStep === 3 && (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">Насколько глубоко изучать?</p>
+            <div className="flex gap-2">
+              {DEPTH_OPTIONS.map((opt) => (
+                <button key={opt.value} onClick={() => setIntake((p) => ({ ...p, depth: opt.value }))}
+                  className={cn("flex-1 p-4 rounded-lg border text-center transition-all text-sm",
+                    intake.depth === opt.value ? "border-primary bg-primary/10 text-foreground" : "border-border hover:border-primary/30 text-muted-foreground")}>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Step 4: Constraints */}
+        {intakeStep === 4 && (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">Ограничения (необязательно)</p>
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-foreground">Дедлайн</label>
+              <Input type="date" value={intake.deadline} onChange={(e) => setIntake((p) => ({ ...p, deadline: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-foreground">Часов в неделю</label>
+              <Input type="number" min="1" max="40" placeholder="Например: 5"
+                value={intake.hoursPerWeek} onChange={(e) => setIntake((p) => ({ ...p, hoursPerWeek: e.target.value }))} />
+            </div>
+          </div>
+        )}
+
+        {/* Step 5: Preferences */}
+        {intakeStep === 5 && (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">Предпочтения (можно выбрать несколько)</p>
+            <div className="flex flex-wrap gap-2">
+              {PREF_OPTIONS.map((opt) => {
+                const active = intake.preferences.includes(opt.value);
+                return (
+                  <button key={opt.value}
+                    onClick={() => setIntake((p) => ({
+                      ...p, preferences: active ? p.preferences.filter((v) => v !== opt.value) : [...p.preferences, opt.value],
+                    }))}
+                    className={cn("px-4 py-2 rounded-full border text-sm transition-all",
+                      active ? "border-primary bg-primary/10 text-foreground" : "border-border hover:border-primary/30 text-muted-foreground")}>
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Navigation */}
+        <div className="flex justify-between pt-2">
+          <Button variant="ghost" size="sm" disabled={intakeStep === 0} onClick={() => setIntakeStep((s) => (s - 1) as IntakeStep)}>
+            <ChevronLeft className="h-4 w-4 mr-1" /> Назад
+          </Button>
+          {intakeStep < 5 ? (
+            <Button size="sm" disabled={!canProceed} onClick={() => setIntakeStep((s) => (s + 1) as IntakeStep)}>
+              Далее <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          ) : (
+            <Button size="sm" onClick={() => {
+              const rec = recommendFormat(intake);
+              setRecommendedFormat(rec);
+              setSelectedFormat(rec);
+              setPhase("recommendation");
+            }}>
+              Готово <ArrowRight className="h-4 w-4 ml-1" />
+            </Button>
+          )}
+        </div>
       </div>
     );
   }
 
-  // DASHBOARD VIEW
-  if (view === "dashboard") {
+  /* ─── RECOMMENDATION ─── */
+  if (phase === "recommendation") {
+    const recInfo = OUTPUT_FORMATS.find((f) => f.value === recommendedFormat)!;
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" onClick={() => { setView("list"); setActiveProjectId(null); }}>← Проекты</Button>
-            <h2 className="text-lg font-bold text-foreground">{activeProject?.title}</h2>
-            <Badge variant="secondary">{activeProject?.status}</Badge>
-          </div>
-          {/* Assistant dropdown */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" disabled={actMutation.isPending}>
-                {actMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Lightbulb className="h-4 w-4 mr-2" />}
-                Помощник
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {getMenuItems().map((item: any) => (
-                <DropdownMenuItem key={item.id} onClick={() => handleAssistantAction(item.action)}>
-                  {item.label}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+      <div className="space-y-6 max-w-xl mx-auto">
+        <h2 className="text-lg font-bold text-foreground">Рекомендация</h2>
 
-        {/* Roadmap */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm flex items-center gap-2"><Map className="h-4 w-4 text-primary" /> Roadmap</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {roadmap.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Roadmap пуст. Запустите планирование.</p>
-            ) : (
-              <div className="space-y-2">
-                {roadmap.map((step: any, i: number) => (
-                  <div key={step.id} className={cn("flex items-center gap-3 p-3 rounded-lg border transition-all",
-                    step.status === "completed" ? "border-accent/30 bg-accent/5" :
-                    step.status === "available" ? "border-primary/30 bg-primary/5 cursor-pointer hover:border-primary" :
-                    "border-border bg-muted/10 opacity-60")}>
-                    <div className={cn("h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0",
-                      step.status === "completed" ? "bg-accent text-accent-foreground" :
-                      step.status === "available" ? "bg-primary text-primary-foreground" :
-                      "bg-muted text-muted-foreground")}>
-                      {step.status === "completed" ? "✓" : i + 1}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">{step.title}</p>
-                      {step.description && <p className="text-xs text-muted-foreground truncate">{step.description}</p>}
-                    </div>
-                    {step.artifact_type && <Badge variant="outline" className="text-[10px] shrink-0">{step.artifact_type}</Badge>}
-                    {step.status === "available" && (
-                      <Button size="sm" variant="default" onClick={() => handleRunStep(step)} disabled={actMutation.isPending}>
-                        <Play className="h-3 w-3 mr-1" /> Начать
-                      </Button>
-                    )}
-                  </div>
-                ))}
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="pt-5 space-y-3">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-primary/20 flex items-center justify-center">
+                <recInfo.icon className="h-5 w-5 text-primary" />
               </div>
-            )}
+              <div>
+                <p className="font-semibold text-foreground">{recInfo.label}</p>
+                <p className="text-xs text-muted-foreground">{recInfo.desc}</p>
+              </div>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              На основе вашей цели «{GOAL_OPTIONS.find((g) => g.value === intake.goal)?.label}» и уровня «{KNOWLEDGE_LEVELS.find((k) => k.value === intake.knowledgeLevel)?.label}» мы рекомендуем этот формат.
+            </p>
           </CardContent>
         </Card>
 
-        {/* Artifacts */}
-        {artifacts.length > 0 && (
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm flex items-center gap-2"><Layers className="h-4 w-4 text-primary" /> Артефакты</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                {artifacts.map((art) => (
-                  <div key={art.id} onClick={() => { setActiveArtifact(art); setView("player"); setSubmitFeedback(null); setSubmitScore(null); }}
-                    className="flex items-center gap-3 p-3 rounded-lg border border-border hover:border-primary/30 cursor-pointer transition-all">
-                    <BookOpen className="h-4 w-4 text-primary shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">{art.title}</p>
-                    </div>
-                    <Badge variant="outline" className="text-[10px]">{art.type}</Badge>
+        <div className="space-y-2">
+          <p className="text-sm font-medium text-foreground">Или выберите другой формат:</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {OUTPUT_FORMATS.map((f) => {
+              const Icon = f.icon;
+              return (
+                <button key={f.value} onClick={() => setSelectedFormat(f.value)}
+                  className={cn("flex items-center gap-3 p-3 rounded-lg border transition-all text-left",
+                    selectedFormat === f.value ? "border-primary bg-primary/10" : "border-border hover:border-primary/30")}>
+                  <Icon className={cn("h-5 w-5 shrink-0", selectedFormat === f.value ? "text-primary" : "text-muted-foreground")} />
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{f.label}</p>
+                    <p className="text-xs text-muted-foreground">{f.desc}</p>
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="flex justify-between">
+          <Button variant="ghost" size="sm" onClick={() => { setPhase("intake"); setIntakeStep(5); }}>
+            <ChevronLeft className="h-4 w-4 mr-1" /> Назад
+          </Button>
+          <Button onClick={handleGenerate}>
+            <Sparkles className="h-4 w-4 mr-2" /> Создать
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  /* ─── GENERATE ─── */
+  if (phase === "generate") {
+    const steps = [
+      { key: "ingesting", label: "Извлечение и индексация текста", icon: FileText },
+      { key: "planning", label: "Создание учебного плана", icon: Brain },
+      { key: "generating", label: "Генерация первого результата", icon: Sparkles },
+    ];
+    const currentIdx = steps.findIndex((s) => s.key === genStatus);
+    const progressVal = genStatus === "done" ? 100 : genStatus === "error" ? 0 : ((currentIdx + 1) / steps.length) * 90;
+
+    return (
+      <div className="space-y-6 max-w-xl mx-auto text-center py-8">
+        {genStatus === "error" ? (
+          <>
+            <AlertCircle className="h-12 w-12 text-destructive mx-auto" />
+            <p className="text-sm text-destructive">Произошла ошибка. Попробуйте снова.</p>
+            <Button variant="outline" onClick={() => { setPhase("recommendation"); setGenStatus("idle"); }}>Назад</Button>
+          </>
+        ) : (
+          <>
+            <Loader2 className="h-12 w-12 text-primary animate-spin mx-auto" />
+            <Progress value={progressVal} className="h-2 max-w-xs mx-auto" />
+            <div className="space-y-3">
+              {steps.map((s, i) => {
+                const Icon = s.icon;
+                const isDone = currentIdx > i || genStatus === "done";
+                const isCurrent = currentIdx === i && genStatus !== "done";
+                return (
+                  <div key={s.key} className={cn("flex items-center gap-3 justify-center text-sm",
+                    isDone ? "text-accent" : isCurrent ? "text-foreground" : "text-muted-foreground/40")}>
+                    {isDone ? <CheckCircle2 className="h-4 w-4" /> : isCurrent ? <Loader2 className="h-4 w-4 animate-spin" /> : <Icon className="h-4 w-4" />}
+                    {s.label}
+                  </div>
+                );
+              })}
+            </div>
+            <p className="text-xs text-muted-foreground">Это может занять 30–60 секунд</p>
+          </>
         )}
       </div>
     );
   }
 
-  // PLAYER VIEW
-  if (view === "player") {
-    return (
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" onClick={() => { setView("dashboard"); setSidePanel(null); }}>← Dashboard</Button>
-            <h2 className="text-base font-bold text-foreground truncate">{activeArtifact?.title || "Артефакт"}</h2>
+  /* ─── WORK ─── */
+  if (phase === "work") {
+    const pub = activeArtifact?.public_json as any;
+    const artifactKind = pub?.kind || activeArtifact?.type || null;
+    const menuItems = getAssistantActions(selectedFormat, artifactKind, quizSubmitted, hasSelection);
+
+    const renderPlayer = () => {
+      if (!activeArtifact || !pub) {
+        return (
+          <div className="text-center py-16">
+            <Brain className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
+            <p className="text-sm text-muted-foreground">Нет контента. Нажмите "Следующий шаг".</p>
           </div>
-          {/* Assistant */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" disabled={actMutation.isPending}>
-                {actMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lightbulb className="h-4 w-4" />}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {getMenuItems().map((item: any) => (
-                <DropdownMenuItem key={item.id} onClick={() => handleAssistantAction(item.action)}>
-                  {item.label}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+        );
+      }
+
+      // Quiz player
+      if (artifactKind === "quiz" && pub.questions) {
+        return (
+          <QuizPlayer
+            questions={pub.questions}
+            onSubmit={(answers) => submitMutation.mutate({ artifact_id: activeArtifact.id, answers })}
+            submitted={quizSubmitted}
+            feedback={submitFeedback}
+            score={submitScore}
+          />
+        );
+      }
+
+      // Flashcards
+      if (artifactKind === "flashcards" && pub.cards) {
+        return <FlashcardsPlayer cards={pub.cards} />;
+      }
+
+      // Slides
+      if (artifactKind === "slides" && pub.slides) {
+        return <SlidesPlayer slides={pub.slides} />;
+      }
+
+      // Course / lesson blocks
+      if ((artifactKind === "course" || artifactKind === "lesson_blocks") && (pub.modules || pub.blocks)) {
+        const blocks = pub.modules
+          ? pub.modules.flatMap((m: any) => [{ id: m.id, title: m.title, type: "text", content: "" }, ...(m.lessons || [])])
+          : pub.blocks || [];
+        return (
+          <div className="space-y-3" onMouseUp={handleMouseUp}>
+            {blocks.filter((b: any) => b.title || b.content).map((block: any) => (
+              <BlockRenderer key={block.id} block={block} onTermClick={handleTermClick} />
+            ))}
+          </div>
+        );
+      }
+
+      // Fallback
+      return <pre className="text-xs bg-muted/30 p-4 rounded-lg overflow-auto max-h-96">{JSON.stringify(pub, null, 2)}</pre>;
+    };
+
+    return (
+      <div className="space-y-4" onMouseUp={handleMouseUp}>
+        {/* Header */}
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <Badge variant="outline" className="shrink-0">{OUTPUT_FORMATS.find((f) => f.value === selectedFormat)?.label}</Badge>
+            <h2 className="text-base font-bold text-foreground truncate">{activeArtifact?.title || "Рабочее пространство"}</h2>
+          </div>
+          <div className="flex items-center gap-2">
+            {/* AI Actions dropdown */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" disabled={actMutation.isPending}>
+                  {actMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lightbulb className="h-4 w-4" />}
+                  <span className="ml-1.5 hidden sm:inline">AI Actions</span>
+                  <ChevronDown className="h-3 w-3 ml-1" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                {menuItems.map((item) => (
+                  <DropdownMenuItem key={item.id} onClick={() => handleAssistantAction(item.action)}>
+                    {item.label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Next step / checkin */}
+            <Button size="sm" variant="default" onClick={() => setPhase("checkin")} disabled={actMutation.isPending}>
+              Следующий шаг <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
         </div>
 
+        {/* Roadmap mini-bar */}
+        {roadmap.length > 0 && (
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+            {roadmap.map((step: any, i: number) => (
+              <div key={step.id} title={step.title}
+                className={cn("h-2 flex-1 rounded-full min-w-[20px] transition-all",
+                  step.status === "completed" ? "bg-accent" :
+                  step.status === "available" ? "bg-primary" :
+                  step.status === "in_progress" ? "bg-primary/50" : "bg-muted")} />
+            ))}
+          </div>
+        )}
+
+        {/* Content area */}
         <div className={cn("grid gap-4", sidePanel ? "grid-cols-1 lg:grid-cols-3" : "grid-cols-1")}>
-          {/* Main content */}
           <div className={cn(sidePanel ? "lg:col-span-2" : "")}>
             {actMutation.isPending ? (
               <div className="text-center py-16"><Loader2 className="h-8 w-8 text-primary animate-spin mx-auto" /><p className="text-sm text-muted-foreground mt-3">Генерация...</p></div>
             ) : submitMutation.isPending ? (
-              <div className="text-center py-16"><Loader2 className="h-8 w-8 text-primary animate-spin mx-auto" /><p className="text-sm text-muted-foreground mt-3">Проверка ответов...</p></div>
+              <div className="text-center py-16"><Loader2 className="h-8 w-8 text-primary animate-spin mx-auto" /><p className="text-sm text-muted-foreground mt-3">Проверка...</p></div>
             ) : (
-              renderArtifactContent()
+              renderPlayer()
             )}
           </div>
 
           {/* Side panel */}
           {sidePanel && (
-            <div className="space-y-3">
+            <div className="space-y-3 p-4 rounded-lg border border-border bg-card">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-foreground">
-                  {sidePanel.type === "loading" ? "Загрузка..." : `Объяснение: ${sidePanel.term}`}
+                  {sidePanel.type === "loading" ? "Загрузка..." :
+                   sidePanel.type === "sources" ? "Источники" :
+                   sidePanel.type === "explain" ? `Объяснение: ${sidePanel.term}` : "Результат"}
                 </h3>
                 <button onClick={() => setSidePanel(null)} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
               </div>
-              {sidePanel.type === "loading" ? (
-                <Loader2 className="h-5 w-5 text-primary animate-spin" />
-              ) : sidePanel.payload ? (
+
+              {sidePanel.type === "loading" && <Loader2 className="h-5 w-5 text-primary animate-spin" />}
+
+              {sidePanel.type === "sources" && (
+                <div className="space-y-1">
+                  {(sidePanel.refs || []).length > 0 ? sidePanel.refs.map((r: string, i: number) => (
+                    <p key={i} className="text-xs text-muted-foreground flex items-center gap-1"><FileSearch className="h-3 w-3" />{r}</p>
+                  )) : <p className="text-xs text-muted-foreground">Нет привязанных источников</p>}
+                </div>
+              )}
+
+              {(sidePanel.type === "explain" || sidePanel.type === "result") && sidePanel.payload && (
                 <div className="space-y-2">
                   {sidePanel.payload.blocks?.map((b: any) => <BlockRenderer key={b.id} block={b} />) ||
-                    <pre className="text-xs bg-muted/30 p-3 rounded-lg overflow-auto">{JSON.stringify(sidePanel.payload, null, 2)}</pre>}
+                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">{typeof sidePanel.payload === "string" ? sidePanel.payload : JSON.stringify(sidePanel.payload, null, 2)}</p>}
                 </div>
-              ) : null}
-              {/* Source refs */}
+              )}
+
               {sidePanel.source_refs?.length > 0 && (
                 <div className="pt-2 border-t border-border">
-                  <p className="text-[10px] text-muted-foreground flex items-center gap-1"><FileSearch className="h-3 w-3" /> Источники: {sidePanel.source_refs.length} фрагментов</p>
+                  <p className="text-[10px] text-muted-foreground flex items-center gap-1"><FileSearch className="h-3 w-3" /> {sidePanel.source_refs.length} источников</p>
                 </div>
               )}
             </div>
           )}
+        </div>
+
+        {/* Submitted quiz: retry + checkin */}
+        {quizSubmitted && (
+          <div className="flex gap-2 justify-center pt-2">
+            <Button variant="outline" size="sm" onClick={() => { setQuizSubmitted(false); setSubmitFeedback(null); setSubmitScore(null); }}>
+              <RotateCcw className="h-4 w-4 mr-1" /> Попробовать снова
+            </Button>
+            <Button size="sm" onClick={() => setPhase("checkin")}>
+              Далее <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  /* ─── CHECK-IN ─── */
+  if (phase === "checkin") {
+    return (
+      <div className="space-y-6 max-w-xl mx-auto">
+        <h2 className="text-lg font-bold text-foreground">Сверка</h2>
+        <p className="text-sm text-muted-foreground">Ответьте на вопросы, чтобы адаптировать следующие шаги.</p>
+
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-foreground">Где было трудно? (темы через запятую)</label>
+            <Input value={checkinAnswers.hardTopics} onChange={(e) => setCheckinAnswers((p) => ({ ...p, hardTopics: e.target.value }))}
+              placeholder="Например: дженерики, интерфейсы" />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-foreground">Темп?</label>
+            <div className="flex gap-2">
+              {["slower", "normal", "faster"].map((v) => (
+                <button key={v} onClick={() => setCheckinAnswers((p) => ({ ...p, pace: v }))}
+                  className={cn("flex-1 p-3 rounded-lg border text-sm transition-all",
+                    checkinAnswers.pace === v ? "border-primary bg-primary/10 text-foreground" : "border-border text-muted-foreground")}>
+                  {v === "slower" ? "Медленнее" : v === "normal" ? "Норм" : "Быстрее"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-foreground">Чего добавить?</label>
+            <div className="flex flex-wrap gap-2">
+              {["Практика", "Примеры", "Тесты"].map((opt) => (
+                <button key={opt} onClick={() => setCheckinAnswers((p) => ({ ...p, addMore: p.addMore === opt ? "" : opt }))}
+                  className={cn("px-4 py-2 rounded-full border text-sm transition-all",
+                    checkinAnswers.addMore === opt ? "border-primary bg-primary/10 text-foreground" : "border-border text-muted-foreground")}>
+                  {opt}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-between">
+          <Button variant="ghost" size="sm" onClick={() => setPhase("work")}>
+            <ChevronLeft className="h-4 w-4 mr-1" /> Назад
+          </Button>
+          <Button onClick={() => { handleCheckin(); handleNextStep(); }}>
+            Обновить и продолжить <ArrowRight className="h-4 w-4 ml-1" />
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  /* ─── FINISH ─── */
+  if (phase === "finish") {
+    return (
+      <div className="space-y-6 max-w-xl mx-auto text-center py-8">
+        <Award className="h-16 w-16 text-primary mx-auto" />
+        <h2 className="text-xl font-bold text-foreground">Готово!</h2>
+        <p className="text-sm text-muted-foreground">Вы прошли все шаги. Можете вернуться к результатам или начать заново.</p>
+
+        <div className="flex gap-3 justify-center">
+          <Button variant="outline" onClick={() => setPhase("work")}>
+            <Eye className="h-4 w-4 mr-2" /> К результатам
+          </Button>
+          <Button onClick={() => {
+            setPhase("intake");
+            setIntakeStep(0);
+            setIntake({ files: [], goal: "", knowledgeLevel: "", depth: "", deadline: "", hoursPerWeek: "", preferences: [] });
+            setProjectId(null);
+            setActiveArtifact(null);
+            setSidePanel(null);
+            setQuizSubmitted(false);
+            setSubmitFeedback(null);
+            setSubmitScore(null);
+            setCompletedSteps(0);
+          }}>
+            <RefreshCw className="h-4 w-4 mr-2" /> Новый проект
+          </Button>
         </div>
       </div>
     );
