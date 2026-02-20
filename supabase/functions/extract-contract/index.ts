@@ -46,12 +46,11 @@ const fieldNames = [
   "ordRequirements", "paymentTerms", "cancellationClause",
 ];
 
-// ─── PDF text extraction ───
+// ─── PDF text extraction using pdfjs-serverless ───
 async function extractPdfText(data: Uint8Array): Promise<string> {
   try {
-    // Use pdfjs-serverless which works in Deno/edge without Node Buffer
     const { getDocument } = await import("https://esm.sh/pdfjs-serverless@0.6.0");
-    const doc = await getDocument(data).promise;
+    const doc = await getDocument({ data, useSystemFonts: true }).promise;
     const pages: string[] = [];
     for (let i = 1; i <= Math.min(doc.numPages, 30); i++) {
       const page = await doc.getPage(i);
@@ -65,14 +64,24 @@ async function extractPdfText(data: Uint8Array): Promise<string> {
   }
 }
 
-// ─── DOCX text extraction ───
+// ─── DOCX text extraction (manual ZIP + XML parsing, no mammoth dependency) ───
 async function extractDocxText(data: Uint8Array): Promise<string> {
   try {
-    const mammoth = await import("npm:mammoth@1.8.0");
-    // Create a proper ArrayBuffer copy so mammoth can find the file
-    const ab = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
-    const result = await mammoth.extractRawText({ arrayBuffer: ab });
-    return result.value || "";
+    const JSZip = (await import("https://esm.sh/jszip@3.10.1")).default;
+    const zip = await JSZip.loadAsync(data);
+    const docXml = await zip.file("word/document.xml")?.async("string");
+    if (!docXml) throw new Error("No word/document.xml found in DOCX");
+    
+    // Strip XML tags, extract text content
+    // Replace paragraph/break tags with newlines first
+    const withBreaks = docXml
+      .replace(/<\/w:p>/g, "\n")
+      .replace(/<w:br[^>]*\/>/g, "\n")
+      .replace(/<w:tab[^>]*\/>/g, "\t");
+    // Remove all XML tags
+    const text = withBreaks.replace(/<[^>]+>/g, "");
+    // Clean up whitespace
+    return text.replace(/\n{3,}/g, "\n\n").trim();
   } catch (e) {
     console.error("DOCX parse error:", e);
     throw new Error("DOCX_PARSE_FAILED");
@@ -90,7 +99,6 @@ serve(async (req) => {
     let redactSensitive = false;
 
     if (contentType.includes("multipart/form-data")) {
-      // ─── New path: file upload, server-side parsing ───
       const formData = await req.formData();
       const file = formData.get("file") as File | null;
       redactSensitive = formData.get("redactSensitive") === "true";
@@ -110,11 +118,9 @@ serve(async (req) => {
       } else if (fileName.endsWith(".docx")) {
         text = await extractDocxText(fileBytes);
       } else {
-        // Plain text fallback
         text = new TextDecoder().decode(fileBytes);
       }
     } else {
-      // ─── Legacy path: pre-extracted text ───
       const body = await req.json();
       text = body.text;
       redactSensitive = body.redactSensitive || false;
@@ -130,14 +136,12 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
-    // Optionally redact bank details before sending to AI
     let processedText = text;
     if (redactSensitive) {
       processedText = processedText.replace(/\b\d{20}\b/g, "****BANK_ACCOUNT****");
       processedText = processedText.replace(/\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/g, "****CARD****");
     }
 
-    // Truncate to ~12000 chars to stay within limits
     const truncated = processedText.slice(0, 12000);
 
     const properties: Record<string, typeof fieldSchema> = {};
@@ -206,7 +210,6 @@ serve(async (req) => {
 
     const extracted = JSON.parse(toolCalls[0].function.arguments);
 
-    // Also return extracted text length for client info
     return new Response(JSON.stringify({ fields: extracted, textLength: text.length }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -215,7 +218,6 @@ serve(async (req) => {
     console.error("extract-contract error:", e);
     const msg = e instanceof Error ? e.message : "Unknown error";
 
-    // Map internal errors to user-friendly messages
     let userMessage = "Произошла ошибка при обработке документа. Попробуйте ещё раз.";
     if (msg === "PDF_PARSE_FAILED") {
       userMessage = "Не удалось прочитать PDF-файл. Убедитесь, что файл не повреждён и содержит текст (не сканированное изображение).";

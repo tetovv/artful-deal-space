@@ -1415,55 +1415,76 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
     const isError = genStatus === "error";
 
     if (isError) {
+      // Determine if the error is a content quality issue (too little text)
+      const isQualityError = pipelineError?.functionName === "quality_check";
+      const userFriendlyMessage = isQualityError
+        ? "Загруженные файлы содержат слишком мало текста для создания материала."
+        : "Произошла ошибка при создании гайда.";
+
       return (
         <div className="space-y-6 max-w-xl mx-auto py-8">
           <h2 className="text-lg font-bold text-foreground">Генерация</h2>
-          <div className="space-y-2">
-            {genStages.map((stage) => {
-              const Icon = stage.icon;
-              return (
-                <div key={stage.key} className="space-y-0">
-                  <div className={cn("flex items-center gap-3 p-3 rounded-lg border",
-                    stage.status === "error" ? "border-destructive/30 bg-destructive/5" :
-                    stage.status === "done" ? "border-accent/30 bg-accent/5" : "border-border")}>
-                    {stage.status === "done" ? <CheckCircle2 className="h-4 w-4 text-accent shrink-0" /> :
-                     stage.status === "error" ? <AlertTriangle className="h-4 w-4 text-destructive shrink-0" /> :
-                     stage.status === "running" ? <Loader2 className="h-4 w-4 text-primary animate-spin shrink-0" /> :
-                     <Icon className="h-4 w-4 text-muted-foreground/40 shrink-0" />}
-                    <span className={cn("text-sm flex-1", stage.status === "error" ? "text-destructive" :
-                      stage.status === "done" ? "text-foreground" : "text-muted-foreground")}>{stage.label}</span>
-                    {stage.status === "error" && (
-                      <Button variant="outline" size="sm" className="text-xs h-7" onClick={() => handleRetryStage(stage.key)}>
-                        <RotateCcw className="h-3 w-3 mr-1" /> Повторить
-                      </Button>
-                    )}
-                  </div>
-                  {/* Debug details for error stage */}
-                  {stage.status === "error" && stage.error && (
-                    <Collapsible>
-                      <CollapsibleTrigger asChild>
-                        <Button variant="ghost" size="sm" className="text-xs ml-7 mt-1">
-                          Подробнее <ChevronDown className="h-3 w-3 ml-1" />
-                        </Button>
-                      </CollapsibleTrigger>
-                      <CollapsibleContent>
-                        <div className="ml-7 mt-1 p-3 rounded-lg bg-muted/30 text-[11px] text-muted-foreground space-y-1">
-                          <p><strong>Стадия:</strong> {stage.key}</p>
-                          <p><strong>Функция:</strong> {stage.error.functionName}</p>
-                          <p><strong>Статус:</strong> HTTP {stage.error.status}</p>
-                          <p className="whitespace-pre-wrap break-all"><strong>Сообщение:</strong> {stage.error.body?.slice(0, 500)}</p>
-                        </div>
-                      </CollapsibleContent>
-                    </Collapsible>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-          {pipelineError && <EdgeErrorCard error={pipelineError} onRetry={handleRetryPipeline} />}
-          <Button variant="ghost" size="sm" onClick={() => { setPhase("recommendation"); setGenStatus("idle"); setPipelineError(null); }}>
-            <ChevronLeft className="h-4 w-4 mr-1" /> Назад к настройкам
-          </Button>
+
+          {/* User-friendly error card */}
+          <Card className="border-destructive/30 bg-destructive/5">
+            <CardContent className="pt-5 space-y-4">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-destructive shrink-0" />
+                <p className="text-sm font-medium text-foreground">{userFriendlyMessage}</p>
+              </div>
+
+              {isQualityError && (
+                <p className="text-xs text-muted-foreground">
+                  Загрузите файлы с большим объёмом текстового контента (минимум 200 символов).
+                </p>
+              )}
+
+              <div className="flex flex-wrap gap-2">
+                {isQualityError ? (
+                  <Button variant="default" size="sm" onClick={() => {
+                    setPhase("intake");
+                    setIntakeStep(0);
+                    setGenStatus("idle");
+                    setPipelineError(null);
+                    setGenStages(INITIAL_GEN_STAGES.map(s => ({ ...s })));
+                  }}>
+                    <ChevronLeft className="h-4 w-4 mr-1" /> Вернуться к источникам
+                  </Button>
+                ) : (
+                  <>
+                    <Button variant="outline" size="sm" onClick={handleRetryPipeline}>
+                      <RotateCcw className="h-3 w-3 mr-1" /> Повторить
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => {
+                      setPhase("intake");
+                      setIntakeStep(0);
+                      setGenStatus("idle");
+                      setPipelineError(null);
+                      setGenStages(INITIAL_GEN_STAGES.map(s => ({ ...s })));
+                    }}>
+                      <ChevronLeft className="h-4 w-4 mr-1" /> Вернуться к источникам
+                    </Button>
+                  </>
+                )}
+              </div>
+
+              {/* Collapsible debug details */}
+              {pipelineError && (
+                <Collapsible>
+                  <CollapsibleTrigger asChild>
+                    <Button variant="ghost" size="sm" className="text-xs text-muted-foreground">
+                      Подробнее <ChevronDown className="h-3 w-3 ml-1" />
+                    </Button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <pre className="text-[11px] text-muted-foreground bg-muted/30 p-3 rounded-lg mt-2 max-h-32 overflow-auto whitespace-pre-wrap break-all">
+                      {pipelineError.body?.slice(0, 500)}
+                    </pre>
+                  </CollapsibleContent>
+                </Collapsible>
+              )}
+            </CardContent>
+          </Card>
         </div>
       );
     }
