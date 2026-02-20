@@ -14,7 +14,7 @@ import CreatorStudio from "./pages/CreatorStudio";
 import CreatorProfile from "./pages/CreatorProfile";
 import AdStudio from "./pages/AdStudio";
 import Marketplace from "./pages/Marketplace";
-import TrustRating from "./pages/TrustRating";
+// TrustRating merged into Marketplace
 import AIWorkspace from "./pages/AIWorkspace";
 import AdminPanel from "./pages/AdminPanel";
 import MyPurchases from "./pages/MyPurchases";
@@ -55,7 +55,7 @@ const App = () => (
               <Route path="/creator/:id" element={<Protected><CreatorProfile /></Protected>} />
               <Route path="/ad-studio" element={<Protected><AdStudio /></Protected>} />
               <Route path="/marketplace" element={<Protected><Marketplace /></Protected>} />
-              <Route path="/trust-rating" element={<Protected><TrustRating /></Protected>} />
+              <Route path="/trust-rating" element={<Navigate to="/marketplace" replace />} />
               <Route path="/ai-workspace" element={<Protected><AIWorkspace /></Protected>} />
               <Route path="/admin" element={<Protected><AdminPanel /></Protected>} />
               <Route path="/my-purchases" element={<Protected><MyPurchases /></Protected>} />
