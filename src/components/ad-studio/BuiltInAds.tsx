@@ -15,9 +15,11 @@ import {
 } from "lucide-react";
 import { CampaignManageView } from "./CampaignManageView";
 import type { Campaign, CampaignStatus, Placement } from "./CampaignManageView";
+import { ContractImportWizard } from "./ContractImportWizard";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { FileText } from "lucide-react";
 
 interface BuiltInAdsProps {
   isVerified: boolean;
@@ -241,6 +243,7 @@ export function BuiltInAds({ isVerified, onGoToSettings }: BuiltInAdsProps) {
   const [placementFilter, setPlacementFilter] = useState<string>("all");
   const [sortBy, setSortBy] = useState<string>("spent");
   const [managingCampaign, setManagingCampaign] = useState<Campaign | null>(null);
+  const [showContractWizard, setShowContractWizard] = useState(false);
 
   const filtered = useMemo(() => {
     let result = [...mockCampaigns];
@@ -279,6 +282,18 @@ export function BuiltInAds({ isVerified, onGoToSettings }: BuiltInAdsProps) {
     };
   }, []);
 
+  if (showContractWizard) {
+    return (
+      <ContractImportWizard
+        onBack={() => setShowContractWizard(false)}
+        onComplete={() => {
+          setShowContractWizard(false);
+          // In real app, would create campaign and navigate to manage view
+        }}
+      />
+    );
+  }
+
   if (managingCampaign) {
     return <CampaignManageView campaign={managingCampaign} onBack={() => setManagingCampaign(null)} />;
   }
@@ -308,17 +323,45 @@ export function BuiltInAds({ isVerified, onGoToSettings }: BuiltInAdsProps) {
               ))}
             </div>
 
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span>
-                  <Button size="sm" disabled={!isVerified} className="h-9 text-sm gap-1.5">
+            {isVerified ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="sm" className="h-9 text-sm gap-1.5">
                     <Plus className="h-4 w-4" />
                     Новая кампания
+                    <ChevronDown className="h-3 w-3 ml-0.5" />
                   </Button>
-                </span>
-              </TooltipTrigger>
-              {!isVerified && <TooltipContent><p className="text-xs">Пройдите верификацию в Настройках</p></TooltipContent>}
-            </Tooltip>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuItem className="text-sm gap-2 py-2.5">
+                    <Plus className="h-3.5 w-3.5" />
+                    <div>
+                      <p className="font-medium">Вручную</p>
+                      <p className="text-[10px] text-muted-foreground">Создать кампанию с нуля</p>
+                    </div>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="text-sm gap-2 py-2.5" onClick={() => setShowContractWizard(true)}>
+                    <FileText className="h-3.5 w-3.5" />
+                    <div>
+                      <p className="font-medium">Из договора</p>
+                      <p className="text-[10px] text-muted-foreground">Импорт из PDF/DOCX</p>
+                    </div>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span>
+                    <Button size="sm" disabled className="h-9 text-sm gap-1.5">
+                      <Plus className="h-4 w-4" />
+                      Новая кампания
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent><p className="text-xs">Пройдите верификацию в Настройках</p></TooltipContent>
+              </Tooltip>
+            )}
 
             <Tooltip>
               <TooltipTrigger asChild>
