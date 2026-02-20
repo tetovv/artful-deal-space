@@ -25,13 +25,24 @@ import {
 } from "@/components/ui/collapsible";
 
 /* ═══════════════ TYPES ═══════════════ */
-type GuidedPhase = "intake" | "recommendation" | "generate" | "work" | "checkin" | "finish";
-type OutputFormat = "COURSE_LEARN" | "EXAM_PREP" | "QUIZ_ONLY" | "FLASHCARDS" | "PRESENTATION";
+type GuidedPhase = "intake" | "recommendation" | "generate" | "player" | "checkin" | "finish";
+type OutputFormat = "COURSE_LEARN" | "EXAM_PREP" | "QUIZ_ONLY" | "INTERVIEW" | "FLASHCARDS" | "PRESENTATION";
 type IntakeStep = 0 | 1 | 2 | 3 | 4 | 5;
+type GenStageKey = "uploading" | "ingesting" | "planning" | "generating";
+type GenStageStatus = "pending" | "running" | "done" | "error";
 type GenStatus = "idle" | "uploading" | "ingesting" | "planning" | "generating" | "done" | "error";
+
+interface GenStage {
+  key: GenStageKey;
+  label: string;
+  icon: React.ElementType;
+  status: GenStageStatus;
+  error?: EdgeError;
+}
 
 interface IntakeData {
   files: File[];
+  pastedText: string;
   goal: string;
   knowledgeLevel: string;
   depth: string;
@@ -57,15 +68,17 @@ interface EdgeError {
 
 const OUTPUT_FORMATS: { value: OutputFormat; label: string; icon: React.ElementType; desc: string }[] = [
   { value: "COURSE_LEARN", label: "Курс", icon: BookOpen, desc: "Уроки + практика + проверки" },
-  { value: "EXAM_PREP", label: "Подготовка к экзамену", icon: GraduationCap, desc: "Диагностика + разбор ошибок + ремедиация" },
   { value: "QUIZ_ONLY", label: "Тесты", icon: HelpCircle, desc: "Банк вопросов + варианты + тренировка" },
+  { value: "EXAM_PREP", label: "Экзамен", icon: GraduationCap, desc: "Диагностика + разбор ошибок + ремедиация" },
+  { value: "INTERVIEW", label: "Собеседование", icon: Brain, desc: "Подготовка к интервью + типовые вопросы" },
   { value: "FLASHCARDS", label: "Карточки", icon: CreditCard, desc: "Карточки для запоминания + quiz me" },
   { value: "PRESENTATION", label: "Презентация", icon: Presentation, desc: "Слайды + заметки + Q&A репетиция" },
 ];
 
 const GOAL_OPTIONS = [
   { value: "self_learn", label: "Учусь для себя" },
-  { value: "exam_prep", label: "Готовлюсь к экзамену/собеседованию" },
+  { value: "exam_prep", label: "Готовлюсь к экзамену" },
+  { value: "interview", label: "Готовлюсь к собеседованию" },
   { value: "quiz_only", label: "Хочу только квиз/диагностику" },
   { value: "flashcards", label: "Хочу карточки" },
   { value: "presentation", label: "Готовлю выступление/презентацию" },
@@ -131,7 +144,14 @@ function recommendFormat(intake: IntakeData): OutputFormat {
   if (intake.goal === "flashcards") return "FLASHCARDS";
   if (intake.goal === "quiz_only") return "QUIZ_ONLY";
   if (intake.goal === "exam_prep") return "EXAM_PREP";
+  if (intake.goal === "interview") return "INTERVIEW";
   return "COURSE_LEARN";
+}
+
+function recommendReason(intake: IntakeData, format: OutputFormat): string {
+  const goalLabel = GOAL_OPTIONS.find((g) => g.value === intake.goal)?.label || intake.goal;
+  const levelLabel = KNOWLEDGE_LEVELS.find((k) => k.value === intake.knowledgeLevel)?.label || intake.knowledgeLevel;
+  return `На основе цели «${goalLabel}» и уровня «${levelLabel}» — этот формат подойдёт лучше всего.`;
 }
 
 function formatToActionType(format: OutputFormat): string {
@@ -139,10 +159,18 @@ function formatToActionType(format: OutputFormat): string {
     case "COURSE_LEARN": return "generate_lesson_blocks";
     case "EXAM_PREP": return "generate_quiz";
     case "QUIZ_ONLY": return "generate_quiz";
+    case "INTERVIEW": return "generate_quiz";
     case "FLASHCARDS": return "generate_flashcards";
     case "PRESENTATION": return "generate_slides";
   }
 }
+
+const INITIAL_GEN_STAGES: GenStage[] = [
+  { key: "uploading", label: "Загрузка источников", icon: Upload, status: "pending" },
+  { key: "ingesting", label: "Извлечение и индексация", icon: FileText, status: "pending" },
+  { key: "planning", label: "Учебный план (roadmap)", icon: Brain, status: "pending" },
+  { key: "generating", label: "Генерация первого результата", icon: Sparkles, status: "pending" },
+];
 
 /** Call edge function with detailed error reporting */
 async function callEdge(fnName: string, body: any): Promise<any> {
@@ -486,7 +514,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
   const [phase, setPhase] = useState<GuidedPhase>("intake");
   const [intakeStep, setIntakeStep] = useState<IntakeStep>(0);
   const [intake, setIntake] = useState<IntakeData>({
-    files: [], goal: "", knowledgeLevel: "", depth: "", deadline: "", hoursPerWeek: "", preferences: [],
+    files: [], pastedText: "", goal: "", knowledgeLevel: "", depth: "", deadline: "", hoursPerWeek: "", preferences: [],
   });
 
   // Recommendation
@@ -495,6 +523,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
 
   // Generate
   const [genStatus, setGenStatus] = useState<GenStatus>("idle");
+  const [genStages, setGenStages] = useState<GenStage[]>(INITIAL_GEN_STAGES.map(s => ({ ...s })));
   const [projectId, setProjectId] = useState<string | null>(null);
   const [pipelineError, setPipelineError] = useState<EdgeError | null>(null);
 
@@ -514,7 +543,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
   useEffect(() => {
     if (resumeProjectId && resumeProjectId !== projectId) {
       setProjectId(resumeProjectId);
-      setPhase("work");
+      setPhase("player");
       setGenStatus("done");
       onResumeComplete?.();
     }
@@ -545,7 +574,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
 
   // Auto-set active artifact when resuming
   useEffect(() => {
-    if (artifacts.length > 0 && !activeArtifact && (phase === "work" || (phase === "generate" && genStatus === "done"))) {
+    if (artifacts.length > 0 && !activeArtifact && (phase === "player" || (phase === "generate" && genStatus === "done"))) {
       setActiveArtifact(artifacts[artifacts.length - 1]);
     }
   }, [artifacts, activeArtifact, phase, genStatus]);
@@ -609,12 +638,19 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
     setHasSelection(!!(sel && sel.length > 2 && sel.length < 100));
   }, []);
 
-  /* ─── Generate pipeline ─── */
+  /* ─── Generate pipeline helpers ─── */
+  const updateStage = (key: GenStageKey, status: GenStageStatus, error?: EdgeError) => {
+    setGenStages(prev => prev.map(s => s.key === key ? { ...s, status, error } : s));
+  };
+
   const runPipeline = async (projId: string, extractedDocs: { text: string; file_name: string }[], format: OutputFormat) => {
     setPipelineError(null);
+    setGenStages(INITIAL_GEN_STAGES.map(s => ({ ...s })));
+    updateStage("uploading", "done");
 
     try {
-      // Ingest: do chunking on client, insert directly via Supabase SDK (avoids edge function memory limits)
+      // Ingest
+      updateStage("ingesting", "running");
       setGenStatus("ingesting");
       const maxChars = 1200;
       const overlap = 150;
@@ -627,8 +663,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
         while (start < doc.text.length) {
           const end = Math.min(start + maxChars, doc.text.length);
           allChunks.push({
-            project_id: projId,
-            user_id: user!.id,
+            project_id: projId, user_id: user!.id,
             content: doc.text.slice(start, end),
             metadata: { file_name: doc.file_name, chunk_index: chunkIndex, start_char: start, end_char: end },
             source_id: projId,
@@ -640,35 +675,39 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
       }
 
       if (!allChunks.length) {
-        throw { functionName: "chunking", status: 0, body: "Не удалось создать чанки из текста" } as EdgeError;
+        const err = { functionName: "chunking", status: 0, body: "Не удалось создать чанки из текста" } as EdgeError;
+        updateStage("ingesting", "error", err);
+        throw err;
       }
 
-      // Delete old chunks
       await supabase.from("project_chunks").delete().eq("project_id", projId);
-
-      // Insert in batches of 50
       for (let i = 0; i < allChunks.length; i += 50) {
         const batch = allChunks.slice(i, i + 50);
         const { error: insertErr } = await supabase.from("project_chunks").insert(batch);
         if (insertErr) {
-          throw { functionName: "chunk_insert", status: 0, body: insertErr.message } as EdgeError;
+          const err = { functionName: "chunk_insert", status: 0, body: insertErr.message } as EdgeError;
+          updateStage("ingesting", "error", err);
+          throw err;
         }
       }
-
       await supabase.from("projects").update({ status: "ingested" }).eq("id", projId);
+      updateStage("ingesting", "done");
 
       // Plan
+      updateStage("planning", "running");
       setGenStatus("planning");
       await callEdge("project_plan", { project_id: projId });
+      updateStage("planning", "done");
 
       // Generate first artifact
+      updateStage("generating", "running");
       setGenStatus("generating");
       const actionType = formatToActionType(format);
       const actData = await callEdge("artifact_act", {
         project_id: projId, action_type: actionType, context: `Format: ${format}`,
       });
+      updateStage("generating", "done");
 
-      // Load artifact
       queryClient.invalidateQueries({ queryKey: ["guided-project", projId] });
       queryClient.invalidateQueries({ queryKey: ["guided-artifacts", projId] });
       queryClient.invalidateQueries({ queryKey: ["my-guided-projects"] });
@@ -679,7 +718,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
       }
 
       setGenStatus("done");
-      setPhase("work");
+      setPhase("player");
       toast.success("Гайд создан!");
     } catch (e: any) {
       console.error("Pipeline error:", e);
@@ -697,21 +736,29 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
     setPhase("generate");
     setGenStatus("uploading");
     setPipelineError(null);
+    setGenStages(INITIAL_GEN_STAGES.map(s => ({ ...s })));
+    updateStage("uploading", "running");
 
     try {
       // Create project
+      const projectTitle = intake.files[0]?.name?.replace(/\.\w+$/, "") ||
+        (intake.pastedText.trim().slice(0, 40) || `Проект ${new Date().toLocaleDateString("ru-RU")}`);
       const { data: proj, error: projErr } = await supabase.from("projects").insert({
         user_id: user.id,
-        title: intake.files[0]?.name?.replace(/\.\w+$/, "") || `Проект ${new Date().toLocaleDateString("ru-RU")}`,
+        title: projectTitle,
         goal: intake.goal,
         audience: intake.knowledgeLevel,
         description: `depth=${intake.depth}, prefs=${intake.preferences.join(",")}`,
         status: "draft",
       }).select().single();
-      if (projErr) throw { functionName: "create_project", status: 0, body: projErr.message };
+      if (projErr) {
+        const err = { functionName: "create_project", status: 0, body: projErr.message } as EdgeError;
+        updateStage("uploading", "error", err);
+        throw err;
+      }
       setProjectId(proj.id);
 
-      // Extract text on client, collect docs for client-side chunking
+      // Extract text on client
       const extractedDocs: { text: string; file_name: string }[] = [];
 
       for (const file of intake.files) {
@@ -719,8 +766,6 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
           const text = await extractText(file);
           if (!text.trim()) continue;
           extractedDocs.push({ text, file_name: file.name });
-
-          // Also upload original file for reference
           const rawPath = `${user.id}/${proj.id}/raw/${file.name}`;
           await supabase.storage.from("ai_sources").upload(rawPath, file, { upsert: true });
         } catch (e) {
@@ -728,10 +773,18 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
         }
       }
 
-      if (!extractedDocs.length) {
-        throw { functionName: "extractText", status: 0, body: "Не удалось извлечь текст ни из одного файла" } as EdgeError;
+      // Add pasted text as a source
+      if (intake.pastedText.trim()) {
+        extractedDocs.push({ text: intake.pastedText.trim(), file_name: "pasted_text.txt" });
       }
 
+      if (!extractedDocs.length) {
+        const err = { functionName: "extractText", status: 0, body: "Не удалось извлечь текст ни из одного источника" } as EdgeError;
+        updateStage("uploading", "error", err);
+        throw err;
+      }
+
+      updateStage("uploading", "done");
       await runPipeline(proj.id, extractedDocs, selectedFormat);
     } catch (e: any) {
       console.error("Generate error:", e);
@@ -770,7 +823,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
           if (art) setActiveArtifact(art as Artifact);
         }
         setGenStatus("done");
-        setPhase("work");
+        setPhase("player");
         toast.success("Гайд создан!");
       } catch (e: any) {
         setGenStatus("error");
@@ -782,7 +835,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
   /* ─── Demo project ─── */
   const handleDemo = async () => {
     if (!user) return;
-    setIntake({ files: [], goal: "self_learn", knowledgeLevel: "basic", depth: "normal", deadline: "", hoursPerWeek: "", preferences: ["examples"] });
+    setIntake({ files: [], pastedText: "", goal: "self_learn", knowledgeLevel: "basic", depth: "normal", deadline: "", hoursPerWeek: "", preferences: ["examples"] });
     setSelectedFormat("COURSE_LEARN");
     setPhase("generate");
     setGenStatus("uploading");
@@ -842,7 +895,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
         },
       });
       queryClient.invalidateQueries({ queryKey: ["guided-project", projectId] });
-      setPhase("work");
+      setPhase("player");
       setCompletedSteps((c) => c + 1);
       toast.success("Roadmap обновлён");
     } catch (e: any) {
@@ -877,15 +930,16 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
 
   /* ─── INTAKE ─── */
   if (phase === "intake") {
+    const hasSources = intake.files.length > 0 || intake.pastedText.trim().length > 0;
     const canProceed = (() => {
-      if (intakeStep === 0) return intake.files.length > 0;
+      if (intakeStep === 0) return hasSources;
       if (intakeStep === 1) return !!intake.goal;
       if (intakeStep === 2) return !!intake.knowledgeLevel;
       if (intakeStep === 3) return !!intake.depth;
       return true;
     })();
 
-    const stepTitles = ["Загрузка файлов", "Цель", "Уровень знаний", "Глубина", "Ограничения", "Предпочтения"];
+    const stepTitles = ["Источники", "Цель", "Уровень знаний", "Глубина", "Ограничения", "Предпочтения"];
 
     return (
       <div className="space-y-6 max-w-xl mx-auto">
@@ -906,9 +960,9 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
         {/* Step 0: Upload */}
         {intakeStep === 0 && (
           <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">Загрузите материалы для обучения (PDF, DOCX, TXT, MD). Без файлов продолжить нельзя.</p>
+            <p className="text-sm text-muted-foreground">Загрузите файлы и/или вставьте текст. Нужен хотя бы один источник.</p>
             <div onClick={() => fileInputRef.current?.click()}
-              className="rounded-xl border-2 border-dashed border-border bg-card p-8 text-center cursor-pointer hover:border-primary/40 transition-all">
+              className="rounded-xl border-2 border-dashed border-border bg-card p-6 text-center cursor-pointer hover:border-primary/40 transition-all">
               {intake.files.length > 0 ? (
                 <div className="space-y-2">
                   {intake.files.map((f, i) => (
@@ -930,6 +984,22 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
             </div>
             <input ref={fileInputRef} type="file" accept=".pdf,.txt,.md,.docx" multiple className="hidden"
               onChange={(e) => { if (e.target.files?.length) setIntake((p) => ({ ...p, files: [...p.files, ...Array.from(e.target.files!)] })); e.target.value = ""; }} />
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-foreground">Или вставьте текст</label>
+              <textarea
+                value={intake.pastedText}
+                onChange={(e) => setIntake((p) => ({ ...p, pastedText: e.target.value }))}
+                placeholder="Вставьте текст из лекции, статьи, конспекта…"
+                className="w-full min-h-[100px] rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground resize-y focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+
+            {!hasSources && (
+              <p className="text-xs text-destructive flex items-center gap-1">
+                <AlertCircle className="h-3 w-3" /> Добавьте хотя бы один источник, чтобы продолжить
+              </p>
+            )}
           </div>
         )}
 
@@ -1032,7 +1102,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
               setSelectedFormat(rec);
               setPhase("recommendation");
             }}>
-              Готово <ArrowRight className="h-4 w-4 ml-1" />
+              К рекомендациям <ArrowRight className="h-4 w-4 ml-1" />
             </Button>
           )}
         </div>
@@ -1047,7 +1117,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
       <div className="space-y-6 max-w-xl mx-auto">
         <h2 className="text-lg font-bold text-foreground">Рекомендация</h2>
         <Card className="border-primary/30 bg-primary/5">
-          <CardContent className="pt-5 space-y-3">
+          <CardContent className="pt-5 space-y-2">
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-lg bg-primary/20 flex items-center justify-center">
                 <recInfo.icon className="h-5 w-5 text-primary" />
@@ -1058,24 +1128,26 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
               </div>
             </div>
             <p className="text-sm text-muted-foreground">
-              На основе вашей цели «{GOAL_OPTIONS.find((g) => g.value === intake.goal)?.label}» и уровня «{KNOWLEDGE_LEVELS.find((k) => k.value === intake.knowledgeLevel)?.label}» мы рекомендуем этот формат.
+              {recommendReason(intake, recommendedFormat)}
             </p>
           </CardContent>
         </Card>
 
         <div className="space-y-2">
           <p className="text-sm font-medium text-foreground">Или выберите другой формат:</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {OUTPUT_FORMATS.map((f) => {
               const Icon = f.icon;
+              const isRec = f.value === recommendedFormat;
               return (
                 <button key={f.value} onClick={() => setSelectedFormat(f.value)}
-                  className={cn("flex items-center gap-3 p-3 rounded-lg border transition-all text-left",
+                  className={cn("flex flex-col items-center gap-2 p-3 rounded-lg border transition-all text-center relative",
                     selectedFormat === f.value ? "border-primary bg-primary/10" : "border-border hover:border-primary/30")}>
-                  <Icon className={cn("h-5 w-5 shrink-0", selectedFormat === f.value ? "text-primary" : "text-muted-foreground")} />
+                  {isRec && <Badge variant="default" className="absolute -top-2 -right-2 text-[9px] px-1.5 py-0">Рек.</Badge>}
+                  <Icon className={cn("h-5 w-5", selectedFormat === f.value ? "text-primary" : "text-muted-foreground")} />
                   <div>
                     <p className="text-sm font-medium text-foreground">{f.label}</p>
-                    <p className="text-xs text-muted-foreground">{f.desc}</p>
+                    <p className="text-[11px] text-muted-foreground leading-tight">{f.desc}</p>
                   </div>
                 </button>
               );
@@ -1095,24 +1167,41 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
     );
   }
 
-  /* ─── GENERATE + WORK (unified) ─── */
-  if (phase === "generate" || phase === "work") {
+  /* ─── GENERATE + PLAYER (unified) ─── */
+  if (phase === "generate" || phase === "player") {
     const isGenerating = phase === "generate" && genStatus !== "done" && genStatus !== "error";
     const isError = genStatus === "error";
-    const genSteps = [
-      { key: "uploading", label: "Загрузка", icon: Upload },
-      { key: "ingesting", label: "Извлечение", icon: FileText },
-      { key: "planning", label: "Учебный план", icon: Brain },
-      { key: "generating", label: "Генерация", icon: Sparkles },
-    ];
-    const currentGenIdx = genSteps.findIndex((s) => s.key === genStatus);
-    const genProgressVal = genStatus === "done" ? 100 : genStatus === "error" ? 0 : ((currentGenIdx + 1) / genSteps.length) * 90;
+    const doneCount = genStages.filter(s => s.status === "done").length;
+    const genProgressVal = genStatus === "done" ? 100 : (doneCount / genStages.length) * 100;
 
-    // Error screen with detailed info
-    if (isError && pipelineError && phase === "generate") {
+    // Error screen: show per-stage status with retry
+    if (isError && phase === "generate") {
       return (
         <div className="space-y-6 max-w-xl mx-auto py-8">
-          <EdgeErrorCard error={pipelineError} onRetry={handleRetryPipeline} />
+          <h2 className="text-lg font-bold text-foreground">Генерация</h2>
+          <div className="space-y-2">
+            {genStages.map((stage) => {
+              const Icon = stage.icon;
+              return (
+                <div key={stage.key} className={cn("flex items-center gap-3 p-3 rounded-lg border",
+                  stage.status === "error" ? "border-destructive/30 bg-destructive/5" :
+                  stage.status === "done" ? "border-accent/30 bg-accent/5" : "border-border")}>
+                  {stage.status === "done" ? <CheckCircle2 className="h-4 w-4 text-accent shrink-0" /> :
+                   stage.status === "error" ? <AlertTriangle className="h-4 w-4 text-destructive shrink-0" /> :
+                   stage.status === "running" ? <Loader2 className="h-4 w-4 text-primary animate-spin shrink-0" /> :
+                   <Icon className="h-4 w-4 text-muted-foreground/40 shrink-0" />}
+                  <span className={cn("text-sm flex-1", stage.status === "error" ? "text-destructive" :
+                    stage.status === "done" ? "text-foreground" : "text-muted-foreground")}>{stage.label}</span>
+                  {stage.status === "error" && (
+                    <Button variant="outline" size="sm" className="text-xs h-7" onClick={handleRetryPipeline}>
+                      <RotateCcw className="h-3 w-3 mr-1" /> Повторить
+                    </Button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {pipelineError && <EdgeErrorCard error={pipelineError} onRetry={handleRetryPipeline} />}
           <Button variant="ghost" size="sm" onClick={() => { setPhase("recommendation"); setGenStatus("idle"); setPipelineError(null); }}>
             <ChevronLeft className="h-4 w-4 mr-1" /> Назад к настройкам
           </Button>
@@ -1266,15 +1355,13 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
             </div>
             <Progress value={genProgressVal} className="h-1.5 mb-3" />
             <div className="flex items-center gap-4">
-              {genSteps.map((s, i) => {
-                const Icon = s.icon;
-                const isDone = currentGenIdx > i;
-                const isCurrent = currentGenIdx === i;
+              {genStages.map((stage) => {
+                const Icon = stage.icon;
                 return (
-                  <div key={s.key} className={cn("flex items-center gap-1.5 text-xs transition-colors",
-                    isDone ? "text-accent" : isCurrent ? "text-foreground" : "text-muted-foreground/40")}>
-                    {isDone ? <CheckCircle2 className="h-3.5 w-3.5" /> : isCurrent ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Icon className="h-3.5 w-3.5" />}
-                    {s.label}
+                  <div key={stage.key} className={cn("flex items-center gap-1.5 text-xs transition-colors",
+                    stage.status === "done" ? "text-accent" : stage.status === "running" ? "text-foreground" : "text-muted-foreground/40")}>
+                    {stage.status === "done" ? <CheckCircle2 className="h-3.5 w-3.5" /> : stage.status === "running" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Icon className="h-3.5 w-3.5" />}
+                    {stage.label}
                   </div>
                 );
               })}
@@ -1412,7 +1499,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
         </div>
 
         <div className="flex justify-between">
-          <Button variant="ghost" size="sm" onClick={() => setPhase("work")}>
+          <Button variant="ghost" size="sm" onClick={() => setPhase("player")}>
             <ChevronLeft className="h-4 w-4 mr-1" /> Назад
           </Button>
           <Button onClick={() => { handleCheckin(); handleNextStep(); }}>
@@ -1432,13 +1519,13 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
         <p className="text-sm text-muted-foreground">Вы прошли все шаги. Можете вернуться к результатам или начать заново.</p>
 
         <div className="flex gap-3 justify-center">
-          <Button variant="outline" onClick={() => setPhase("work")}>
+          <Button variant="outline" onClick={() => setPhase("player")}>
             К результатам
           </Button>
           <Button onClick={() => {
             setPhase("intake");
             setIntakeStep(0);
-            setIntake({ files: [], goal: "", knowledgeLevel: "", depth: "", deadline: "", hoursPerWeek: "", preferences: [] });
+            setIntake({ files: [], pastedText: "", goal: "", knowledgeLevel: "", depth: "", deadline: "", hoursPerWeek: "", preferences: [] });
             setProjectId(null);
             setActiveArtifact(null);
             setSidePanel(null);
