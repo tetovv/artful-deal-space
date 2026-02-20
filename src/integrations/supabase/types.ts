@@ -1048,6 +1048,10 @@ export type Database = {
           bank_corr_account: string | null
           bank_name: string | null
           bank_verified: boolean | null
+          brand_description: string | null
+          brand_logo_url: string | null
+          brand_name: string | null
+          brand_website: string | null
           business_inn: string | null
           business_name: string | null
           business_ogrn: string | null
@@ -1076,6 +1080,10 @@ export type Database = {
           bank_corr_account?: string | null
           bank_name?: string | null
           bank_verified?: boolean | null
+          brand_description?: string | null
+          brand_logo_url?: string | null
+          brand_name?: string | null
+          brand_website?: string | null
           business_inn?: string | null
           business_name?: string | null
           business_ogrn?: string | null
@@ -1104,6 +1112,10 @@ export type Database = {
           bank_corr_account?: string | null
           bank_name?: string | null
           bank_verified?: boolean | null
+          brand_description?: string | null
+          brand_logo_url?: string | null
+          brand_name?: string | null
+          brand_website?: string | null
           business_inn?: string | null
           business_name?: string | null
           business_ogrn?: string | null
