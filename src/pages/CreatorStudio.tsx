@@ -5,7 +5,7 @@ import {
   FileText, Video, Image, Music, Mic, BookOpen, Layout,
   ArrowUpDown, Filter, Search, X, FolderOpen, LineChart as LineChartIcon,
   Wallet, Handshake, MessageCircle, Calendar, User, ChevronRight,
-  ExternalLink, Clock, CheckCircle, AlertCircle, Send,
+  ExternalLink, Clock, CheckCircle, AlertCircle, Send, ThumbsDown,
 } from "lucide-react";
 import { ChartTypeSelector, ChartType } from "@/components/ChartTypeSelector";
 import { Button } from "@/components/ui/button";
@@ -76,7 +76,7 @@ function mapItem(item: any) {
     creatorId: item.creator_id || item.creatorId || "",
     creatorName: item.creator_name || item.creatorName || "",
     creatorAvatar: item.creator_avatar || item.creatorAvatar || "",
-    price: item.price ?? null, views: item.views || 0, likes: item.likes || 0,
+    price: item.price ?? null, views: item.views || 0, likes: item.likes || 0, dislikes: (item as any).dislikes || 0,
     createdAt: item.created_at || item.createdAt || "", tags: item.tags || [],
     status: item.status || "draft",
     monetization_type: item.monetization_type || "free",
@@ -162,6 +162,7 @@ const CreatorStudio = () => {
   /* ── derived stats ── */
   const totalViews = myItems.reduce((s, i) => s + i.views, 0);
   const totalLikes = myItems.reduce((s, i) => s + i.likes, 0);
+  const totalDislikes = myItems.reduce((s, i) => s + (i as any).dislikes, 0);
   const totalRevenue = myItems.reduce((s, i) => s + (i.price || 0), 0);
   const completedDeals = dbDeals.filter((d: any) => d.status === "completed");
   const pendingDeals = dbDeals.filter((d: any) => d.status === "pending");
@@ -555,6 +556,7 @@ const CreatorStudio = () => {
                             <div className="flex items-center gap-3 text-xs text-muted-foreground">
                               <span className="flex items-center gap-1"><Eye className="h-3 w-3" />{fmtNum(item.views)}</span>
                               <span className="flex items-center gap-1"><Heart className="h-3 w-3" />{fmtNum(item.likes)}</span>
+                              <span className="flex items-center gap-1 text-destructive/70"><ThumbsDown className="h-3 w-3" />{fmtNum((item as any).dislikes)}</span>
                               {item.price ? <span className="font-medium text-primary">₽{item.price.toLocaleString()}</span> : <span className="text-success">Бесплатно</span>}
                               <span className="hidden sm:inline text-muted-foreground/60">{new Date(item.createdAt).toLocaleDateString("ru")}</span>
                             </div>
@@ -654,6 +656,7 @@ const CreatorStudio = () => {
                   {[
                     { label: "Просмотры", value: fmtNum(totalViews), trend: "+12%", icon: Eye, gradient: "from-primary/15 to-primary/5", iconColor: "text-primary" },
                     { label: "Лайки", value: fmtNum(totalLikes), trend: "+8%", icon: Heart, gradient: "from-destructive/15 to-destructive/5", iconColor: "text-destructive" },
+                    { label: "Дизлайки", value: fmtNum(totalDislikes), trend: "", icon: ThumbsDown, gradient: "from-muted/30 to-muted/10", iconColor: "text-muted-foreground" },
                     { label: "ER", value: `${engagementRate}%`, trend: "+0.3%", icon: TrendingUp, gradient: "from-warning/15 to-warning/5", iconColor: "text-warning" },
                     { label: "Публикации", value: String(myItems.length), trend: "+3", icon: Package, gradient: "from-accent/15 to-accent/5", iconColor: "text-accent-foreground" },
                     { label: "Доход", value: `₽${fmtNum(totalRevenue + dealsEarned)}`, trend: "+15%", icon: DollarSign, gradient: "from-success/15 to-success/5", iconColor: "text-success" },
