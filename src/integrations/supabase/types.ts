@@ -1043,6 +1043,16 @@ export type Database = {
       studio_settings: {
         Row: {
           auto_publish: boolean | null
+          bank_account: string | null
+          bank_bik: string | null
+          bank_corr_account: string | null
+          bank_name: string | null
+          bank_verified: boolean | null
+          business_inn: string | null
+          business_name: string | null
+          business_ogrn: string | null
+          business_type: string | null
+          business_verified: boolean | null
           channel_description: string | null
           channel_name: string | null
           created_at: string
@@ -1052,12 +1062,25 @@ export type Database = {
           notify_new_comment: boolean | null
           notify_new_deal: boolean | null
           notify_new_subscriber: boolean | null
+          ord_identifier: string | null
+          ord_token: string | null
+          ord_verified: boolean | null
           updated_at: string
           user_id: string
           watermark_enabled: boolean | null
         }
         Insert: {
           auto_publish?: boolean | null
+          bank_account?: string | null
+          bank_bik?: string | null
+          bank_corr_account?: string | null
+          bank_name?: string | null
+          bank_verified?: boolean | null
+          business_inn?: string | null
+          business_name?: string | null
+          business_ogrn?: string | null
+          business_type?: string | null
+          business_verified?: boolean | null
           channel_description?: string | null
           channel_name?: string | null
           created_at?: string
@@ -1067,12 +1090,25 @@ export type Database = {
           notify_new_comment?: boolean | null
           notify_new_deal?: boolean | null
           notify_new_subscriber?: boolean | null
+          ord_identifier?: string | null
+          ord_token?: string | null
+          ord_verified?: boolean | null
           updated_at?: string
           user_id: string
           watermark_enabled?: boolean | null
         }
         Update: {
           auto_publish?: boolean | null
+          bank_account?: string | null
+          bank_bik?: string | null
+          bank_corr_account?: string | null
+          bank_name?: string | null
+          bank_verified?: boolean | null
+          business_inn?: string | null
+          business_name?: string | null
+          business_ogrn?: string | null
+          business_type?: string | null
+          business_verified?: boolean | null
           channel_description?: string | null
           channel_name?: string | null
           created_at?: string
@@ -1082,6 +1118,9 @@ export type Database = {
           notify_new_comment?: boolean | null
           notify_new_deal?: boolean | null
           notify_new_subscriber?: boolean | null
+          ord_identifier?: string | null
+          ord_token?: string | null
+          ord_verified?: boolean | null
           updated_at?: string
           user_id?: string
           watermark_enabled?: boolean | null
