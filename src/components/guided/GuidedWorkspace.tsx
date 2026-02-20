@@ -1098,9 +1098,18 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
           }
 
           // Extract text on client — yields to UI after each page
-          const text = await extractTextOnClient(file);
+          let text = "";
+          try {
+            text = await extractTextOnClient(file);
+          } catch (extractErr: any) {
+            console.error(`Text extraction failed for ${fileName}:`, extractErr);
+            // Surface the actual error instead of silently swallowing
+            toast.error(`Ошибка извлечения ${fileName}: ${extractErr.message || extractErr}`);
+            return null;
+          }
           if (!text.trim()) {
             console.warn(`No text extracted from ${fileName}`);
+            toast.error(`Файл «${fileName}» не содержит текстового слоя. Попробуйте другой файл.`);
             return null;
           }
 
@@ -1122,7 +1131,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
 
       // Check that we have at least something to process
       if (extractedDocs.length === 0) {
-        const err = { functionName: "quality_check", status: 0, body: "Не удалось извлечь текст ни из одного файла. Проверьте формат файлов." } as EdgeError;
+        const err = { functionName: "client_extract", status: 0, body: "Не удалось извлечь текст ни из одного файла. Возможные причины: PDF-скан без текстового слоя, повреждённый файл, или неподдерживаемый формат." } as EdgeError;
         updateStage("uploading", "error", err);
         throw err;
       }
