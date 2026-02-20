@@ -23,3 +23,6 @@ verify_jwt = false
 
 [functions.project_checkin]
 verify_jwt = false
+
+[functions.bik-lookup]
+verify_jwt = false
