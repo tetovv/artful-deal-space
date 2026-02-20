@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { SelectTabPrompt } from "@/pages/Home";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -15,7 +16,7 @@ import { motion } from "framer-motion";
 import { ContentType } from "@/types";
 import { contentTypeLabels } from "@/data/mockData";
 
-const types: ContentType[] = ["video", "music", "post", "podcast", "book", "template", "image"];
+const types: ContentType[] = ["video", "music", "post", "podcast", "book", "template"];
 
 const stagger = {
   container: { hidden: {}, show: { transition: { staggerChildren: 0.06 } } },
@@ -234,7 +235,7 @@ export default function Subscriptions() {
                 </Button>
               </div>
             ) : !activeType ? (
-              <SubscriptionSelectTabPrompt />
+              <SelectTabPrompt />
             ) : feedLoading ? (
               <div className="text-center py-16 text-muted-foreground">Загрузка ленты...</div>
             ) : filteredFeed.length === 0 ? (
@@ -331,35 +332,3 @@ export default function Subscriptions() {
   );
 }
 
-function SubscriptionSelectTabPrompt() {
-  return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.5, ease: "easeOut" }}
-      className="flex flex-col items-center justify-center py-20 space-y-5"
-    >
-      <motion.div
-        animate={{ y: [0, -8, 0] }}
-        transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-        className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center"
-      >
-        <Sparkles className="h-8 w-8 text-primary" />
-      </motion.div>
-      <div className="text-center space-y-2 max-w-md">
-        <h3 className="text-xl font-bold text-foreground">Выберите категорию</h3>
-        <p className="text-sm text-muted-foreground">
-          Нажмите на одну из вкладок выше, чтобы увидеть контент от ваших подписок
-        </p>
-      </div>
-      <motion.div
-        animate={{ opacity: [0.4, 1, 0.4] }}
-        transition={{ duration: 2, repeat: Infinity }}
-        className="flex items-center gap-2 text-xs text-muted-foreground"
-      >
-        <ArrowRight className="h-3.5 w-3.5 rotate-[-90deg]" />
-        <span>Выберите тип контента</span>
-      </motion.div>
-    </motion.div>
-  );
-}

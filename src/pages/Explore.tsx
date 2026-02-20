@@ -8,7 +8,7 @@ import { useContentItems } from "@/hooks/useDbData";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { SelectTabPrompt } from "@/pages/Home";
 
-const types: ContentType[] = ["video", "music", "post", "podcast", "book", "template", "image"];
+const types: ContentType[] = ["video", "music", "post", "podcast", "book", "template"];
 
 const Explore = () => {
   const [search, setSearch] = useState("");
@@ -41,7 +41,7 @@ const Explore = () => {
 
   return (
     <PageTransition>
-      <div className="p-6 lg:p-8 space-y-6 max-w-7xl">
+      <div className="p-6 lg:p-8 space-y-6 max-w-7xl mx-auto">
 
         <div className="space-y-3">
           <div className="relative max-w-2xl mx-auto">
