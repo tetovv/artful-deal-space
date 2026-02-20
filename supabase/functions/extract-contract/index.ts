@@ -69,8 +69,9 @@ async function extractPdfText(data: Uint8Array): Promise<string> {
 async function extractDocxText(data: Uint8Array): Promise<string> {
   try {
     const mammoth = await import("npm:mammoth@1.8.0");
-    // mammoth accepts arrayBuffer in Deno
-    const result = await mammoth.extractRawText({ arrayBuffer: data.buffer });
+    // Create a proper ArrayBuffer copy so mammoth can find the file
+    const ab = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+    const result = await mammoth.extractRawText({ arrayBuffer: ab });
     return result.value || "";
   } catch (e) {
     console.error("DOCX parse error:", e);
