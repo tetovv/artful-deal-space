@@ -4,28 +4,31 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   Upload, Brain, Loader2, CheckCircle2, BookOpen, HelpCircle,
-  FileText, AlertCircle, ChevronRight, ChevronLeft, Play, Send,
-  Lightbulb, Layers, RotateCcw, X, FileSearch, Sparkles,
-  GraduationCap, CreditCard, Presentation, Zap, Clock,
-  BarChart3, ArrowRight, ChevronDown, MessageSquare, Eye,
-  Bookmark, RefreshCw, Target, Award, Bug
+  FileText, AlertCircle, ChevronRight, ChevronLeft, Send,
+  Lightbulb, RotateCcw, X, FileSearch, Sparkles,
+  GraduationCap, CreditCard, Presentation, Clock,
+  ArrowRight, ChevronDown,
+  RefreshCw, Award, Bug, Copy, AlertTriangle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Collapsible, CollapsibleContent, CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 /* ═══════════════ TYPES ═══════════════ */
 type GuidedPhase = "intake" | "recommendation" | "generate" | "work" | "checkin" | "finish";
 type OutputFormat = "COURSE_LEARN" | "EXAM_PREP" | "QUIZ_ONLY" | "FLASHCARDS" | "PRESENTATION";
 type IntakeStep = 0 | 1 | 2 | 3 | 4 | 5;
+type GenStatus = "idle" | "uploading" | "ingesting" | "planning" | "generating" | "done" | "error";
 
 interface IntakeData {
   files: File[];
@@ -44,6 +47,12 @@ interface Artifact {
   public_json: any;
   status: string;
   roadmap_step_id: string | null;
+}
+
+interface EdgeError {
+  functionName: string;
+  status: number;
+  body: string;
 }
 
 const OUTPUT_FORMATS: { value: OutputFormat; label: string; icon: React.ElementType; desc: string }[] = [
@@ -80,16 +89,13 @@ const PREF_OPTIONS = [
   { value: "examples", label: "Больше примеров" },
 ];
 
-/* ═══════════════ File extraction ═══════════════ */
+/* ═══════════════ Helpers ═══════════════ */
 async function extractText(file: File): Promise<string> {
   const ext = file.name.toLowerCase().split(".").pop();
-  if (ext === "txt" || ext === "md") {
-    return file.text();
-  }
+  if (ext === "txt" || ext === "md") return file.text();
   if (ext === "pdf") {
     try {
       const pdfjsLib = await import("pdfjs-dist");
-      // Use bundled worker via Vite ?url import
       const workerModule = await import("pdfjs-dist/build/pdf.worker.mjs?url");
       pdfjsLib.GlobalWorkerOptions.workerSrc = workerModule.default;
       const arrayBuf = await file.arrayBuffer();
@@ -120,7 +126,6 @@ async function extractText(file: File): Promise<string> {
   return file.text();
 }
 
-/* ═══════════════ Recommend format from intake ═══════════════ */
 function recommendFormat(intake: IntakeData): OutputFormat {
   if (intake.goal === "presentation") return "PRESENTATION";
   if (intake.goal === "flashcards") return "FLASHCARDS";
@@ -139,6 +144,98 @@ function formatToActionType(format: OutputFormat): string {
   }
 }
 
+/** Call edge function with detailed error reporting */
+async function callEdge(fnName: string, body: any): Promise<any> {
+  const { data, error } = await supabase.functions.invoke(fnName, { body });
+  if (error) {
+    // Try to extract detailed info
+    const edgeErr: EdgeError = {
+      functionName: fnName,
+      status: (error as any)?.status || 0,
+      body: typeof error === "string" ? error : (error as any)?.message || JSON.stringify(error).slice(0, 2000),
+    };
+    throw edgeErr;
+  }
+  if (data?.error) {
+    throw { functionName: fnName, status: data.status || 400, body: data.error } as EdgeError;
+  }
+  return data;
+}
+
+/* ═══════════════ Error Card ═══════════════ */
+const EdgeErrorCard = ({ error, onRetry }: { error: EdgeError; onRetry?: () => void }) => {
+  const [open, setOpen] = useState(false);
+  const report = `Function: ${error.functionName}\nStatus: ${error.status}\nBody: ${error.body}`;
+  return (
+    <Card className="border-destructive/30 bg-destructive/5">
+      <CardContent className="pt-5 space-y-3">
+        <div className="flex items-center gap-2">
+          <AlertTriangle className="h-5 w-5 text-destructive shrink-0" />
+          <p className="text-sm font-medium text-foreground">Ошибка: {error.functionName}</p>
+        </div>
+        <p className="text-xs text-muted-foreground">HTTP {error.status}</p>
+        <Collapsible open={open} onOpenChange={setOpen}>
+          <CollapsibleTrigger asChild>
+            <Button variant="ghost" size="sm" className="text-xs">
+              {open ? "Скрыть" : "Debug"} <ChevronDown className={cn("h-3 w-3 ml-1 transition-transform", open && "rotate-180")} />
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <pre className="text-[11px] text-muted-foreground bg-muted/30 p-3 rounded-lg mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-all">
+              {error.body.slice(0, 2000)}
+            </pre>
+          </CollapsibleContent>
+        </Collapsible>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => { navigator.clipboard.writeText(report); toast.success("Скопировано"); }}>
+            <Copy className="h-3 w-3 mr-1" /> Копировать отчёт
+          </Button>
+          {onRetry && (
+            <Button variant="outline" size="sm" onClick={onRetry}>
+              <RotateCcw className="h-3 w-3 mr-1" /> Повторить
+            </Button>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
+/* ═══════════════ Unrecognized payload card ═══════════════ */
+const UnknownPayloadCard = ({ kind, payload }: { kind: string; payload: any }) => {
+  const [open, setOpen] = useState(false);
+  return (
+    <Card className="border-yellow-500/30 bg-yellow-500/5">
+      <CardContent className="pt-5 space-y-3">
+        <div className="flex items-center gap-2">
+          <AlertCircle className="h-5 w-5 text-yellow-600 shrink-0" />
+          <p className="text-sm font-medium text-foreground">
+            Невозможно отобразить результат: получен «{kind}»
+          </p>
+        </div>
+        <Collapsible open={open} onOpenChange={setOpen}>
+          <CollapsibleTrigger asChild>
+            <Button variant="ghost" size="sm" className="text-xs">
+              {open ? "Скрыть" : "Debug"} <ChevronDown className={cn("h-3 w-3 ml-1 transition-transform", open && "rotate-180")} />
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <pre className="text-[11px] text-muted-foreground bg-muted/30 p-3 rounded-lg mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-all">
+              {JSON.stringify(payload, null, 2).slice(0, 2000)}
+            </pre>
+          </CollapsibleContent>
+        </Collapsible>
+        <Button variant="outline" size="sm" onClick={() => {
+          navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+          toast.success("Скопировано");
+        }}>
+          <Copy className="h-3 w-3 mr-1" /> Копировать отчёт
+        </Button>
+      </CardContent>
+    </Card>
+  );
+};
+
 /* ═══════════════ RENDERERS ═══════════════ */
 const BlockRenderer = ({ block, onTermClick }: { block: any; onTermClick?: (term: string) => void }) => {
   const handleTextSelect = () => {
@@ -148,7 +245,6 @@ const BlockRenderer = ({ block, onTermClick }: { block: any; onTermClick?: (term
     }
   };
   if (!block) return null;
-
   return (
     <div className="p-4 rounded-lg border border-border bg-card space-y-2" onMouseUp={handleTextSelect}>
       {block.title && (
@@ -162,6 +258,31 @@ const BlockRenderer = ({ block, onTermClick }: { block: any; onTermClick?: (term
   );
 };
 
+/** Renders assistant_note payloads */
+const AssistantNoteCard = ({ payload, sourceRefs }: { payload: any; sourceRefs?: string[] }) => (
+  <div className="space-y-3">
+    {payload.title && (
+      <div className="flex items-center gap-2">
+        <Lightbulb className="h-4 w-4 text-primary" />
+        <h4 className="font-semibold text-sm text-foreground">{payload.title}</h4>
+      </div>
+    )}
+    {payload.content && (
+      <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">{payload.content}</p>
+    )}
+    {(sourceRefs || payload.source_refs)?.length > 0 && (
+      <div className="pt-2 border-t border-border space-y-1">
+        <p className="text-[10px] font-medium text-muted-foreground">Источники:</p>
+        {(sourceRefs || payload.source_refs).map((r: string, i: number) => (
+          <p key={i} className="text-[11px] text-muted-foreground flex items-center gap-1">
+            <FileSearch className="h-3 w-3" />{r}
+          </p>
+        ))}
+      </div>
+    )}
+  </div>
+);
+
 const QuizPlayer = ({ questions, onSubmit, submitted, feedback, score }: {
   questions: any[];
   onSubmit: (answers: { block_id: string; value: string | string[] }[]) => void;
@@ -170,7 +291,6 @@ const QuizPlayer = ({ questions, onSubmit, submitted, feedback, score }: {
   score: number | null;
 }) => {
   const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
-
   const handleSelect = (qId: string, optId: string, isMulti: boolean) => {
     if (submitted) return;
     setAnswers((prev) => {
@@ -181,7 +301,6 @@ const QuizPlayer = ({ questions, onSubmit, submitted, feedback, score }: {
       return { ...prev, [qId]: optId };
     });
   };
-
   return (
     <div className="space-y-4">
       {submitted && feedback && (
@@ -214,6 +333,9 @@ const QuizPlayer = ({ questions, onSubmit, submitted, feedback, score }: {
                 );
               })}
             </div>
+            {submitted && qFeedback?.correct === false && q.explanation && (
+              <p className="text-xs text-muted-foreground bg-muted/30 p-2 rounded">{q.explanation}</p>
+            )}
           </div>
         );
       })}
@@ -283,17 +405,17 @@ const SlidesPlayer = ({ slides }: { slides: any[] }) => {
   );
 };
 
-/* ═══════════════ DYNAMIC ASSISTANT MENU ═══════════════ */
+/* ═══════════════ AI Actions menu (localized + context-dependent) ═══════════════ */
 function getAssistantActions(format: OutputFormat, artifactKind: string | null, submitted: boolean, hasSelection: boolean): { id: string; label: string; action: string }[] {
   const items: { id: string; label: string; action: string }[] = [];
 
-  // Common: sources always available
+  // Sources always available
   items.push({ id: "sources", label: "📄 Показать источники", action: "show_sources" });
 
   if (format === "COURSE_LEARN" || artifactKind === "course" || artifactKind === "lesson_blocks") {
     if (hasSelection) {
-      items.unshift({ id: "explain", label: "💡 Объяснить", action: "explain_term" });
-      items.unshift({ id: "expand", label: "📖 Расширить", action: "expand_selection" });
+      items.unshift({ id: "explain", label: "💡 Объяснить термин", action: "explain_term" });
+      items.unshift({ id: "expand", label: "📖 Расширить выделенное", action: "expand_selection" });
       items.unshift({ id: "example", label: "📝 Пример", action: "give_example" });
     } else {
       items.unshift({ id: "flashcards", label: "🃏 Сделать карточки", action: "generate_flashcards" });
@@ -303,15 +425,15 @@ function getAssistantActions(format: OutputFormat, artifactKind: string | null, 
 
   if (format === "EXAM_PREP" || format === "QUIZ_ONLY" || artifactKind === "quiz") {
     if (!submitted) {
-      items.unshift({ id: "hint", label: "💡 Подсказка", action: "give_example" });
+      items.unshift({ id: "hint", label: "💡 Подсказка", action: "give_hint" });
     } else {
-      items.unshift({ id: "remediate", label: "📚 Доп.практика", action: "remediate_topic" });
-      items.unshift({ id: "explain_err", label: "🔍 Разобрать ошибку", action: "explain_term" });
+      items.unshift({ id: "remediate", label: "📚 Доп. практика", action: "remediate_topic" });
+      items.unshift({ id: "explain_err", label: "🔍 Разобрать ошибку", action: "explain_mistake" });
     }
   }
 
   if (format === "FLASHCARDS" || artifactKind === "flashcards") {
-    items.unshift({ id: "quiz_me", label: "✅ Quiz me", action: "generate_quiz" });
+    items.unshift({ id: "quiz_me", label: "✅ Мини-квиз", action: "generate_quiz" });
     items.unshift({ id: "add_cards", label: "➕ Добавить карточек", action: "generate_flashcards" });
     if (hasSelection) {
       items.unshift({ id: "explain_fc", label: "💡 Объяснить термин", action: "explain_term" });
@@ -350,8 +472,9 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
   const [recommendedFormat, setRecommendedFormat] = useState<OutputFormat>("COURSE_LEARN");
 
   // Generate
-  const [genStatus, setGenStatus] = useState<"idle" | "ingesting" | "planning" | "generating" | "done" | "error">("idle");
+  const [genStatus, setGenStatus] = useState<GenStatus>("idle");
   const [projectId, setProjectId] = useState<string | null>(null);
+  const [pipelineError, setPipelineError] = useState<EdgeError | null>(null);
 
   // Work
   const [activeArtifact, setActiveArtifact] = useState<Artifact | null>(null);
@@ -400,21 +523,17 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
 
   // Auto-set active artifact when resuming
   useEffect(() => {
-    if (artifacts.length > 0 && !activeArtifact && phase === "work") {
+    if (artifacts.length > 0 && !activeArtifact && (phase === "work" || (phase === "generate" && genStatus === "done"))) {
       setActiveArtifact(artifacts[artifacts.length - 1]);
     }
-  }, [artifacts, activeArtifact, phase]);
+  }, [artifacts, activeArtifact, phase, genStatus]);
 
   const roadmap = (project?.roadmap as any[]) || [];
 
   /* ─── Mutations ─── */
   const actMutation = useMutation({
     mutationFn: async (params: { action_type: string; target?: any; context?: string }) => {
-      const { data, error } = await supabase.functions.invoke("artifact_act", {
-        body: { project_id: projectId, ...params },
-      });
-      if (error) throw error;
-      return data;
+      return callEdge("artifact_act", { project_id: projectId, ...params });
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["guided-artifacts"] });
@@ -429,18 +548,23 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
         });
       }
       if (data.public_payload && !data.artifact_id) {
+        // This is an inline action result (assistant_note)
         setSidePanel({ type: "result", payload: data.public_payload, source_refs: data.source_refs });
       }
       toast.success("Готово");
     },
-    onError: (e) => toast.error(`Ошибка: ${e.message}`),
+    onError: (e: any) => {
+      if (e.functionName) {
+        setSidePanel({ type: "error", error: e as EdgeError });
+      } else {
+        toast.error(`Ошибка: ${e.message || e}`);
+      }
+    },
   });
 
   const submitMutation = useMutation({
     mutationFn: async (params: { artifact_id: string; answers: any[] }) => {
-      const { data, error } = await supabase.functions.invoke("artifact_submit", { body: params });
-      if (error) throw error;
-      return data;
+      return callEdge("artifact_submit", params);
     },
     onSuccess: (data) => {
       setQuizSubmitted(true);
@@ -448,7 +572,13 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
       setSubmitScore(data.score);
       toast.success("Проверено!");
     },
-    onError: (e) => toast.error(`Ошибка: ${e.message}`),
+    onError: (e: any) => {
+      if (e.functionName) {
+        setSidePanel({ type: "error", error: e as EdgeError });
+      } else {
+        toast.error(`Ошибка: ${e.message || e}`);
+      }
+    },
   });
 
   /* ─── Text selection tracking ─── */
@@ -458,10 +588,54 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
   }, []);
 
   /* ─── Generate pipeline ─── */
+  const runPipeline = async (projId: string, documents: { text: string; file_name: string }[], format: OutputFormat) => {
+    setPipelineError(null);
+
+    try {
+      // Ingest
+      setGenStatus("ingesting");
+      await callEdge("project_ingest", { project_id: projId, documents });
+
+      // Plan
+      setGenStatus("planning");
+      await callEdge("project_plan", { project_id: projId });
+
+      // Generate first artifact
+      setGenStatus("generating");
+      const actionType = formatToActionType(format);
+      const actData = await callEdge("artifact_act", {
+        project_id: projId, action_type: actionType, context: `Format: ${format}`,
+      });
+
+      // Load artifact
+      queryClient.invalidateQueries({ queryKey: ["guided-project", projId] });
+      queryClient.invalidateQueries({ queryKey: ["guided-artifacts", projId] });
+      queryClient.invalidateQueries({ queryKey: ["my-guided-projects"] });
+
+      if (actData?.artifact_id) {
+        const { data: art } = await supabase.from("artifacts").select("*").eq("id", actData.artifact_id).single();
+        if (art) setActiveArtifact(art as Artifact);
+      }
+
+      setGenStatus("done");
+      setPhase("work");
+      toast.success("Гайд создан!");
+    } catch (e: any) {
+      console.error("Pipeline error:", e);
+      setGenStatus("error");
+      if (e.functionName) {
+        setPipelineError(e as EdgeError);
+      } else {
+        setPipelineError({ functionName: "unknown", status: 0, body: e.message || String(e) });
+      }
+    }
+  };
+
   const handleGenerate = async () => {
     if (!user) return;
     setPhase("generate");
-    setGenStatus("ingesting");
+    setGenStatus("uploading");
+    setPipelineError(null);
 
     try {
       // Create project
@@ -473,10 +647,10 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
         description: `depth=${intake.depth}, prefs=${intake.preferences.join(",")}`,
         status: "draft",
       }).select().single();
-      if (projErr) throw projErr;
+      if (projErr) throw { functionName: "create_project", status: 0, body: projErr.message };
       setProjectId(proj.id);
 
-      // Extract & upload
+      // Extract texts
       const documents: { text: string; file_name: string }[] = [];
       for (const file of intake.files) {
         try {
@@ -490,99 +664,78 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
       }
 
       if (!documents.length || !documents.some((d) => d.text.trim())) {
-        toast.error("Не удалось извлечь текст");
-        setGenStatus("error");
-        return;
+        throw { functionName: "extractText", status: 0, body: "Не удалось извлечь текст ни из одного файла" } as EdgeError;
       }
 
-      // Ingest
-      setGenStatus("ingesting");
-      const { error: ingestErr } = await supabase.functions.invoke("project_ingest", {
-        body: { project_id: proj.id, documents },
-      });
-      if (ingestErr) throw ingestErr;
-
-      // Plan
-      setGenStatus("planning");
-      const { error: planErr } = await supabase.functions.invoke("project_plan", {
-        body: { project_id: proj.id },
-      });
-      if (planErr) throw planErr;
-
-      // Generate first artifact
-      setGenStatus("generating");
-      const actionType = formatToActionType(selectedFormat);
-      const { data: actData, error: actErr } = await supabase.functions.invoke("artifact_act", {
-        body: { project_id: proj.id, action_type: actionType, context: `Format: ${selectedFormat}` },
-      });
-      if (actErr) throw actErr;
-
-      // Load artifact
-      queryClient.invalidateQueries({ queryKey: ["guided-project", proj.id] });
-      queryClient.invalidateQueries({ queryKey: ["guided-artifacts", proj.id] });
-
-      if (actData?.artifact_id) {
-        const { data: art } = await supabase.from("artifacts").select("*").eq("id", actData.artifact_id).single();
-        if (art) setActiveArtifact(art as Artifact);
-      }
-
-      setGenStatus("done");
-      setPhase("work");
-      toast.success("Первый результат готов!");
+      await runPipeline(proj.id, documents, selectedFormat);
     } catch (e: any) {
       console.error("Generate error:", e);
       setGenStatus("error");
-      toast.error(`Ошибка: ${e.message || "Неизвестная ошибка"}`);
+      if (e.functionName) {
+        setPipelineError(e as EdgeError);
+      } else {
+        setPipelineError({ functionName: "unknown", status: 0, body: e.message || String(e) });
+      }
     }
+  };
+
+  /* ─── Retry pipeline from last failed step ─── */
+  const handleRetryPipeline = () => {
+    if (!projectId) return;
+    // Re-run from the step that failed
+    setPipelineError(null);
+    setGenStatus("idle");
+    // Simple: restart from ingest with empty documents triggers re-plan
+    // In practice we'd need to know which step failed. For now re-do plan+generate.
+    setPhase("generate");
+    (async () => {
+      try {
+        setGenStatus("planning");
+        await callEdge("project_plan", { project_id: projectId });
+        setGenStatus("generating");
+        const actData = await callEdge("artifact_act", {
+          project_id: projectId, action_type: formatToActionType(selectedFormat),
+          context: `Format: ${selectedFormat}`,
+        });
+        queryClient.invalidateQueries({ queryKey: ["guided-project", projectId] });
+        queryClient.invalidateQueries({ queryKey: ["guided-artifacts", projectId] });
+        queryClient.invalidateQueries({ queryKey: ["my-guided-projects"] });
+        if (actData?.artifact_id) {
+          const { data: art } = await supabase.from("artifacts").select("*").eq("id", actData.artifact_id).single();
+          if (art) setActiveArtifact(art as Artifact);
+        }
+        setGenStatus("done");
+        setPhase("work");
+        toast.success("Гайд создан!");
+      } catch (e: any) {
+        setGenStatus("error");
+        setPipelineError(e.functionName ? e : { functionName: "unknown", status: 0, body: e.message || String(e) });
+      }
+    })();
   };
 
   /* ─── Demo project ─── */
   const handleDemo = async () => {
     if (!user) return;
-    setIntake({
-      files: [], goal: "self_learn", knowledgeLevel: "basic", depth: "normal",
-      deadline: "", hoursPerWeek: "", preferences: ["examples"],
-    });
+    setIntake({ files: [], goal: "self_learn", knowledgeLevel: "basic", depth: "normal", deadline: "", hoursPerWeek: "", preferences: ["examples"] });
     setSelectedFormat("COURSE_LEARN");
     setPhase("generate");
-    setGenStatus("ingesting");
+    setGenStatus("uploading");
+    setPipelineError(null);
 
     try {
       const { data: proj, error } = await supabase.from("projects").insert({
         user_id: user.id, title: "Demo: TypeScript", status: "draft",
       }).select().single();
-      if (error) throw error;
+      if (error) throw { functionName: "create_project", status: 0, body: error.message };
       setProjectId(proj.id);
 
       const demoText = `TypeScript — язык программирования от Microsoft, надмножество JavaScript с статической типизацией.\n\nОсновные типы: string, number, boolean, any, void, null, undefined, never.\n\nИнтерфейсы описывают структуру объектов:\ninterface User { name: string; age: number; email?: string; }\n\nДженерики обеспечивают переиспользование:\nfunction identity<T>(arg: T): T { return arg; }\n\nEnum — именованные константы:\nenum Direction { Up, Down, Left, Right }\n\nUnion и Intersection типы:\ntype StringOrNumber = string | number;\ntype NamedAndAged = Named & Aged;`;
 
-      const { error: ie } = await supabase.functions.invoke("project_ingest", {
-        body: { project_id: proj.id, documents: [{ text: demoText, file_name: "typescript.md" }] },
-      });
-      if (ie) throw ie;
-
-      setGenStatus("planning");
-      const { error: pe } = await supabase.functions.invoke("project_plan", { body: { project_id: proj.id } });
-      if (pe) throw pe;
-
-      setGenStatus("generating");
-      const { data: actData, error: ae } = await supabase.functions.invoke("artifact_act", {
-        body: { project_id: proj.id, action_type: "generate_lesson_blocks", context: "Demo course" },
-      });
-      if (ae) throw ae;
-
-      queryClient.invalidateQueries({ queryKey: ["guided-project", proj.id] });
-      queryClient.invalidateQueries({ queryKey: ["guided-artifacts", proj.id] });
-      if (actData?.artifact_id) {
-        const { data: art } = await supabase.from("artifacts").select("*").eq("id", actData.artifact_id).single();
-        if (art) setActiveArtifact(art as Artifact);
-      }
-      setGenStatus("done");
-      setPhase("work");
-      toast.success("Demo готов!");
+      await runPipeline(proj.id, [{ text: demoText, file_name: "typescript.md" }], "COURSE_LEARN");
     } catch (e: any) {
       setGenStatus("error");
-      toast.error(e.message);
+      setPipelineError(e.functionName ? e : { functionName: "unknown", status: 0, body: e.message || String(e) });
     }
   };
 
@@ -606,7 +759,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
       { action_type: "explain_term", target: { term }, context: activeArtifact?.title },
       {
         onSuccess: (data) => {
-          setSidePanel({ type: "explain", term, payload: data.public_payload, source_refs: data.source_refs });
+          setSidePanel({ type: "result", payload: data.public_payload, source_refs: data.source_refs });
         },
       }
     );
@@ -616,10 +769,11 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
   const handleCheckin = async () => {
     if (!projectId) return;
     try {
-      await supabase.functions.invoke("project_checkin", {
-        body: {
-          project_id: projectId,
-          answers: { hard_topics: checkinAnswers.hardTopics.split(",").map((s) => s.trim()).filter(Boolean), pace: checkinAnswers.pace, add_more: checkinAnswers.addMore },
+      await callEdge("project_checkin", {
+        project_id: projectId,
+        answers: {
+          hard_topics: checkinAnswers.hardTopics.split(",").map((s) => s.trim()).filter(Boolean),
+          pace: checkinAnswers.pace, add_more: checkinAnswers.addMore,
         },
       });
       queryClient.invalidateQueries({ queryKey: ["guided-project", projectId] });
@@ -627,7 +781,11 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
       setCompletedSteps((c) => c + 1);
       toast.success("Roadmap обновлён");
     } catch (e: any) {
-      toast.error(e.message);
+      if (e.functionName) {
+        toast.error(`Ошибка ${e.functionName}: ${e.body}`);
+      } else {
+        toast.error(e.message || "Ошибка");
+      }
     }
   };
 
@@ -795,7 +953,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
 
         {/* Navigation */}
         <div className="flex justify-between pt-2">
-          <Button variant="ghost" size="sm" disabled={intakeStep === 0} onClick={() => setIntakeStep((s) => (s - 1) as IntakeStep)}>
+          <Button variant="ghost" size="sm" onClick={() => intakeStep > 0 ? setIntakeStep((s) => (s - 1) as IntakeStep) : null} disabled={intakeStep === 0}>
             <ChevronLeft className="h-4 w-4 mr-1" /> Назад
           </Button>
           {intakeStep < 5 ? (
@@ -823,7 +981,6 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
     return (
       <div className="space-y-6 max-w-xl mx-auto">
         <h2 className="text-lg font-bold text-foreground">Рекомендация</h2>
-
         <Card className="border-primary/30 bg-primary/5">
           <CardContent className="pt-5 space-y-3">
             <div className="flex items-center gap-3">
@@ -876,24 +1033,28 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
   /* ─── GENERATE + WORK (unified) ─── */
   if (phase === "generate" || phase === "work") {
     const isGenerating = phase === "generate" && genStatus !== "done" && genStatus !== "error";
-    const isError = phase === "generate" && genStatus === "error";
+    const isError = genStatus === "error";
     const genSteps = [
-      { key: "ingesting", label: "Извлечение текста", icon: FileText },
+      { key: "uploading", label: "Загрузка", icon: Upload },
+      { key: "ingesting", label: "Извлечение", icon: FileText },
       { key: "planning", label: "Учебный план", icon: Brain },
       { key: "generating", label: "Генерация", icon: Sparkles },
     ];
     const currentGenIdx = genSteps.findIndex((s) => s.key === genStatus);
     const genProgressVal = genStatus === "done" ? 100 : genStatus === "error" ? 0 : ((currentGenIdx + 1) / genSteps.length) * 90;
 
-    if (isError) {
+    // Error screen with detailed info
+    if (isError && pipelineError && phase === "generate") {
       return (
-        <div className="space-y-6 max-w-xl mx-auto text-center py-8">
-          <AlertCircle className="h-12 w-12 text-destructive mx-auto" />
-          <p className="text-sm text-destructive">Произошла ошибка. Попробуйте снова.</p>
-          <Button variant="outline" onClick={() => { setPhase("recommendation"); setGenStatus("idle"); }}>Назад</Button>
+        <div className="space-y-6 max-w-xl mx-auto py-8">
+          <EdgeErrorCard error={pipelineError} onRetry={handleRetryPipeline} />
+          <Button variant="ghost" size="sm" onClick={() => { setPhase("recommendation"); setGenStatus("idle"); setPipelineError(null); }}>
+            <ChevronLeft className="h-4 w-4 mr-1" /> Назад к настройкам
+          </Button>
         </div>
       );
     }
+
     const pub = activeArtifact?.public_json as any;
     const artifactKind = pub?.kind || activeArtifact?.type || null;
     const menuItems = getAssistantActions(selectedFormat, artifactKind, quizSubmitted, hasSelection);
@@ -903,12 +1064,12 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
         return (
           <div className="text-center py-16">
             <Brain className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
-            <p className="text-sm text-muted-foreground">Нет контента. Нажмите "Следующий шаг".</p>
+            <p className="text-sm text-muted-foreground">Нет контента. Нажмите «Следующий шаг».</p>
           </div>
         );
       }
 
-      // Quiz player
+      // Quiz
       if (artifactKind === "quiz" && pub.questions) {
         return (
           <QuizPlayer
@@ -945,8 +1106,88 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
         );
       }
 
-      // Fallback
-      return <pre className="text-xs bg-muted/30 p-4 rounded-lg overflow-auto max-h-96">{JSON.stringify(pub, null, 2)}</pre>;
+      // Assistant note (from inline actions)
+      if (artifactKind === "assistant_note") {
+        return <AssistantNoteCard payload={pub} />;
+      }
+
+      // Method pack (legacy — render blocks)
+      if (artifactKind === "method_pack" && pub.blocks) {
+        return (
+          <div className="space-y-3">
+            {pub.blocks.map((block: any) => (
+              <BlockRenderer key={block.id} block={block} onTermClick={handleTermClick} />
+            ))}
+          </div>
+        );
+      }
+
+      // Unknown payload — NO raw JSON, show error card
+      return <UnknownPayloadCard kind={artifactKind || "unknown"} payload={pub} />;
+    };
+
+    /* ─── Side panel renderer ─── */
+    const renderSidePanel = () => {
+      if (!sidePanel) return null;
+
+      return (
+        <div className="space-y-3 p-4 rounded-lg border border-border bg-card animate-fade-in">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-foreground">
+              {sidePanel.type === "loading" ? "Загрузка..." :
+               sidePanel.type === "sources" ? "Источники" :
+               sidePanel.type === "error" ? "Ошибка" : "Результат"}
+            </h3>
+            <button onClick={() => setSidePanel(null)} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
+          </div>
+
+          {sidePanel.type === "loading" && <Loader2 className="h-5 w-5 text-primary animate-spin" />}
+
+          {sidePanel.type === "error" && sidePanel.error && (
+            <EdgeErrorCard error={sidePanel.error} onRetry={() => setSidePanel(null)} />
+          )}
+
+          {sidePanel.type === "sources" && (
+            <div className="space-y-1">
+              {(sidePanel.refs || []).length > 0 ? sidePanel.refs.map((r: string, i: number) => (
+                <p key={i} className="text-xs text-muted-foreground flex items-center gap-1"><FileSearch className="h-3 w-3" />{r}</p>
+              )) : <p className="text-xs text-muted-foreground">Нет привязанных источников</p>}
+            </div>
+          )}
+
+          {sidePanel.type === "result" && sidePanel.payload && (() => {
+            const p = sidePanel.payload;
+            // assistant_note
+            if (p.kind === "assistant_note") {
+              return <AssistantNoteCard payload={p} sourceRefs={sidePanel.source_refs} />;
+            }
+            // method_pack blocks (legacy conversion)
+            if (p.kind === "method_pack" && p.blocks) {
+              return (
+                <div className="space-y-2">
+                  {p.blocks.map((b: any) => <BlockRenderer key={b.id} block={b} />)}
+                </div>
+              );
+            }
+            // Quiz inline
+            if (p.kind === "quiz" && p.questions) {
+              return <p className="text-sm text-muted-foreground">Квиз создан — переключено на основной контент</p>;
+            }
+            // Flashcards inline
+            if (p.kind === "flashcards" && p.cards) {
+              return <p className="text-sm text-muted-foreground">Карточки созданы — переключено на основной контент</p>;
+            }
+            // Fallback: no raw JSON, use error card
+            return <UnknownPayloadCard kind={p.kind || "unknown"} payload={p} />;
+          })()}
+
+          {sidePanel.source_refs?.length > 0 && sidePanel.payload?.kind !== "assistant_note" && (
+            <div className="pt-2 border-t border-border">
+              <p className="text-[10px] text-muted-foreground flex items-center gap-1"><FileSearch className="h-3 w-3" /> {sidePanel.source_refs.length} источников</p>
+            </div>
+          )}
+        </div>
+      );
     };
 
     return (
@@ -975,6 +1216,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
             </div>
           </div>
         )}
+
         {/* Header */}
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2 min-w-0">
@@ -982,12 +1224,12 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
             <h2 className="text-base font-bold text-foreground truncate">{activeArtifact?.title || "Рабочее пространство"}</h2>
           </div>
           <div className="flex items-center gap-2">
-            {/* AI Actions dropdown */}
+            {/* AI Actions dropdown — localized */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" disabled={actMutation.isPending || isGenerating}>
                   {actMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lightbulb className="h-4 w-4" />}
-                  <span className="ml-1.5 hidden sm:inline">AI Actions</span>
+                  <span className="ml-1.5 hidden sm:inline">Действия AI</span>
                   <ChevronDown className="h-3 w-3 ml-1" />
                 </Button>
               </DropdownMenuTrigger>
@@ -1010,7 +1252,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
         {/* Roadmap mini-bar */}
         {roadmap.length > 0 && (
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-            {roadmap.map((step: any, i: number) => (
+            {roadmap.map((step: any) => (
               <div key={step.id} title={step.title}
                 className={cn("h-2 flex-1 rounded-full min-w-[20px] transition-all",
                   step.status === "completed" ? "bg-accent" :
@@ -1045,41 +1287,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
           </div>
 
           {/* Side panel */}
-          {sidePanel && (
-            <div className="space-y-3 p-4 rounded-lg border border-border bg-card">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-foreground">
-                  {sidePanel.type === "loading" ? "Загрузка..." :
-                   sidePanel.type === "sources" ? "Источники" :
-                   sidePanel.type === "explain" ? `Объяснение: ${sidePanel.term}` : "Результат"}
-                </h3>
-                <button onClick={() => setSidePanel(null)} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
-              </div>
-
-              {sidePanel.type === "loading" && <Loader2 className="h-5 w-5 text-primary animate-spin" />}
-
-              {sidePanel.type === "sources" && (
-                <div className="space-y-1">
-                  {(sidePanel.refs || []).length > 0 ? sidePanel.refs.map((r: string, i: number) => (
-                    <p key={i} className="text-xs text-muted-foreground flex items-center gap-1"><FileSearch className="h-3 w-3" />{r}</p>
-                  )) : <p className="text-xs text-muted-foreground">Нет привязанных источников</p>}
-                </div>
-              )}
-
-              {(sidePanel.type === "explain" || sidePanel.type === "result") && sidePanel.payload && (
-                <div className="space-y-2">
-                  {sidePanel.payload.blocks?.map((b: any) => <BlockRenderer key={b.id} block={b} />) ||
-                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">{typeof sidePanel.payload === "string" ? sidePanel.payload : JSON.stringify(sidePanel.payload, null, 2)}</p>}
-                </div>
-              )}
-
-              {sidePanel.source_refs?.length > 0 && (
-                <div className="pt-2 border-t border-border">
-                  <p className="text-[10px] text-muted-foreground flex items-center gap-1"><FileSearch className="h-3 w-3" /> {sidePanel.source_refs.length} источников</p>
-                </div>
-              )}
-            </div>
-          )}
+          {sidePanel && renderSidePanel()}
         </div>
 
         {/* Submitted quiz: retry + checkin */}
@@ -1160,7 +1368,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
 
         <div className="flex gap-3 justify-center">
           <Button variant="outline" onClick={() => setPhase("work")}>
-            <Eye className="h-4 w-4 mr-2" /> К результатам
+            К результатам
           </Button>
           <Button onClick={() => {
             setPhase("intake");
@@ -1173,6 +1381,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
             setSubmitFeedback(null);
             setSubmitScore(null);
             setCompletedSteps(0);
+            setPipelineError(null);
           }}>
             <RefreshCw className="h-4 w-4 mr-2" /> Новый проект
           </Button>
