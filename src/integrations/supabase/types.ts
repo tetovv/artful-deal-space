@@ -468,6 +468,218 @@ export type Database = {
         }
         Relationships: []
       }
+      deal_audit_log: {
+        Row: {
+          action: string
+          category: string
+          created_at: string
+          deal_id: string
+          id: string
+          metadata: Json | null
+          user_id: string
+        }
+        Insert: {
+          action: string
+          category?: string
+          created_at?: string
+          deal_id: string
+          id?: string
+          metadata?: Json | null
+          user_id: string
+        }
+        Update: {
+          action?: string
+          category?: string
+          created_at?: string
+          deal_id?: string
+          id?: string
+          metadata?: Json | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deal_audit_log_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "deals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      deal_escrow: {
+        Row: {
+          amount: number
+          created_at: string
+          deal_id: string
+          id: string
+          label: string
+          milestone_id: string | null
+          released_at: string | null
+          released_by: string | null
+          reserved_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          deal_id: string
+          id?: string
+          label: string
+          milestone_id?: string | null
+          released_at?: string | null
+          released_by?: string | null
+          reserved_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          deal_id?: string
+          id?: string
+          label?: string
+          milestone_id?: string | null
+          released_at?: string | null
+          released_by?: string | null
+          reserved_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deal_escrow_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "deals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deal_escrow_milestone_id_fkey"
+            columns: ["milestone_id"]
+            isOneToOne: false
+            referencedRelation: "milestones"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      deal_files: {
+        Row: {
+          category: string
+          created_at: string
+          deal_id: string
+          file_name: string
+          file_size: number | null
+          file_type: string | null
+          id: string
+          pinned: boolean | null
+          storage_path: string
+          user_id: string
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          deal_id: string
+          file_name: string
+          file_size?: number | null
+          file_type?: string | null
+          id?: string
+          pinned?: boolean | null
+          storage_path: string
+          user_id: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          deal_id?: string
+          file_name?: string
+          file_size?: number | null
+          file_type?: string | null
+          id?: string
+          pinned?: boolean | null
+          storage_path?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deal_files_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "deals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      deal_terms: {
+        Row: {
+          created_at: string
+          created_by: string
+          deal_id: string
+          fields: Json
+          id: string
+          status: string
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          deal_id: string
+          fields?: Json
+          id?: string
+          status?: string
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          deal_id?: string
+          fields?: Json
+          id?: string
+          status?: string
+          updated_at?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deal_terms_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "deals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      deal_terms_acceptance: {
+        Row: {
+          accepted_at: string
+          id: string
+          terms_id: string
+          user_id: string
+        }
+        Insert: {
+          accepted_at?: string
+          id?: string
+          terms_id: string
+          user_id: string
+        }
+        Update: {
+          accepted_at?: string
+          id?: string
+          terms_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deal_terms_acceptance_terms_id_fkey"
+            columns: ["terms_id"]
+            isOneToOne: false
+            referencedRelation: "deal_terms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       deals: {
         Row: {
           advertiser_id: string | null

@@ -1,7 +1,14 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
 import { deals, messages as allMessages } from "@/data/mockData";
 import { useRealtimeMessages } from "@/hooks/useRealtimeMessages";
 import { useAdvertiserScores } from "@/hooks/useAdvertiserScores";
+import { useAuth } from "@/contexts/AuthContext";
+import {
+  useDealAuditLog, useLogDealEvent,
+  useDealEscrow, useReserveEscrow, useReleaseEscrow,
+  useDealFiles, useUploadDealFile, useDownloadDealFile,
+  useDealTerms, useAcceptTerms,
+} from "@/hooks/useDealData";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -454,11 +461,28 @@ const termsSections: { title: string; fields: TermFieldRow[] }[] = [
   },
 ];
 
-function TermsTab() {
-  const [selectedVersion, setSelectedVersion] = useState(mockTermsVersions.length - 1);
+function TermsTab({ dealId }: { dealId: string }) {
+  const { user } = useAuth();
+  const { data: dbTerms = [] } = useDealTerms(dealId);
+  const acceptTerms = useAcceptTerms();
+
+  // Use DB terms if available, fallback to mock
+  const termsVersions = dbTerms.length > 0
+    ? dbTerms.map((t: any) => ({
+        id: t.id,
+        version: t.version,
+        status: t.status as "accepted" | "draft" | "pending",
+        date: new Date(t.created_at).toLocaleDateString("ru-RU"),
+        acceptedBy: (t.deal_terms_acceptance || []).map(() => "Участник"),
+        fields: t.fields as Record<string, string>,
+        myAccepted: (t.deal_terms_acceptance || []).some((a: any) => a.user_id === user?.id),
+      }))
+    : mockTermsVersions.map((v) => ({ ...v, id: "", myAccepted: false }));
+
+  const [selectedVersion, setSelectedVersion] = useState(termsVersions.length - 1);
   const [showChanges, setShowChanges] = useState(false);
-  const ver = mockTermsVersions[selectedVersion];
-  const prevVer = selectedVersion > 0 ? mockTermsVersions[selectedVersion - 1] : null;
+  const ver = termsVersions[Math.min(selectedVersion, termsVersions.length - 1)];
+  const prevVer = selectedVersion > 0 ? termsVersions[selectedVersion - 1] : null;
 
   const statusLabel = ver.status === "accepted" ? "Согласовано" : ver.status === "draft" ? "Черновик" : "Ожидает подтверждения";
   const statusColor = ver.status === "accepted"
@@ -474,12 +498,19 @@ function TermsTab() {
     }
   }
 
-  const canAccept = ver.status === "draft" || (ver.status as string) === "pending";
-  const hasAcceptedAndNoDraft = ver.status === "accepted" && selectedVersion === mockTermsVersions.length - 1;
+  const canAccept = (ver.status === "draft" || ver.status === "pending") && !ver.myAccepted;
+  const hasAcceptedAndNoDraft = ver.status === "accepted" && selectedVersion === termsVersions.length - 1;
+
+  const handleAccept = () => {
+    if (ver.id) {
+      acceptTerms.mutate({ termsId: ver.id, dealId, version: ver.version });
+    } else {
+      toast.success("Условия подтверждены (демо)");
+    }
+  };
 
   return (
     <div className="p-4 space-y-3 max-w-[820px] mx-auto">
-      {/* Header: version selector + status */}
       <Card>
         <CardContent className="p-3">
           <div className="flex items-center justify-between">
@@ -493,7 +524,7 @@ function TermsTab() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {mockTermsVersions.map((v, i) => (
+                  {termsVersions.map((v, i) => (
                     <SelectItem key={v.version} value={String(i)}>v{v.version}</SelectItem>
                   ))}
                 </SelectContent>
@@ -523,7 +554,6 @@ function TermsTab() {
         </CardContent>
       </Card>
 
-      {/* Accordion sections */}
       <Accordion type="multiple" defaultValue={termsSections.map((_, i) => `s${i}`)}>
         {termsSections.map((section, si) => {
           const visibleFields = showChanges
@@ -562,12 +592,11 @@ function TermsTab() {
         })}
       </Accordion>
 
-      {/* Actions: max 2 */}
       <div className="flex items-center gap-2 pt-1">
         {canAccept && (
-          <Button size="sm" className="text-[13px] h-8">
+          <Button size="sm" className="text-[13px] h-8" onClick={handleAccept} disabled={acceptTerms.isPending}>
             <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
-            Подтвердить условия
+            {acceptTerms.isPending ? "Подтверждение…" : "Подтвердить условия"}
           </Button>
         )}
         <Button size="sm" variant="outline" className="text-[13px] h-8">
@@ -575,7 +604,6 @@ function TermsTab() {
         </Button>
       </div>
 
-      {/* Additional links — collapsed */}
       <Collapsible>
         <CollapsibleTrigger className="flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground transition-colors">
           <ChevronRight className="h-3 w-3" />
@@ -593,7 +621,6 @@ function TermsTab() {
         </CollapsibleContent>
       </Collapsible>
 
-      {/* Footer note */}
       <p className="text-[11px] text-muted-foreground/40 leading-relaxed">
         Платформа фиксирует версионные условия и подтверждения сторон.
       </p>
@@ -603,83 +630,101 @@ function TermsTab() {
 /* ═══════════════════════════════════════════════════════
    FILES TAB — dense table, strict actions
    ═══════════════════════════════════════════════════════ */
-function FilesTab() {
-  // Sort: pinned first, then by date descending
+function FilesTab({ dealId }: { dealId: string }) {
+  const { data: dbFiles = [], isLoading } = useDealFiles(dealId);
+  const uploadFile = useUploadDealFile();
+  const downloadFile = useDownloadDealFile();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadCategory, setUploadCategory] = useState("draft");
+
+  const displayFiles = dbFiles.length > 0
+    ? dbFiles.map((f) => ({
+        id: f.id, name: f.file_name, type: f.category as any,
+        uploader: "Вы", date: new Date(f.created_at).toLocaleDateString("ru-RU"),
+        pinned: f.pinned ?? false, storagePath: f.storage_path,
+        sizeMeta: `${(f.file_type || "").split("/").pop()?.toUpperCase() || "—"} · ${((f.file_size || 0) / 1024).toFixed(0)} KB`,
+      }))
+    : mockFiles.map((f) => ({ ...f, storagePath: "", sizeMeta: fileSizeMock[f.id] || "—" }));
+
   const sortedFiles = useMemo(() => {
-    return [...mockFiles].sort((a, b) => {
-      if (a.pinned && !b.pinned) return -1;
-      if (!a.pinned && b.pinned) return 1;
-      return 0;
-    });
-  }, []);
+    return [...displayFiles].sort((a, b) => (a.pinned && !b.pinned ? -1 : !a.pinned && b.pinned ? 1 : 0));
+  }, [displayFiles]);
 
   const fileSizeMock: Record<string, string> = {
     "f1": "PDF · 1.2 MB", "f2": "MP4 · 84 MB", "f3": "MP4 · 112 MB", "f4": "PDF · 340 KB",
   };
 
+  const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    uploadFile.mutate({ dealId, file, category: uploadCategory });
+    e.target.value = "";
+  };
+
   return (
     <div className="p-4 space-y-3 max-w-[820px] mx-auto">
-      {/* Header with upload */}
       <div className="flex items-center justify-between">
         <p className="text-[14px] font-semibold text-card-foreground">Файлы сделки</p>
-        <Button variant="outline" size="sm" className="text-[13px] h-8">
-          <Upload className="h-3.5 w-3.5 mr-1.5" />
-          Загрузить
-        </Button>
+        <div className="flex items-center gap-2">
+          <Select value={uploadCategory} onValueChange={setUploadCategory}>
+            <SelectTrigger className="h-7 w-28 text-[12px]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="brief">Бриф</SelectItem>
+              <SelectItem value="draft">Черновик</SelectItem>
+              <SelectItem value="final">Финальный</SelectItem>
+              <SelectItem value="legal">Юридический</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button variant="outline" size="sm" className="text-[13px] h-8" onClick={() => fileInputRef.current?.click()} disabled={uploadFile.isPending}>
+            <Upload className="h-3.5 w-3.5 mr-1.5" />
+            {uploadFile.isPending ? "Загрузка…" : "Загрузить"}
+          </Button>
+          <input ref={fileInputRef} type="file" className="hidden" onChange={handleUpload} />
+        </div>
       </div>
 
-      {/* Table header */}
       <div className="grid grid-cols-[100px_1fr_120px_80px_72px] gap-2 px-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-        <span>Категория</span>
-        <span>Файл</span>
-        <span>Автор</span>
-        <span>Дата</span>
-        <span className="text-right">Действия</span>
+        <span>Категория</span><span>Файл</span><span>Автор</span><span>Дата</span><span className="text-right">Действия</span>
       </div>
 
-      {/* Rows grouped by category, empty hidden */}
-      {(["Brief", "Draft", "Final", "Legal"] as const).map((type) => {
-        const files = sortedFiles.filter((f) => f.type === type);
-        if (files.length === 0) return null;
-        return files.map((file, fi) => (
-          <div
-            key={file.id}
-            className={cn(
-              "grid grid-cols-[100px_1fr_120px_80px_72px] gap-2 items-center px-2 py-1.5 rounded transition-colors hover:bg-muted/30",
-              file.pinned && "bg-primary/5 border border-primary/20"
-            )}
-          >
-            {/* Category: show label only on first row of group */}
-            <span className="text-[12px] text-muted-foreground">
-              {fi === 0 ? fileTypeLabels[type] : ""}
-            </span>
-
-            {/* File: clickable name + metadata */}
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5">
-                {file.pinned && <Pin className="h-3 w-3 text-primary shrink-0" />}
-                <a href="#" target="_blank" rel="noopener noreferrer" className="text-[14px] font-medium text-card-foreground hover:text-primary hover:underline truncate">
-                  {file.name}
-                </a>
+      {isLoading ? (
+        <div className="text-center py-8 text-[13px] text-muted-foreground">Загрузка…</div>
+      ) : (
+        (["brief", "draft", "final", "legal", "Brief", "Draft", "Final", "Legal"] as const).map((type) => {
+          const files = sortedFiles.filter((f) => f.type.toLowerCase() === type.toLowerCase());
+          if (files.length === 0) return null;
+          const label = fileTypeLabels[type as keyof typeof fileTypeLabels] || (type.charAt(0).toUpperCase() + type.slice(1));
+          return files.map((file, fi) => (
+            <div
+              key={file.id}
+              className={cn(
+                "grid grid-cols-[100px_1fr_120px_80px_72px] gap-2 items-center px-2 py-1.5 rounded transition-colors hover:bg-muted/30",
+                file.pinned && "bg-primary/5 border border-primary/20"
+              )}
+            >
+              <span className="text-[12px] text-muted-foreground">{fi === 0 ? label : ""}</span>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  {file.pinned && <Pin className="h-3 w-3 text-primary shrink-0" />}
+                  <span className="text-[14px] font-medium text-card-foreground truncate">{file.name}</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground/60">{file.sizeMeta}</p>
               </div>
-              <p className="text-[11px] text-muted-foreground/60">{fileSizeMock[file.id] || "—"}</p>
+              <span className="text-[13px] text-muted-foreground truncate">{file.uploader}</span>
+              <span className="text-[12px] text-muted-foreground">{file.date}</span>
+              <div className="flex items-center justify-end">
+                {file.storagePath ? (
+                  <button onClick={() => downloadFile.mutate(file.storagePath)} title="Скачать" className="text-muted-foreground hover:text-foreground transition-colors">
+                    <Download className="h-4 w-4" />
+                  </button>
+                ) : (
+                  <Download className="h-4 w-4 text-muted-foreground/40" />
+                )}
+              </div>
             </div>
-
-            {/* Uploader */}
-            <span className="text-[13px] text-muted-foreground truncate">{file.uploader}</span>
-
-            {/* Date */}
-            <span className="text-[12px] text-muted-foreground">{file.date}</span>
-
-            {/* Actions: download only */}
-            <div className="flex items-center justify-end">
-              <a href="#" title="Скачать" className="text-muted-foreground hover:text-foreground transition-colors">
-                <Download className="h-4 w-4" />
-              </a>
-            </div>
-          </div>
-        ));
-      })}
+          ));
+        })
+      )}
     </div>
   );
 }
@@ -687,54 +732,73 @@ function FilesTab() {
 /* ═══════════════════════════════════════════════════════
    PAYMENT TAB — simplified, single summary line
    ═══════════════════════════════════════════════════════ */
-function PaymentTab() {
-  const remaining = mockPayment.total - mockPayment.released;
+function PaymentTab({ dealId }: { dealId: string }) {
+  const { data: escrowItems = [] } = useDealEscrow(dealId);
+  const releaseEscrow = useReleaseEscrow();
+  const logEvent = useLogDealEvent();
+
+  // Use DB data if available, fallback to mock
+  const milestones = escrowItems.length > 0
+    ? escrowItems.map((e: any) => ({ id: e.id, label: e.label, amount: e.amount, status: e.status as string }))
+    : mockPayment.milestones;
+
+  const total = milestones.reduce((s: number, m: any) => s + m.amount, 0);
+  const released = milestones.filter((m: any) => m.status === "released").reduce((s: number, m: any) => s + m.amount, 0);
+  const reserved = milestones.filter((m: any) => m.status === "reserved").reduce((s: number, m: any) => s + m.amount, 0);
+  const remaining = total - released;
+  const commission = Math.round(total * 0.1);
+
+  const handleRelease = (escrowId: string) => {
+    releaseEscrow.mutate({ escrowId, dealId });
+  };
 
   return (
     <div className="p-4 space-y-3 max-w-[820px] mx-auto">
-      {/* Compact summary line */}
       <div className="flex items-center gap-3 flex-wrap text-[14px]">
-        <span className="text-muted-foreground">Итого: <span className="font-semibold text-card-foreground">{mockPayment.total.toLocaleString()} ₽</span></span>
+        <span className="text-muted-foreground">Итого: <span className="font-semibold text-card-foreground">{total.toLocaleString()} ₽</span></span>
         <span className="text-border">·</span>
-        <span className="text-muted-foreground">Резерв: <span className="font-semibold text-card-foreground">{mockPayment.reserved.toLocaleString()} ₽</span></span>
+        <span className="text-muted-foreground">Резерв: <span className="font-semibold text-card-foreground">{reserved.toLocaleString()} ₽</span></span>
         <span className="text-border">·</span>
-        <span className="text-muted-foreground">Выплачено: <span className="font-semibold text-success">{mockPayment.released.toLocaleString()} ₽</span></span>
+        <span className="text-muted-foreground">Выплачено: <span className="font-semibold text-success">{released.toLocaleString()} ₽</span></span>
         <span className="text-border">·</span>
         <span className="text-muted-foreground">Остаток: <span className="font-semibold text-card-foreground">{remaining.toLocaleString()} ₽</span></span>
       </div>
 
-      {/* Milestones — main block */}
       <Card>
         <CardContent className="p-3 space-y-0">
           <p className="text-[14px] font-semibold text-card-foreground mb-1">Этапы оплаты</p>
-          {mockPayment.milestones.map((ms, i) => (
+          {milestones.map((ms: any, i: number) => (
             <div key={ms.id} className={cn("flex items-center justify-between py-1.5", i > 0 && "border-t border-border/50")}>
               <div className="flex items-center gap-2">
-                <span className={cn("text-[11px] font-medium px-1.5 py-0.5 rounded", paymentStatusColors[ms.status])}>
-                  {paymentStatusLabels[ms.status]}
+                <span className={cn("text-[11px] font-medium px-1.5 py-0.5 rounded", paymentStatusColors[ms.status as keyof typeof paymentStatusColors] || "bg-muted text-muted-foreground")}>
+                  {paymentStatusLabels[ms.status as keyof typeof paymentStatusLabels] || ms.status}
                 </span>
                 <span className="text-[14px] text-card-foreground">{ms.label}</span>
               </div>
-              <span className="text-[14px] font-medium text-card-foreground">{ms.amount.toLocaleString()} ₽</span>
+              <div className="flex items-center gap-2">
+                <span className="text-[14px] font-medium text-card-foreground">{ms.amount.toLocaleString()} ₽</span>
+                {ms.status === "reserved" && escrowItems.length > 0 && (
+                  <Button size="sm" variant="outline" className="text-[11px] h-6 px-2" onClick={() => handleRelease(ms.id)} disabled={releaseEscrow.isPending}>
+                    Выплатить
+                  </Button>
+                )}
+              </div>
             </div>
           ))}
-          {/* Platform fee — subtle inline */}
           <div className="flex items-center justify-between pt-1.5 mt-1 border-t border-border/30">
-            <span className="text-[12px] text-muted-foreground/60" title={`Комиссия платформы ${mockPayment.commissionPercent}% от суммы сделки`}>
-              Комиссия платформы ({mockPayment.commissionPercent}%)
+            <span className="text-[12px] text-muted-foreground/60" title="Комиссия платформы 10% от суммы сделки">
+              Комиссия платформы (10%)
             </span>
-            <span className="text-[12px] text-muted-foreground/60">{mockPayment.commission.toLocaleString()} ₽</span>
+            <span className="text-[12px] text-muted-foreground/60">{commission.toLocaleString()} ₽</span>
           </div>
         </CardContent>
       </Card>
 
-      {/* Primary action */}
       <Button size="sm" className="text-[13px] h-8">
         <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
         Подтвердить выполнение
       </Button>
 
-      {/* Dispute — collapsible "Problem" section */}
       <Collapsible>
         <CollapsibleTrigger className="flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground transition-colors">
           <ChevronRight className="h-3 w-3" />
@@ -756,10 +820,16 @@ function PaymentTab() {
 /* ═══════════════════════════════════════════════════════
    MORE TAB — 2 accordion sections, no nested tabs
    ═══════════════════════════════════════════════════════ */
-function MoreTab() {
+function MoreTab({ dealId }: { dealId: string }) {
+  const { data: dbAudit = [] } = useDealAuditLog(dealId);
   const erid = "2SDnjek4fP1";
   const ordStatus: "ok" | "error" = "ok";
-  const recentAudit = mockAudit.slice(0, 10);
+  const displayAudit = dbAudit.length > 0
+    ? dbAudit.slice(0, 12).map((e: any) => ({
+        id: e.id, ts: new Date(e.created_at).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" }),
+        who: "Участник", action: e.action, category: e.category, file: (e.metadata as any)?.file_name,
+      }))
+    : mockAudit.slice(0, 10);
   const categoryIcons: Record<string, any> = { terms: ScrollText, files: Files, payments: CreditCard, ord: Radio };
 
   return (
@@ -812,7 +882,7 @@ function MoreTab() {
           </AccordionTrigger>
           <AccordionContent className="pb-3">
             <div className="space-y-0">
-              {recentAudit.map((entry, i) => {
+              {displayAudit.map((entry: any, i: number) => {
                 const Icon = categoryIcons[entry.category] || ScrollText;
                 return (
                   <div key={entry.id} className={cn("flex items-start gap-2.5 py-1.5", i > 0 && "border-t border-border/30")}>
@@ -828,7 +898,7 @@ function MoreTab() {
                 );
               })}
             </div>
-            {mockAudit.length > 10 && (
+            {displayAudit.length >= 10 && (
               <button className="text-[12px] text-primary hover:underline mt-2 flex items-center gap-1">
                 Показать полный журнал <ChevronRight className="h-3 w-3" />
               </button>
@@ -1005,10 +1075,10 @@ export function DealWorkspace() {
         {/* ── Tab content ── */}
         <div className="flex-1 overflow-y-auto">
           {activeSubTab === "chat" && <ChatTab deal={selectedDeal} onOpenTerms={() => setActiveSubTab("terms")} />}
-          {activeSubTab === "terms" && <TermsTab />}
-          {activeSubTab === "files" && <FilesTab />}
-          {activeSubTab === "payment" && <PaymentTab />}
-          {activeSubTab === "more" && <MoreTab />}
+          {activeSubTab === "terms" && <TermsTab dealId={selectedDeal.id} />}
+          {activeSubTab === "files" && <FilesTab dealId={selectedDeal.id} />}
+          {activeSubTab === "payment" && <PaymentTab dealId={selectedDeal.id} />}
+          {activeSubTab === "more" && <MoreTab dealId={selectedDeal.id} />}
         </div>
       </div>
     </div>
