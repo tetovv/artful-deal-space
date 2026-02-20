@@ -10,6 +10,7 @@ import {
   useDealEscrow, useReserveEscrow, useReleaseEscrow,
   useDealFiles, useUploadDealFile, useDownloadDealFile,
   useDealTerms, useAcceptTerms,
+  useRealtimeAuditLog, useRealtimeEscrow,
 } from "@/hooks/useDealData";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -933,6 +934,10 @@ export function DealWorkspace() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [activeSubTab, setActiveSubTab] = useState("chat");
   const [detailsOpen, setDetailsOpen] = useState(false);
+
+  // Realtime subscriptions for audit log and escrow
+  useRealtimeAuditLog(activeDeal?.id);
+  useRealtimeEscrow(activeDeal?.id);
 
   if (!activeDeal) {
     return <div className="flex-1 flex items-center justify-center text-muted-foreground text-[15px]">Нет сделок</div>;

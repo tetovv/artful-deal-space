@@ -7,15 +7,23 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Search, UserPlus, UserCheck, Star, Eye, FileText } from "lucide-react";
+import { Search, UserPlus, UserCheck, Star, Eye, FileText, ArrowUpDown } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+
+type SortOption = "content" | "rating" | "followers";
+const sortLabels: Record<SortOption, string> = {
+  content: "По контенту",
+  rating: "По рейтингу",
+  followers: "По подписчикам",
+};
 
 export default function Authors() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
+  const [sortBy, setSortBy] = useState<SortOption>("followers");
 
   // Fetch all creator profiles
   const { data: creators = [], isLoading } = useQuery({
@@ -64,10 +72,16 @@ export default function Authors() {
     refetchSubs();
   };
 
-  const filtered = creators.filter((c: any) =>
-    c.display_name?.toLowerCase().includes(search.toLowerCase()) ||
-    (c.niche || []).some((n: string) => n.toLowerCase().includes(search.toLowerCase()))
-  );
+  const filtered = creators
+    .filter((c: any) =>
+      c.display_name?.toLowerCase().includes(search.toLowerCase()) ||
+      (c.niche || []).some((n: string) => n.toLowerCase().includes(search.toLowerCase()))
+    )
+    .sort((a: any, b: any) => {
+      if (sortBy === "content") return (b.content_count || 0) - (a.content_count || 0);
+      if (sortBy === "rating") return (Number(b.rating) || 0) - (Number(a.rating) || 0);
+      return (b.followers || 0) - (a.followers || 0);
+    });
 
   return (
     <PageTransition>
@@ -77,9 +91,25 @@ export default function Authors() {
           <p className="text-sm text-muted-foreground">Находите и подписывайтесь на интересных авторов</p>
         </div>
 
-        <div className="relative max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Поиск авторов..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 bg-card border-border" />
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input placeholder="Поиск авторов..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 bg-card border-border" />
+          </div>
+          <div className="flex gap-1.5 items-center">
+            <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />
+            {(Object.keys(sortLabels) as SortOption[]).map((key) => (
+              <button
+                key={key}
+                onClick={() => setSortBy(key)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  sortBy === key ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground hover:bg-accent"
+                }`}
+              >
+                {sortLabels[key]}
+              </button>
+            ))}
+          </div>
         </div>
 
         {isLoading ? (

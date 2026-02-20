@@ -43,6 +43,13 @@ function mapItem(item: any) {
 }
 
 type Tab = "feed" | "authors";
+type SortOption = "content" | "rating" | "followers";
+
+const sortLabels: Record<SortOption, string> = {
+  content: "По контенту",
+  rating: "По рейтингу",
+  followers: "По подписчикам",
+};
 
 export default function Subscriptions() {
   const { user } = useAuth();
@@ -50,6 +57,7 @@ export default function Subscriptions() {
   const [tab, setTab] = useState<Tab>("feed");
   const [search, setSearch] = useState("");
   const [activeType, setActiveType] = useState<ContentType | null>(null);
+  const [sortBy, setSortBy] = useState<SortOption>("followers");
 
   // Subscribed creators
   const { data: subscribedCreators = [], refetch: refetchSubs } = useQuery({
@@ -139,10 +147,16 @@ export default function Subscriptions() {
   });
 
   // Filter authors
-  const filteredAuthors = allCreators.filter((c: any) =>
-    c.display_name?.toLowerCase().includes(search.toLowerCase()) ||
-    (c.niche || []).some((n: string) => n.toLowerCase().includes(search.toLowerCase()))
-  );
+  const filteredAuthors = allCreators
+    .filter((c: any) =>
+      c.display_name?.toLowerCase().includes(search.toLowerCase()) ||
+      (c.niche || []).some((n: string) => n.toLowerCase().includes(search.toLowerCase()))
+    )
+    .sort((a: any, b: any) => {
+      if (sortBy === "content") return (b.content_count || 0) - (a.content_count || 0);
+      if (sortBy === "rating") return (Number(b.rating) || 0) - (Number(a.rating) || 0);
+      return (b.followers || 0) - (a.followers || 0);
+    });
 
   return (
     <PageTransition>
@@ -189,6 +203,22 @@ export default function Subscriptions() {
                   }`}
                 >
                   {contentTypeLabels[t] || t}
+                </button>
+              ))}
+            </div>
+          )}
+          {tab === "authors" && (
+            <div className="flex gap-1.5 flex-wrap items-center">
+              <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />
+              {(Object.keys(sortLabels) as SortOption[]).map((key) => (
+                <button
+                  key={key}
+                  onClick={() => setSortBy(key)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                    sortBy === key ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground hover:bg-accent"
+                  }`}
+                >
+                  {sortLabels[key]}
                 </button>
               ))}
             </div>
