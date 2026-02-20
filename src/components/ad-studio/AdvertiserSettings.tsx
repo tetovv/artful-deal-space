@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-// useBlocker requires data router — not available with BrowserRouter
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,9 +10,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
-  Save, Building2, Landmark, ShieldCheck, CheckCircle2, Clock, Palette, Globe, Upload, X, ImageIcon,
+  Save, Building2, Landmark, ShieldCheck, CheckCircle2, Clock, Palette, Globe, Upload, X,
   Mail, Tag, Eye, EyeOff, Lock, Users, Loader2, AlertCircle, PlugZap, RefreshCw, Info,
+  Copy, HelpCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -49,7 +50,15 @@ const defaults: AdvSettings = {
 };
 
 type VerifyState = "idle" | "loading" | "success" | "error";
-type SectionStatus = "empty" | "filled" | "verified";
+type SectionStatus = "empty" | "unsaved" | "filled" | "verified";
+
+const ORD_PROVIDERS = [
+  { id: "yandex", label: "Яндекс ОРД" },
+  { id: "vk", label: "VK ОРД" },
+  { id: "mediascout", label: "МедиаСкаут" },
+  { id: "ozon", label: "Озон ОРД" },
+  { id: "amords", label: "АМОРДС" },
+];
 
 // ─── Helpers ───
 function getLegalConfig(type: string | null) {
@@ -79,9 +88,16 @@ function isBankFieldsValid(form: AdvSettings): boolean {
   return form.bank_bik.length === 9 && form.bank_account.length === 20;
 }
 
-function getSectionStatus(fieldsValid: boolean, verified: boolean): SectionStatus {
-  if (verified && fieldsValid) return "verified";
+/** Compare specific keys between form and saved to detect section-level dirty */
+function isSectionDirty(form: AdvSettings, saved: AdvSettings, keys: (keyof AdvSettings)[]): boolean {
+  return keys.some((k) => form[k] !== saved[k]);
+}
+
+function getSectionStatus(fieldsValid: boolean, verified: boolean, sectionDirty: boolean): SectionStatus {
+  if (verified && fieldsValid && !sectionDirty) return "verified";
+  if (fieldsValid && sectionDirty) return "unsaved";
   if (fieldsValid) return "filled";
+  if (sectionDirty) return "unsaved";
   return "empty";
 }
 
@@ -103,19 +119,43 @@ function VerifyResult({ state, successText, errorText }: { state: VerifyState; s
 
 function StatusBadge({ status }: { status: SectionStatus }) {
   if (status === "verified") return <Badge variant="outline" className="text-[9px] border-success/30 text-success bg-success/10 ml-2">Подтверждено</Badge>;
-  if (status === "filled") return <Badge variant="outline" className="text-[9px] border-warning/30 text-warning bg-warning/10 ml-2">Не проверено</Badge>;
+  if (status === "unsaved") return <Badge variant="outline" className="text-[9px] border-warning/30 text-warning bg-warning/10 ml-2">Не сохранено</Badge>;
+  if (status === "filled") return <Badge variant="outline" className="text-[9px] border-primary/30 text-primary bg-primary/10 ml-2">Заполнено</Badge>;
   return <Badge variant="outline" className="text-[9px] border-muted-foreground/30 text-muted-foreground ml-2">Не заполнено</Badge>;
 }
 
 function SectionCheck({ status, label }: { status: SectionStatus; label: string }) {
   const done = status === "verified";
-  const partial = status === "filled";
+  const partial = status === "filled" || status === "unsaved";
   return (
     <div className="flex items-center gap-2 text-xs">
       {done ? <CheckCircle2 className="h-3.5 w-3.5 text-success flex-shrink-0" />
         : partial ? <Clock className="h-3.5 w-3.5 text-warning flex-shrink-0" />
         : <div className="h-3.5 w-3.5 rounded-full border border-muted-foreground/40 flex-shrink-0" />}
       <span className={done ? "text-card-foreground" : "text-muted-foreground"}>{label}</span>
+    </div>
+  );
+}
+
+function CopyableField({ value, label }: { value: string; label: string }) {
+  const [showFull, setShowFull] = useState(false);
+  if (!value) return null;
+  const display = showFull ? value : value;
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs">{label}</Label>
+      <div className="flex items-center gap-1.5">
+        <Input value={display} readOnly className="text-sm h-9 font-mono bg-muted/30 cursor-default flex-1" />
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button type="button" size="sm" variant="ghost" className="h-9 w-9 p-0 flex-shrink-0"
+              onClick={() => { navigator.clipboard.writeText(value); toast.success("Скопировано"); }}>
+              <Copy className="h-3.5 w-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="top"><p className="text-xs">Копировать</p></TooltipContent>
+        </Tooltip>
+      </div>
     </div>
   );
 }
@@ -146,8 +186,20 @@ export function AdvertiserSettings() {
   const [showOrdToken, setShowOrdToken] = useState(false);
   const [verifyStates, setVerifyStates] = useState<Record<string, VerifyState>>({ business: "idle", bank: "idle", ord: "idle" });
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showBankNumbers, setShowBankNumbers] = useState(false);
 
   const dirty = useMemo(() => JSON.stringify(form) !== JSON.stringify(savedSnapshot), [form, savedSnapshot]);
+
+  // Section-level dirty detection
+  const brandKeys: (keyof AdvSettings)[] = ["brand_name", "brand_website", "brand_description", "brand_logo_url", "business_category", "contact_email"];
+  const legalKeys: (keyof AdvSettings)[] = ["business_type", "business_name", "business_inn", "business_ogrn"];
+  const bankKeys: (keyof AdvSettings)[] = ["bank_bik", "bank_name", "bank_account", "bank_corr_account"];
+  const ordKeys: (keyof AdvSettings)[] = ["ord_identifier", "ord_token"];
+
+  const brandDirty = isSectionDirty(form, savedSnapshot, brandKeys);
+  const legalDirty = isSectionDirty(form, savedSnapshot, legalKeys);
+  const bankDirty = isSectionDirty(form, savedSnapshot, bankKeys);
+  const ordDirty = isSectionDirty(form, savedSnapshot, ordKeys);
 
   const { data: settings, isLoading } = useQuery({
     queryKey: ["studio-settings", user?.id],
@@ -182,24 +234,15 @@ export function AdvertiserSettings() {
   const update = useCallback((key: keyof AdvSettings, value: any) => {
     setForm((prev) => {
       const next = { ...prev, [key]: value };
-      // Reset verification when editing verified section fields
       if (["business_type", "business_name", "business_inn", "business_ogrn"].includes(key)) {
         next.business_verified = false;
         setVerifyStates((s) => ({ ...s, business: "idle" }));
       }
-      // When business_type changes, clear fields that don't apply
       if (key === "business_type") {
         const cfg = getLegalConfig(value);
-        // Trim INN if too long for new type
-        if (next.business_inn.length > cfg.innLen) {
-          next.business_inn = next.business_inn.slice(0, cfg.innLen);
-        }
-        // Clear OGRN if not needed
-        if (!cfg.showOgrn) {
-          next.business_ogrn = "";
-        } else if (next.business_ogrn.length > cfg.ogrnLen) {
-          next.business_ogrn = next.business_ogrn.slice(0, cfg.ogrnLen);
-        }
+        if (next.business_inn.length > cfg.innLen) next.business_inn = next.business_inn.slice(0, cfg.innLen);
+        if (!cfg.showOgrn) next.business_ogrn = "";
+        else if (next.business_ogrn.length > cfg.ogrnLen) next.business_ogrn = next.business_ogrn.slice(0, cfg.ogrnLen);
       }
       if (["bank_name", "bank_bik", "bank_account", "bank_corr_account"].includes(key)) {
         next.bank_verified = false;
@@ -221,15 +264,11 @@ export function AdvertiserSettings() {
     const v = rawValue.replace(/\D/g, "").slice(0, 9);
     setForm((prev) => {
       const next = { ...prev, bank_bik: v, bank_verified: false };
-      if (v.length !== 9) {
-        next.bank_name = "";
-      }
+      if (v.length !== 9) next.bank_name = "";
       setVerifyStates((s) => ({ ...s, bank: "idle" }));
       return next;
     });
-
     if (bikLookupTimer.current) clearTimeout(bikLookupTimer.current);
-
     if (v.length === 9) {
       setBikLoading(true);
       bikLookupTimer.current = setTimeout(async () => {
@@ -254,11 +293,8 @@ export function AdvertiserSettings() {
     }
   }, []);
 
-  // Warn on browser close/refresh with unsaved changes
   useEffect(() => {
-    const handler = (e: BeforeUnloadEvent) => {
-      if (dirty) { e.preventDefault(); }
-    };
+    const handler = (e: BeforeUnloadEvent) => { if (dirty) e.preventDefault(); };
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, [dirty]);
@@ -287,7 +323,6 @@ export function AdvertiserSettings() {
     }
     setVerifyStates((s) => ({ ...s, [type]: "loading" }));
     await new Promise((r) => setTimeout(r, 1200));
-
     if (type === "business") {
       if (!isLegalFieldsValid(form)) {
         setVerifyStates((s) => ({ ...s, business: "error" }));
@@ -319,27 +354,20 @@ export function AdvertiserSettings() {
     }
   }, [form, dirty, save]);
 
-  // ─── Section statuses ───
+  // ─── Section statuses (with dirty awareness) ───
   const legalCfg = getLegalConfig(form.business_type);
-  const legalStatus = getSectionStatus(isLegalFieldsValid(form), form.business_verified);
-  const bankStatus = getSectionStatus(isBankFieldsValid(form), form.bank_verified);
-  const brandStatus: SectionStatus = form.brand_name ? "verified" : "empty"; // brand has no server verification
-  const ordStatus = getSectionStatus(!!form.ord_identifier, form.ord_verified);
+  const legalStatus = getSectionStatus(isLegalFieldsValid(form), form.business_verified, legalDirty);
+  const bankStatus = getSectionStatus(isBankFieldsValid(form), form.bank_verified, bankDirty);
+  const brandStatus = getSectionStatus(!!form.brand_name, true, brandDirty); // brand has no server verification; treat as "verified" if name exists
+  const ordStatus = getSectionStatus(!!form.ord_identifier, form.ord_verified, ordDirty);
 
-  const readinessItems = [
-    { status: brandStatus, label: "Бренд", hint: "Обязательно для сделок" },
-    { status: legalStatus, label: "Реквизиты", hint: "Обязательно для сделок" },
-    { status: bankStatus, label: "Банк", hint: "Для выплат" },
-    { status: ordStatus, label: "ОРД", hint: "Для маркировки рекламы" },
+  // ─── Readiness: split mandatory vs optional ───
+  const mandatoryReady = !!(form.brand_name) && !!(form.business_verified && isLegalFieldsValid(form));
+  const mandatoryScore = [!!form.brand_name, !!(form.business_verified && isLegalFieldsValid(form))].filter(Boolean).length;
+  const optionalItems = [
+    { done: !!(form.bank_verified && isBankFieldsValid(form)), label: "Банк", hint: "Для выплат" },
+    { done: !!(form.ord_verified && !!form.ord_identifier), label: "ОРД", hint: "Для маркировки рекламы" },
   ];
-  // Readiness: brand just needs name, others need verified
-  const readinessScore = [
-    !!form.brand_name,
-    form.business_verified && isLegalFieldsValid(form),
-    form.bank_verified && isBankFieldsValid(form),
-    form.ord_verified && !!form.ord_identifier,
-  ].filter(Boolean).length;
-  const readinessPercent = (readinessScore / 4) * 100;
 
   if (isLoading) {
     return <div className="p-8 text-center text-sm text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />Загрузка…</div>;
@@ -347,38 +375,62 @@ export function AdvertiserSettings() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
+      {/* Sticky save bar */}
+      {dirty && (
+        <div className="sticky top-0 z-20 bg-warning/10 border-b border-warning/20 px-6 py-2 flex items-center justify-between animate-fade-in">
+          <div className="flex items-center gap-2 text-xs text-warning">
+            <AlertCircle className="h-3.5 w-3.5" />
+            <span className="font-medium">Есть несохранённые изменения</span>
+          </div>
+          <Button size="sm" disabled={save.isPending} onClick={() => save.mutate()} className="h-7 text-xs gap-1.5">
+            <Save className="h-3 w-3" />
+            {save.isPending ? "Сохранение…" : "Сохранить"}
+          </Button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between px-6 pt-3 pb-2">
         <div>
           <h2 className="text-base font-bold text-foreground">Настройки рекламодателя</h2>
           <p className="text-xs text-muted-foreground">Верификация и данные бренда для размещения рекламы</p>
         </div>
-        <div className="flex items-center gap-2">
-          {dirty && (
-            <Badge variant="outline" className="text-[10px] gap-1 border-warning/30 text-warning bg-warning/10 animate-fade-in">
-              <AlertCircle className="h-2.5 w-2.5" /> Есть несохранённые изменения
-            </Badge>
-          )}
-          <Button size="sm" disabled={!dirty || save.isPending} onClick={() => save.mutate()}>
-            <Save className="h-3.5 w-3.5 mr-1.5" />
-            {save.isPending ? "Сохранение…" : "Сохранить"}
-          </Button>
-        </div>
+        <Button size="sm" disabled={!dirty || save.isPending} onClick={() => save.mutate()}>
+          <Save className="h-3.5 w-3.5 mr-1.5" />
+          {save.isPending ? "Сохранение…" : "Сохранить"}
+        </Button>
       </div>
 
-      {/* Readiness block */}
-      <div className="px-6 pb-3">
+      {/* Readiness block — split mandatory / optional */}
+      <div className="px-6 pb-3 space-y-2">
+        {/* Mandatory for deals */}
         <div className="rounded-xl border border-border bg-card p-4 space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-card-foreground">Готовность профиля</span>
-            <span className="text-xs text-muted-foreground">{readinessScore} / 4</span>
+            <span className="text-xs font-semibold text-card-foreground">Готовность к сделкам</span>
+            <span className="text-xs text-muted-foreground">{mandatoryScore} / 2</span>
           </div>
-          <Progress value={readinessPercent} className="h-1.5" />
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {readinessItems.map((item) => (
-              <div key={item.label} className="space-y-0.5">
-                <SectionCheck status={item.status} label={item.label} />
-                <p className="text-[10px] text-muted-foreground pl-5">{item.hint}</p>
+          <Progress value={(mandatoryScore / 2) * 100} className="h-1.5" />
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-0.5">
+              <SectionCheck status={brandStatus} label="Бренд" />
+              <p className="text-[10px] text-muted-foreground pl-5">Обязательно для сделок</p>
+            </div>
+            <div className="space-y-0.5">
+              <SectionCheck status={legalStatus} label="Реквизиты" />
+              <p className="text-[10px] text-muted-foreground pl-5">Обязательно для сделок</p>
+            </div>
+          </div>
+          {mandatoryReady && (
+            <p className="text-[10px] text-success flex items-center gap-1"><CheckCircle2 className="h-3 w-3" /> Вы можете создавать сделки</p>
+          )}
+        </div>
+        {/* Optional sections */}
+        <div className="rounded-xl border border-border bg-card p-3">
+          <div className="grid grid-cols-2 gap-2">
+            {optionalItems.map((item) => (
+              <div key={item.label} className="flex items-center gap-2">
+                <SectionCheck status={item.done ? "verified" : "empty"} label={item.label} />
+                <span className="text-[10px] text-muted-foreground">— {item.hint}</span>
               </div>
             ))}
           </div>
@@ -392,6 +444,7 @@ export function AdvertiserSettings() {
           <CardHeader className="pb-1 pt-3 px-4">
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
               <Palette className="h-4 w-4 text-primary" /> Бренд
+              {brandDirty && <Badge variant="outline" className="text-[9px] border-warning/30 text-warning bg-warning/10 ml-1">изменено</Badge>}
               <PrivacyLabel isPublic />
             </CardTitle>
           </CardHeader>
@@ -443,12 +496,9 @@ export function AdvertiserSettings() {
                     </button>
                   </div>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
+                  <button type="button" onClick={() => fileInputRef.current?.click()}
                     className="h-9 w-9 rounded border border-dashed border-border flex items-center justify-center flex-shrink-0 hover:border-primary/50 hover:bg-muted/30 transition-colors cursor-pointer"
-                    title="Загрузить логотип"
-                  >
+                    title="Загрузить логотип">
                     <Upload className="h-3.5 w-3.5 text-muted-foreground" />
                   </button>
                 )}
@@ -466,9 +516,7 @@ export function AdvertiserSettings() {
                     toast.success("Логотип загружен");
                   } catch {
                     toast.error("Ошибка загрузки");
-                  } finally {
-                    setUploading(false);
-                  }
+                  } finally { setUploading(false); }
                 }} />
                 <Button type="button" size="sm" variant="outline" className="h-9 text-xs gap-1.5" disabled={uploading}
                   onClick={() => fileInputRef.current?.click()}>
@@ -492,7 +540,21 @@ export function AdvertiserSettings() {
           <CardContent className="px-4 pb-3 space-y-2.5 flex-1">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label className="text-xs">Форма собственности *</Label>
+                <Label className="text-xs flex items-center gap-1">
+                  Форма собственности *
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-[260px]">
+                      <p className="text-xs leading-relaxed">
+                        <strong>Самозанятый (НПД)</strong> — физлицо на налоге на профдоход. Нужны только ФИО и ИНН (12 цифр), ОГРНИП не требуется.<br />
+                        <strong>ИП</strong> — индивидуальный предприниматель. ФИО + ИНН (12) + ОГРНИП (15).<br />
+                        <strong>ООО</strong> — юрлицо. Наименование + ИНН (10) + ОГРН (13).
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </Label>
                 <Select value={form.business_type || ""} onValueChange={(v) => update("business_type", v)}>
                   <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Выберите тип" /></SelectTrigger>
                   <SelectContent>
@@ -537,7 +599,7 @@ export function AdvertiserSettings() {
               <p className="text-xs text-muted-foreground py-2">Выберите форму собственности, чтобы заполнить реквизиты</p>
             )}
             <VerifyResult state={verifyStates.business} successText="Реквизиты подтверждены" errorText="Проверьте заполнение полей" />
-            {legalStatus === "filled" && !form.business_verified && verifyStates.business !== "success" && (
+            {isLegalFieldsValid(form) && !form.business_verified && verifyStates.business !== "success" && (
               <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" onClick={() => mockVerify("business")} disabled={verifyStates.business === "loading"}>
                 <ShieldCheck className="h-3.5 w-3.5" />
                 {dirty ? "Сохранить и проверить" : "Проверить"}
@@ -559,8 +621,21 @@ export function AdvertiserSettings() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs">БИК * <span className="text-muted-foreground font-normal">(9 цифр)</span></Label>
-                <Input value={form.bank_bik} onChange={(e) => handleBikChange(e.target.value)}
-                  placeholder="044525974" className="text-sm h-9 font-mono" maxLength={9} />
+                <div className="flex items-center gap-1.5">
+                  <Input value={form.bank_bik} onChange={(e) => handleBikChange(e.target.value)}
+                    placeholder="044525974" className="text-sm h-9 font-mono flex-1" maxLength={9} />
+                  {form.bank_bik.length === 9 && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button type="button" size="sm" variant="ghost" className="h-9 w-9 p-0 flex-shrink-0"
+                          onClick={() => { navigator.clipboard.writeText(form.bank_bik); toast.success("БИК скопирован"); }}>
+                          <Copy className="h-3.5 w-3.5" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent><p className="text-xs">Копировать</p></TooltipContent>
+                    </Tooltip>
+                  )}
+                </div>
                 {form.bank_bik.length > 0 && form.bank_bik.length !== 9 && (
                   <p className="text-[10px] text-warning">{form.bank_bik.length}/9 цифр</p>
                 )}
@@ -576,26 +651,73 @@ export function AdvertiserSettings() {
                 <p className="text-[10px] text-muted-foreground"><Info className="h-2.5 w-2.5 inline mr-0.5 -mt-px" />Определяется автоматически по БИК</p>
               </div>
             </div>
+
+            {/* Account numbers with show/hide toggle and copy */}
+            <div className="flex items-center gap-2 mb-1">
+              <Label className="text-xs text-muted-foreground">Номера счетов</Label>
+              <button type="button" onClick={() => setShowBankNumbers(!showBankNumbers)}
+                className="text-muted-foreground hover:text-foreground transition-colors">
+                {showBankNumbers ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+              </button>
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs">Расчётный счёт * <span className="text-muted-foreground font-normal">(20 цифр)</span></Label>
-                <Input value={form.bank_account} onChange={(e) => update("bank_account", e.target.value.replace(/\D/g, "").slice(0, 20))}
-                  placeholder="40802810..." className="text-sm h-9 font-mono" maxLength={20} />
-                {form.bank_account.length > 0 && form.bank_account.length !== 20 && (
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    value={showBankNumbers || !form.bank_account ? form.bank_account : "••••" + form.bank_account.slice(-4)}
+                    onChange={showBankNumbers ? (e) => update("bank_account", e.target.value.replace(/\D/g, "").slice(0, 20)) : undefined}
+                    readOnly={!showBankNumbers}
+                    placeholder="40802810..."
+                    className={`text-sm h-9 font-mono flex-1 ${!showBankNumbers && form.bank_account ? "bg-muted/30 cursor-not-allowed" : ""}`}
+                    maxLength={20}
+                  />
+                  {form.bank_account.length === 20 && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button type="button" size="sm" variant="ghost" className="h-9 w-9 p-0 flex-shrink-0"
+                          onClick={() => { navigator.clipboard.writeText(form.bank_account); toast.success("Счёт скопирован"); }}>
+                          <Copy className="h-3.5 w-3.5" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent><p className="text-xs">Копировать</p></TooltipContent>
+                    </Tooltip>
+                  )}
+                </div>
+                {showBankNumbers && form.bank_account.length > 0 && form.bank_account.length !== 20 && (
                   <p className="text-[10px] text-warning">{form.bank_account.length}/20 цифр</p>
                 )}
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Корр. счёт <span className="text-muted-foreground font-normal">(20 цифр)</span></Label>
-                <Input value={form.bank_corr_account} onChange={(e) => update("bank_corr_account", e.target.value.replace(/\D/g, "").slice(0, 20))}
-                  placeholder="30101810..." className="text-sm h-9 font-mono" maxLength={20} />
-                {form.bank_corr_account.length > 0 && form.bank_corr_account.length !== 20 && (
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    value={showBankNumbers || !form.bank_corr_account ? form.bank_corr_account : "••••" + form.bank_corr_account.slice(-4)}
+                    onChange={showBankNumbers ? (e) => update("bank_corr_account", e.target.value.replace(/\D/g, "").slice(0, 20)) : undefined}
+                    readOnly={!showBankNumbers}
+                    placeholder="30101810..."
+                    className={`text-sm h-9 font-mono flex-1 ${!showBankNumbers && form.bank_corr_account ? "bg-muted/30 cursor-not-allowed" : ""}`}
+                    maxLength={20}
+                  />
+                  {form.bank_corr_account.length === 20 && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button type="button" size="sm" variant="ghost" className="h-9 w-9 p-0 flex-shrink-0"
+                          onClick={() => { navigator.clipboard.writeText(form.bank_corr_account); toast.success("Корр. счёт скопирован"); }}>
+                          <Copy className="h-3.5 w-3.5" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent><p className="text-xs">Копировать</p></TooltipContent>
+                    </Tooltip>
+                  )}
+                </div>
+                {showBankNumbers && form.bank_corr_account.length > 0 && form.bank_corr_account.length !== 20 && (
                   <p className="text-[10px] text-warning">{form.bank_corr_account.length}/20 цифр</p>
                 )}
               </div>
             </div>
             <VerifyResult state={verifyStates.bank} successText="Банк подтверждён" errorText="Проверьте заполнение" />
-            {bankStatus === "filled" && !form.bank_verified && verifyStates.bank !== "success" && (
+            {isBankFieldsValid(form) && !form.bank_verified && verifyStates.bank !== "success" && (
               <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" onClick={() => mockVerify("bank")} disabled={verifyStates.bank === "loading"}>
                 <ShieldCheck className="h-3.5 w-3.5" />
                 {dirty ? "Сохранить и проверить" : "Проверить"}
@@ -619,31 +741,49 @@ export function AdvertiserSettings() {
                 <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2">
                   <p className="text-xs text-muted-foreground leading-relaxed">
                     <span className="font-medium text-card-foreground">ОРД (Оператор рекламных данных)</span> — обязательная система маркировки рекламы в РФ.
-                    Подключите провайдера для автоматической маркировки при создании рекламных кампаний.
+                    Выберите провайдера и подключитесь.
                   </p>
+                </div>
+                {/* Provider selection as radio-like chips */}
+                <div className="space-y-1">
+                  <Label className="text-xs">Провайдер ОРД *</Label>
                   <div className="flex flex-wrap gap-1.5">
-                    {["Яндекс", "VK", "МедиаСкаут", "Озон", "АМОРДС"].map((p) => (
-                      <Badge key={p} variant="secondary" className="text-[10px]">{p}</Badge>
-                    ))}
+                    {ORD_PROVIDERS.map((p) => {
+                      const selected = form.ord_identifier === p.id;
+                      return (
+                        <button key={p.id} type="button"
+                          onClick={() => update("ord_identifier", p.id)}
+                          className={`text-[11px] px-2.5 py-1 rounded-md border transition-colors ${
+                            selected
+                              ? "border-primary bg-primary/15 text-primary font-medium"
+                              : "border-border bg-muted/20 text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                          }`}>
+                          {selected && <CheckCircle2 className="h-3 w-3 inline mr-1 -mt-px" />}
+                          {p.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {/* Or custom input */}
+                  {form.ord_identifier && !ORD_PROVIDERS.some((p) => p.id === form.ord_identifier) && (
+                    <p className="text-[10px] text-muted-foreground">Пользовательский: {form.ord_identifier}</p>
+                  )}
+                  <div className="pt-1">
+                    <Input value={ORD_PROVIDERS.some((p) => p.id === form.ord_identifier) ? "" : form.ord_identifier}
+                      onChange={(e) => update("ord_identifier", e.target.value)}
+                      placeholder="Или введите идентификатор вручную" className="text-sm h-8" maxLength={100} />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <Label className="text-xs">Идентификатор ОРД *</Label>
-                    <Input value={form.ord_identifier} onChange={(e) => update("ord_identifier", e.target.value)}
-                      placeholder="ord-123456" className="text-sm h-9" maxLength={100} />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Токен доступа</Label>
-                    <div className="relative">
-                      <Input value={form.ord_token} onChange={(e) => update("ord_token", e.target.value)}
-                        placeholder="••••••••" className="text-sm h-9 pr-9" maxLength={500}
-                        type={showOrdToken ? "text" : "password"} />
-                      <button type="button" onClick={() => setShowOrdToken(!showOrdToken)}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
-                        {showOrdToken ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                      </button>
-                    </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Токен доступа</Label>
+                  <div className="relative">
+                    <Input value={form.ord_token} onChange={(e) => update("ord_token", e.target.value)}
+                      placeholder="••••••••" className="text-sm h-9 pr-9" maxLength={500}
+                      type={showOrdToken ? "text" : "password"} />
+                    <button type="button" onClick={() => setShowOrdToken(!showOrdToken)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                      {showOrdToken ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                    </button>
                   </div>
                 </div>
                 <VerifyResult state={verifyStates.ord} successText="ОРД подключён" errorText="Проверьте идентификатор" />
@@ -664,7 +804,7 @@ export function AdvertiserSettings() {
                     <Badge variant="outline" className="text-[9px] border-success/30 text-success bg-success/10">Активен</Badge>
                   </div>
                   <div className="text-xs text-muted-foreground space-y-1">
-                    <p>Провайдер: <span className="text-card-foreground">{form.ord_identifier || "—"}</span></p>
+                    <p>Провайдер: <span className="text-card-foreground">{ORD_PROVIDERS.find((p) => p.id === form.ord_identifier)?.label || form.ord_identifier || "—"}</span></p>
                     <p>Токен: <span className="font-mono text-card-foreground">{"•".repeat(12)}</span></p>
                   </div>
                 </div>
