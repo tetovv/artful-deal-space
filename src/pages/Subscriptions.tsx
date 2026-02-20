@@ -226,16 +226,49 @@ export default function Subscriptions() {
         {tab === "feed" && (
           <>
             {subscribedCreators.length === 0 ? (
-              <div className="text-center py-20 space-y-4">
-                <Rss className="h-12 w-12 mx-auto text-muted-foreground/40" />
-                <h3 className="text-lg font-semibold">Нет подписок</h3>
-                <p className="text-sm text-muted-foreground max-w-sm mx-auto">Подпишитесь на авторов, чтобы видеть их новый контент в этой ленте</p>
-                <Button onClick={() => setTab("authors")}>
-                  <UserPlus className="h-4 w-4 mr-2" />Найти авторов
-                </Button>
-              </div>
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.5, ease: "easeOut" }}
+                className="flex flex-col items-center justify-center py-20 space-y-6"
+              >
+                <div className="relative">
+                  <motion.div
+                    animate={{ scale: [1, 1.15, 1], opacity: [0.3, 0.6, 0.3] }}
+                    transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+                    className="absolute inset-0 rounded-full bg-primary/10 -m-4"
+                  />
+                  <motion.div
+                    animate={{ y: [0, -6, 0] }}
+                    transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+                    className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center relative"
+                  >
+                    <UserPlus className="h-8 w-8 text-primary" />
+                  </motion.div>
+                </div>
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.3, duration: 0.4 }}
+                  className="text-center space-y-2 max-w-sm"
+                >
+                  <h3 className="text-xl font-bold text-foreground">Нет подписок</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Подпишитесь на авторов, чтобы видеть их новый контент в этой ленте
+                  </p>
+                </motion.div>
+                <motion.div
+                  initial={{ opacity: 0, y: 5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.5, duration: 0.4 }}
+                >
+                  <Button onClick={() => setTab("authors")} size="lg" className="gap-2">
+                    <UserPlus className="h-4 w-4" />Найти авторов
+                  </Button>
+                </motion.div>
+              </motion.div>
             ) : !activeType ? (
-              <SelectTabPrompt />
+              <SelectTabPrompt onSelectType={setActiveType} />
             ) : feedLoading ? (
               <div className="text-center py-16 text-muted-foreground">Загрузка ленты...</div>
             ) : filteredFeed.length === 0 ? (
