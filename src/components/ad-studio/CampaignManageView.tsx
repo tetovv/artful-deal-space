@@ -695,17 +695,16 @@ function CreativeTab({ campaign }: { campaign: Campaign }) {
 // ═══════════════════════════════════════════════════════
 function OrdTab({ campaign }: { campaign: Campaign }) {
   const ordStatus = campaign.ordStatus || "connected";
-  const ordProvider = campaign.ordProvider || "ОРД Яндекс";
+  const [techOpen, setTechOpen] = useState(false);
 
   return (
     <div className="space-y-3">
-      {/* Connection status */}
+      {/* Connection status — compact, no reconnect */}
       <Card>
-        <CardContent className="p-4 space-y-2.5">
-          <p className="text-[15px] font-semibold text-card-foreground">Подключение к ОРД</p>
+        <CardContent className="p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${
+              <div className={`h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
                 ordStatus === "connected" ? "bg-success/15" : ordStatus === "error" ? "bg-destructive/15" : "bg-warning/15"
               }`}>
                 {ordStatus === "connected" ? <CheckCircle2 className="h-4 w-4 text-success" /> :
@@ -713,33 +712,42 @@ function OrdTab({ campaign }: { campaign: Campaign }) {
                  <Info className="h-4 w-4 text-warning" />}
               </div>
               <div>
-                <p className="text-[14px] font-medium text-card-foreground">{ordProvider}</p>
-                <p className="text-[13px] text-muted-foreground">
-                  {ordStatus === "connected" && `Активно · синхр. ${campaign.ordLastSync || "—"}`}
-                  {ordStatus === "error" && "Ошибка соединения — повторите попытку"}
-                  {ordStatus === "pending" && "Ожидает подключения"}
+                <p className="text-[14px] font-medium text-card-foreground">ОРД: Яндекс <span className="text-foreground/40 font-normal">(фиксировано)</span></p>
+                <p className="text-[13px] text-foreground/60">
+                  {ordStatus === "connected" && <>Активно · синхр. {campaign.ordLastSync || "—"}</>}
+                  {ordStatus === "error" && "Ошибка соединения"}
+                  {ordStatus === "pending" && "Ожидает первой синхронизации"}
                 </p>
               </div>
             </div>
-            <Button size="sm" variant="outline" className="h-7 text-[13px] gap-1.5">
-              <RefreshCw className="h-3.5 w-3.5" />
-              Переподключить
-            </Button>
+            {ordStatus === "error" && (
+              <Button size="sm" variant="outline" className="h-7 text-[13px] gap-1.5"
+                onClick={() => toast.info("Повторная синхронизация запущена")}>
+                <RefreshCw className="h-3.5 w-3.5" />
+                Повторить синхронизацию
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
 
-      {/* ERID status (compact, no duplicate copy button) */}
+      {/* ERID — prominent, single copy */}
       <Card>
-        <CardContent className="p-4 space-y-2">
+        <CardContent className="p-4 space-y-1.5">
           <p className="text-[15px] font-semibold text-card-foreground">Маркировка (ERID)</p>
           {campaign.erid ? (
-            <div className="flex items-center gap-2.5 text-[13px] text-muted-foreground">
+            <div className="flex items-center gap-2">
               <ShieldCheck className="h-4 w-4 text-success flex-shrink-0" />
-              <span>ERID <span className="font-mono font-semibold text-card-foreground">{campaign.erid}</span> присвоен креативу. Для нового креатива дублируйте кампанию.</span>
+              <span className="text-[15px] font-mono font-bold text-card-foreground tracking-wide">{campaign.erid}</span>
+              <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => {
+                navigator.clipboard.writeText(campaign.erid!);
+                toast.success("ERID скопирован");
+              }}>
+                <ClipboardCopy className="h-3.5 w-3.5 text-primary" />
+              </Button>
             </div>
           ) : (
-            <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
+            <div className="flex items-center gap-2 text-[13px] text-foreground/60">
               <Info className="h-4 w-4 text-warning flex-shrink-0" />
               <span>ERID будет получен после отправки креатива в ОРД.</span>
             </div>
@@ -747,24 +755,38 @@ function OrdTab({ campaign }: { campaign: Campaign }) {
         </CardContent>
       </Card>
 
-      {/* Campaign ORD IDs */}
+      {/* Sync history */}
       <Card>
         <CardContent className="p-4 space-y-2">
-          <p className="text-[15px] font-semibold text-card-foreground">Идентификаторы в ОРД</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            <div className="space-y-1">
-              <span className="text-[13px] text-muted-foreground">ID кампании в ОРД</span>
-              <p className="font-mono text-card-foreground text-[13px] bg-muted/30 rounded px-2 py-1 border border-border">
-                ord-camp-2026-0219-a1b2
-              </p>
-            </div>
-            <div className="space-y-1">
-              <span className="text-[13px] text-muted-foreground">Провайдер</span>
-              <p className="text-card-foreground text-[13px] bg-muted/30 rounded px-2 py-1 border border-border">
-                {ordProvider}
-              </p>
-            </div>
+          <p className="text-[15px] font-semibold text-card-foreground">История синхронизации</p>
+          <div className="space-y-1">
+            {mockOrdEvents.map((ev, i) => (
+              <div key={i} className="flex items-center gap-2.5 py-1 text-[13px]">
+                {ev.status === "ok"
+                  ? <CheckCircle2 className="h-3.5 w-3.5 text-success flex-shrink-0" />
+                  : <XCircle className="h-3.5 w-3.5 text-destructive flex-shrink-0" />}
+                <span className="text-foreground/50 flex-shrink-0 w-32 font-mono text-[12px]">{ev.date}</span>
+                <span className="text-card-foreground">{ev.action}</span>
+              </div>
+            ))}
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Technical data — collapsible */}
+      <Card>
+        <CardContent className="p-0">
+          <button type="button" onClick={() => setTechOpen(!techOpen)}
+            className="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-muted/20 transition-colors rounded-lg">
+            <span className="text-[14px] font-medium text-card-foreground">Технические данные</span>
+            <ArrowRight className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${techOpen ? "rotate-90" : ""}`} />
+          </button>
+          {techOpen && (
+            <div className="px-4 pb-3 space-y-2">
+              <SummaryRow label="ID кампании в ОРД" value={<span className="font-mono text-[13px]">ord-camp-2026-0219-a1b2</span>} />
+              <SummaryRow label="Провайдер" value="Яндекс ОРД" />
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
