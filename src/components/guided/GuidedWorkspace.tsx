@@ -64,6 +64,9 @@ interface EdgeError {
   functionName: string;
   status: number;
   body: string;
+  url?: string;
+  payloadSize?: number;
+  responseBody?: string;
 }
 
 const OUTPUT_FORMATS: { value: OutputFormat; label: string; icon: React.ElementType; desc: string }[] = [
@@ -172,40 +175,97 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 
 /* Quality check is now done server-side in project_ingest */
 
-/** Call edge function with detailed error reporting */
+/** Call edge function with detailed error reporting via raw fetch for full control */
 async function callEdge(fnName: string, body: any): Promise<any> {
-  const payloadSize = JSON.stringify(body).length;
+  const payloadStr = JSON.stringify(body);
+  const payloadSize = payloadStr.length;
   const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${fnName}`;
 
-  const { data, error } = await supabase.functions.invoke(fnName, { body });
+  const controller = new AbortController();
+  const timeoutMs = fnName === "project_ingest" ? 120_000 : 60_000;
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-  if (error) {
-    const status = (error as any)?.status ?? 0;
-    let detail = typeof error === "string"
-      ? error
-      : (error as any)?.message || (error as any)?.details || (error as any)?.context || JSON.stringify(error).slice(0, 2000);
+  try {
+    const session = (await supabase.auth.getSession()).data.session;
+    const authToken = session?.access_token;
 
-    // HTTP 0 — no response at all (CORS / network / payload too large)
-    if (status === 0 || !status) {
-      detail = `Запрос не получил ответ (возможно: CORS, сеть или слишком большой payload ~${Math.round(payloadSize / 1024)}KB).\n\nURL: ${url}\nPayload size: ~${Math.round(payloadSize / 1024)}KB\n\nОригинальная ошибка: ${detail}`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+        ...(authToken ? { "Authorization": `Bearer ${authToken}` } : {}),
+      },
+      body: payloadStr,
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+
+    const responseText = await res.text();
+    let data: any;
+    try { data = JSON.parse(responseText); } catch { data = null; }
+
+    if (!res.ok) {
+      const errMsg = data?.error || responseText.slice(0, 4000) || `HTTP ${res.status}`;
+      throw {
+        functionName: fnName,
+        status: res.status,
+        body: errMsg,
+        url,
+        payloadSize,
+        responseBody: responseText.slice(0, 4000),
+      } as EdgeError;
     }
 
-    throw { functionName: fnName, status, body: detail, payloadSize, url } as EdgeError & { payloadSize: number; url: string };
-  }
+    if (data?.error) {
+      throw { functionName: fnName, status: data.status || 400, body: data.error, url, payloadSize } as EdgeError;
+    }
+    return data;
+  } catch (e: any) {
+    clearTimeout(timer);
+    if (e.functionName) throw e; // Already an EdgeError
 
-  if (data?.error) {
-    throw { functionName: fnName, status: data.status || 400, body: data.error } as EdgeError;
+    if (e.name === "AbortError") {
+      throw {
+        functionName: fnName,
+        status: 0,
+        body: `Таймаут: запрос к «${fnName}» не завершился за ${timeoutMs / 1000} сек.`,
+        url,
+        payloadSize,
+      } as EdgeError;
+    }
+
+    // Network error / CORS block
+    throw {
+      functionName: fnName,
+      status: 0,
+      body: `Сетевая ошибка (CORS / нет сети): ${e.message || String(e)}`,
+      url,
+      payloadSize,
+    } as EdgeError;
   }
-  return data;
 }
 
 /* ═══════════════ Error Card ═══════════════ */
 const EdgeErrorCard = ({ error, onRetry, onBackToSources }: { error: EdgeError; onRetry?: () => void; onBackToSources?: () => void }) => {
   const [open, setOpen] = useState(false);
-  const isQualityError = error.functionName === "quality_check";
+  const isQualityError = error.functionName === "quality_check"
+    || (error.functionName === "project_ingest" && (error.body?.toLowerCase().includes("мало текст") || error.body?.toLowerCase().includes("извлечь текст")));
+
   const userMessage = isQualityError
     ? "Недостаточно текстового контента для создания материала. Попробуйте загрузить файл с большим объёмом текста."
-    : `Произошла ошибка. Попробуйте ещё раз.`;
+    : error.status === 0
+      ? "Не удалось связаться с сервером. Проверьте подключение к сети."
+      : `Сервер ответил ошибкой (HTTP ${error.status}). Попробуйте ещё раз.`;
+
+  // Build debug info for Details section
+  const debugLines = [
+    `stage: ${error.functionName}`,
+    error.url && `url: ${error.url}`,
+    `http_status: ${error.status}`,
+    error.payloadSize != null && `payload_size: ~${Math.round(error.payloadSize / 1024)}KB`,
+    `\n--- response ---\n${(error.responseBody || error.body || "").slice(0, 4000)}`,
+  ].filter(Boolean).join("\n");
 
   return (
     <Card className="border-destructive/30 bg-destructive/5">
@@ -222,7 +282,7 @@ const EdgeErrorCard = ({ error, onRetry, onBackToSources }: { error: EdgeError; 
           </CollapsibleTrigger>
           <CollapsibleContent>
             <pre className="text-[11px] text-muted-foreground bg-muted/30 p-3 rounded-lg mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-all">
-              {error.body.slice(0, 2000)}
+              {debugLines}
             </pre>
           </CollapsibleContent>
         </Collapsible>
@@ -232,7 +292,7 @@ const EdgeErrorCard = ({ error, onRetry, onBackToSources }: { error: EdgeError; 
               <ChevronLeft className="h-3 w-3 mr-1" /> Вернуться к источникам
             </Button>
           )}
-          {onRetry && !isQualityError && (
+          {onRetry && (
             <Button variant="outline" size="sm" onClick={onRetry}>
               <RotateCcw className="h-3 w-3 mr-1" /> Повторить
             </Button>
@@ -811,26 +871,70 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
       } else {
         setPipelineError({ functionName: "unknown", status: 0, body: e.message || String(e) });
       }
+      // Mark project as error so MyMaterials shows error state
+      if (projId) {
+        supabase.from("projects").update({ status: "error" }).eq("id", projId).then(() => {
+          queryClient.invalidateQueries({ queryKey: ["my-guided-projects"] });
+        });
+      }
     }
   };
 
-  // Legacy compat wrapper for demo
+  // Legacy compat wrapper for demo — simulates ingest locally if edge function unavailable
   const runPipeline = async (projId: string, inlineDocs: { text: string; file_name: string }[], format: OutputFormat) => {
-    // For demo, we pass inline documents directly
     uploadedSourcesRef.current = [];
     pastedTextRef.current = "";
     updateStage("uploading", "done");
-    // Use inline documents mode
-    const body: any = { project_id: projId, documents: inlineDocs };
     setGenStatus("ingesting");
     updateStage("ingesting", "running");
+
     try {
+      const body: any = { project_id: projId, documents: inlineDocs };
       await withTimeout(callEdge("project_ingest", body), STAGE_TIMEOUT_MS, "project_ingest");
       updateStage("ingesting", "done");
     } catch (e: any) {
-      const edgeErr = e.functionName ? e : { functionName: "project_ingest", status: 0, body: e.message || String(e) };
-      updateStage("ingesting", "error", edgeErr);
-      throw edgeErr;
+      // DEMO FALLBACK: if edge function fails, simulate ingest locally
+      console.warn("Demo ingest fallback — simulating locally:", e);
+      try {
+        // Insert chunks directly for demo text
+        const allText = inlineDocs.map(d => d.text).join("\n\n");
+        if (allText.length < 50) throw e; // Too little text, re-throw
+
+        // Create a source record
+        const { data: srcRec } = await supabase.from("project_sources").insert({
+          project_id: projId, user_id: user!.id,
+          file_name: inlineDocs[0]?.file_name || "demo.txt",
+          file_type: "txt", storage_path: `demo/${projId}/text.txt`,
+          status: "processed", file_size: allText.length,
+        }).select("id").single();
+
+        const sourceId = srcRec?.id || projId;
+
+        // Chunk and insert
+        const maxChars = 1200, overlap = 150;
+        const chunks: { content: string; metadata: any; source_id: string }[] = [];
+        let start = 0, ci = 0;
+        while (start < allText.length) {
+          const end = Math.min(start + maxChars, allText.length);
+          chunks.push({ content: allText.slice(start, end), metadata: { file_name: "demo.txt", chunk_index: ci }, source_id: sourceId });
+          start = end - overlap;
+          if (start >= allText.length) break;
+          ci++;
+        }
+
+        await supabase.from("project_chunks").delete().eq("project_id", projId);
+        for (let i = 0; i < chunks.length; i += 50) {
+          await supabase.from("project_chunks").insert(
+            chunks.slice(i, i + 50).map(c => ({ project_id: projId, user_id: user!.id, content: c.content, metadata: c.metadata, source_id: c.source_id }))
+          );
+        }
+        await supabase.from("projects").update({ status: "ingested" }).eq("id", projId);
+        updateStage("ingesting", "done");
+      } catch (fallbackErr) {
+        const edgeErr = e.functionName ? e : { functionName: "project_ingest", status: 0, body: e.message || String(e) };
+        updateStage("ingesting", "error", edgeErr);
+        throw edgeErr;
+      }
     }
     // Continue with planning and generating
     await runPipelineFrom(projId, "planning", [], format);
@@ -1360,15 +1464,49 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
       const errorBody = pipelineError?.body?.toLowerCase() || "";
       const isQualityError = pipelineError?.functionName === "quality_check"
         || (pipelineError?.functionName === "project_ingest" && (errorBody.includes("мало текст") || errorBody.includes("извлечь текст")));
+
+      const failedStage = genStages.find(s => s.status === "error");
+      const failedStageName = failedStage?.label || pipelineError?.functionName || "unknown";
+
       const userFriendlyMessage = isQualityError
         ? "Загруженные файлы содержат слишком мало текста для создания материала."
-        : "Произошла ошибка при создании гайда.";
+        : pipelineError?.status === 0
+          ? "Не удалось связаться с сервером. Проверьте подключение."
+          : `Ошибка на этапе «${failedStageName}» (HTTP ${pipelineError?.status || "?"}).`;
+
+      // Build structured debug info
+      const debugLines = [
+        `stage: ${pipelineError?.functionName || "unknown"}`,
+        pipelineError?.url && `url: ${pipelineError.url}`,
+        `http_status: ${pipelineError?.status ?? "?"}`,
+        pipelineError?.payloadSize != null && `payload_size: ~${Math.round(pipelineError.payloadSize / 1024)}KB`,
+        `\n--- response ---\n${(pipelineError?.responseBody || pipelineError?.body || "").slice(0, 4000)}`,
+      ].filter(Boolean).join("\n");
 
       return (
         <div className="space-y-6 max-w-xl mx-auto py-8">
           <h2 className="text-lg font-bold text-foreground">Генерация</h2>
 
-          {/* User-friendly error card */}
+          {/* Stage progress (show what completed before error) */}
+          <div className="space-y-1.5">
+            {genStages.map((stage) => {
+              const Icon = stage.icon;
+              return (
+                <div key={stage.key} className={cn("flex items-center gap-3 p-2.5 rounded-lg border text-sm",
+                  stage.status === "done" ? "border-accent/30 bg-accent/5 text-foreground" :
+                  stage.status === "error" ? "border-destructive/30 bg-destructive/5 text-destructive font-medium" :
+                  "border-border text-muted-foreground/50")}>
+                  {stage.status === "done" ? <CheckCircle2 className="h-4 w-4 text-accent shrink-0" /> :
+                   stage.status === "error" ? <AlertTriangle className="h-4 w-4 text-destructive shrink-0" /> :
+                   <Icon className="h-4 w-4 text-muted-foreground/40 shrink-0" />}
+                  <span>{stage.label}</span>
+                  {stage.status === "error" && <Badge variant="destructive" className="ml-auto text-[10px]">Ошибка</Badge>}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Error card */}
           <Card className="border-destructive/30 bg-destructive/5">
             <CardContent className="pt-5 space-y-4">
               <div className="flex items-center gap-2">
@@ -1383,35 +1521,23 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
               )}
 
               <div className="flex flex-wrap gap-2">
-                {isQualityError ? (
-                  <Button variant="default" size="sm" onClick={() => {
-                    setPhase("intake");
-                    setIntakeStep(0);
-                    setGenStatus("idle");
-                    setPipelineError(null);
-                    setGenStages(INITIAL_GEN_STAGES.map(s => ({ ...s })));
-                  }}>
-                    <ChevronLeft className="h-4 w-4 mr-1" /> Вернуться к источникам
+                {!isQualityError && failedStage && (
+                  <Button variant="outline" size="sm" onClick={() => handleRetryStage(failedStage.key)}>
+                    <RotateCcw className="h-3 w-3 mr-1" /> Повторить «{failedStage.label}»
                   </Button>
-                ) : (
-                  <>
-                    <Button variant="outline" size="sm" onClick={handleRetryPipeline}>
-                      <RotateCcw className="h-3 w-3 mr-1" /> Повторить
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => {
-                      setPhase("intake");
-                      setIntakeStep(0);
-                      setGenStatus("idle");
-                      setPipelineError(null);
-                      setGenStages(INITIAL_GEN_STAGES.map(s => ({ ...s })));
-                    }}>
-                      <ChevronLeft className="h-4 w-4 mr-1" /> Вернуться к источникам
-                    </Button>
-                  </>
                 )}
+                <Button variant="ghost" size="sm" onClick={() => {
+                  setPhase("intake");
+                  setIntakeStep(0);
+                  setGenStatus("idle");
+                  setPipelineError(null);
+                  setGenStages(INITIAL_GEN_STAGES.map(s => ({ ...s })));
+                }}>
+                  <ChevronLeft className="h-4 w-4 mr-1" /> Вернуться к источникам
+                </Button>
               </div>
 
-              {/* Collapsible debug details */}
+              {/* Collapsible structured debug details */}
               {pipelineError && (
                 <Collapsible>
                   <CollapsibleTrigger asChild>
@@ -1420,8 +1546,8 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
                     </Button>
                   </CollapsibleTrigger>
                   <CollapsibleContent>
-                    <pre className="text-[11px] text-muted-foreground bg-muted/30 p-3 rounded-lg mt-2 max-h-32 overflow-auto whitespace-pre-wrap break-all">
-                      {pipelineError.body?.slice(0, 500)}
+                    <pre className="text-[11px] text-muted-foreground bg-muted/30 p-3 rounded-lg mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-all">
+                      {debugLines}
                     </pre>
                   </CollapsibleContent>
                 </Collapsible>
