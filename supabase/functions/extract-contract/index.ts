@@ -46,18 +46,13 @@ const fieldNames = [
   "ordRequirements", "paymentTerms", "cancellationClause",
 ];
 
-// ─── PDF text extraction using pdfjs-serverless ───
+// ─── PDF text extraction using unpdf (designed for serverless/Deno) ───
 async function extractPdfText(data: Uint8Array): Promise<string> {
   try {
-    const { getDocument } = await import("https://esm.sh/pdfjs-serverless@0.6.0");
-    const doc = await getDocument({ data, useSystemFonts: true }).promise;
-    const pages: string[] = [];
-    for (let i = 1; i <= Math.min(doc.numPages, 30); i++) {
-      const page = await doc.getPage(i);
-      const content = await page.getTextContent();
-      pages.push(content.items.map((item: any) => item.str).join(" "));
-    }
-    return pages.join("\n\n");
+    const { extractText, getDocumentProxy } = await import("https://esm.sh/unpdf@0.12.1");
+    const pdf = await getDocumentProxy(data);
+    const { text } = await extractText(pdf, { mergePages: true });
+    return text || "";
   } catch (e) {
     console.error("PDF parse error:", e);
     throw new Error("PDF_PARSE_FAILED");
