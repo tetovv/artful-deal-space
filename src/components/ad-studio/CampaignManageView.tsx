@@ -202,8 +202,8 @@ function MetricCard({ label, value, icon: Icon, colorClass }: {
           <Icon className="h-4 w-4" />
         </div>
         <div className="min-w-0">
-          <p className="text-base font-bold text-card-foreground leading-tight">{value}</p>
-          <p className="text-[13px] text-muted-foreground">{label}</p>
+          <p className="text-lg font-bold text-card-foreground leading-tight">{value}</p>
+          <p className="text-[14px] text-foreground/70">{label}</p>
         </div>
       </CardContent>
     </Card>
@@ -214,7 +214,7 @@ function MetricCard({ label, value, icon: Icon, colorClass }: {
 function MiniChart({ metric }: { metric: string }) {
   const bars = useMemo(() => Array.from({ length: 14 }, () => 20 + Math.random() * 80), []);
   return (
-    <div className="flex items-end gap-[3px] h-32 w-full">
+    <div className="flex items-end gap-[3px] h-28 w-full">
       {bars.map((v, i) => (
         <div key={i} className="flex-1 rounded-t bg-primary/60 hover:bg-primary transition-colors"
           style={{ height: `${v}%` }} />
@@ -265,8 +265,6 @@ const mockOrdEvents: OrdEvent[] = [
 function OverviewTab({ campaign }: { campaign: Campaign }) {
   const [dateRange, setDateRange] = useState<DateRange>("30d");
   const [chartMetric, setChartMetric] = useState<string>("impressions");
-  const [topUpOpen, setTopUpOpen] = useState(false);
-  const [topUpAmount, setTopUpAmount] = useState("");
 
   const budgetPercent = campaign.budget > 0 ? Math.min((campaign.spent / campaign.budget) * 100, 100) : 0;
   const daysTotal = campaign.startDate && campaign.endDate
@@ -282,15 +280,15 @@ function OverviewTab({ campaign }: { campaign: Campaign }) {
 
   return (
     <div className="space-y-3">
-      {/* Period selector + KPIs */}
-      <div className="flex items-center justify-between">
-        <p className="text-[15px] font-semibold text-card-foreground">Метрики за период</p>
-        <div className="flex items-center rounded-lg border border-border bg-card overflow-hidden">
+      {/* KPI row with period selector top-right */}
+      <div className="flex items-center justify-between mb-1">
+        <p className="text-[15px] font-semibold text-card-foreground">Метрики</p>
+        <div className="flex items-center gap-1 text-[13px]">
           {(["today", "7d", "30d"] as DateRange[]).map((r) => (
             <button key={r} type="button" onClick={() => setDateRange(r)}
-              className={`px-3 py-1.5 text-xs transition-colors ${dateRange === r
+              className={`px-2 py-0.5 rounded-md transition-colors ${dateRange === r
                 ? "bg-primary/15 text-primary font-medium"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
+                : "text-muted-foreground hover:text-foreground"
               }`}>
               {dateRangeLabels[r]}
             </button>
@@ -298,28 +296,28 @@ function OverviewTab({ campaign }: { campaign: Campaign }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         <MetricCard label="Показы" value={formatNum(campaign.impressions)} icon={Eye} colorClass="bg-info/15 text-info" />
         <MetricCard label="Клики" value={formatNum(campaign.clicks)} icon={MousePointerClick} colorClass="bg-success/15 text-success" />
         <MetricCard label="CTR" value={`${campaign.ctr}%`} icon={TrendingUp} colorClass="bg-accent/15 text-accent" />
         <MetricCard label="Потрачено" value={`${formatNum(campaign.spent)} ₽`} icon={BarChart3} colorClass="bg-warning/15 text-warning" />
       </div>
 
-      {/* Chart */}
+      {/* Chart — single block, minimal metric toggle */}
       <Card>
-        <CardContent className="p-4 space-y-2.5">
+        <CardContent className="p-4 space-y-2">
           <div className="flex items-center justify-between">
             <p className="text-[15px] font-semibold text-card-foreground">Динамика</p>
-            <div className="flex items-center rounded-lg border border-border bg-card overflow-hidden">
+            <div className="flex items-center gap-1 text-[13px]">
               {[
                 { key: "impressions", label: "Показы" },
                 { key: "clicks", label: "Клики" },
                 { key: "spend", label: "Расходы" },
               ].map((m) => (
                 <button key={m.key} type="button" onClick={() => setChartMetric(m.key)}
-                  className={`px-3 py-1 text-xs transition-colors ${chartMetric === m.key
+                  className={`px-2 py-0.5 rounded-md transition-colors ${chartMetric === m.key
                     ? "bg-primary/15 text-primary font-medium"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
+                    : "text-muted-foreground hover:text-foreground"
                   }`}>
                   {m.label}
                 </button>
@@ -330,53 +328,20 @@ function OverviewTab({ campaign }: { campaign: Campaign }) {
         </CardContent>
       </Card>
 
-      {/* Budget & pacing */}
+      {/* Budget & pacing — compact, no top-up controls */}
       <Card>
-        <CardContent className="p-4 space-y-2.5">
-          <div className="flex items-center justify-between">
-            <p className="text-[15px] font-semibold text-card-foreground">Бюджет и пейсинг</p>
-            {isStarted(campaign) && !isTerminal(campaign) && (
-              <Button size="sm" variant="outline" className="h-7 text-[13px] gap-1.5" onClick={() => setTopUpOpen(!topUpOpen)}>
-                <PlusCircle className="h-3.5 w-3.5" />
-                Пополнить бюджет
-              </Button>
-            )}
+        <CardContent className="p-4 space-y-1.5">
+          <p className="text-[15px] font-semibold text-card-foreground">Бюджет</p>
+          <div className="flex items-center justify-between text-[14px]">
+            <span className="text-foreground/70">Потрачено</span>
+            <span className="font-medium text-card-foreground">{formatNum(campaign.spent)} / {formatNum(campaign.budget)} ₽</span>
           </div>
-
-          {topUpOpen && (
-            <div className="flex items-center gap-3 p-3 rounded-lg border border-primary/20 bg-primary/5">
-              <Input
-                type="number"
-                placeholder="Сумма пополнения (₽)"
-                value={topUpAmount}
-                onChange={(e) => setTopUpAmount(e.target.value)}
-                className="h-9 flex-1 max-w-[200px]"
-              />
-              <Button size="sm" className="h-9 text-sm" onClick={() => {
-                toast.success(`Бюджет пополнен на ${topUpAmount} ₽`);
-                setTopUpOpen(false);
-                setTopUpAmount("");
-              }}>
-                Подтвердить
-              </Button>
-              <Button size="sm" variant="ghost" className="h-9 text-sm" onClick={() => setTopUpOpen(false)}>
-                Отмена
-              </Button>
-            </div>
-          )}
-
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between text-[14px]">
-              <span className="text-muted-foreground">Потрачено</span>
-              <span className="font-medium text-card-foreground">{formatNum(campaign.spent)} / {formatNum(campaign.budget)} ₽</span>
-            </div>
-            <Progress value={budgetPercent} className="h-2" />
-            <div className="flex items-center gap-6 text-[13px] text-muted-foreground pt-0.5">
-              <span>Дневной темп: <span className="font-medium text-card-foreground">{formatNum(dailyPace)} ₽/день</span></span>
-              {daysRemaining !== null && (
-                <span>Осталось: <span className="font-medium text-card-foreground">{daysRemaining} дн.</span></span>
-              )}
-            </div>
+          <Progress value={budgetPercent} className="h-1.5" />
+          <div className="flex items-center gap-5 text-[13px] text-foreground/60">
+            <span>Темп: <span className="font-medium text-card-foreground">{formatNum(dailyPace)} ₽/день</span></span>
+            {daysRemaining !== null && (
+              <span>Осталось: <span className="font-medium text-card-foreground">{daysRemaining} дн.</span></span>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -384,16 +349,16 @@ function OverviewTab({ campaign }: { campaign: Campaign }) {
       {/* Diagnostics */}
       {hasIssues && (
         <Card className="border-warning/30">
-          <CardContent className="p-3.5 space-y-1.5">
+          <CardContent className="p-3 space-y-1">
             <div className="flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-warning flex-shrink-0" />
               <p className="text-[14px] font-semibold text-card-foreground">Почему кампания не откручивается?</p>
             </div>
-            <ul className="space-y-1 text-[13px] text-muted-foreground pl-6">
-              {budgetPercent >= 100 && <li className="flex items-center gap-2"><Ban className="h-3.5 w-3.5 text-destructive" /> Бюджет исчерпан — пополните для продолжения</li>}
-              {campaign.impressions === 0 && campaign.status === "draft" && <li className="flex items-center gap-2"><Info className="h-3.5 w-3.5 text-warning" /> Кампания в черновике — запустите для показа</li>}
-              {campaign.impressions === 0 && campaign.status === "active" && <li className="flex items-center gap-2"><Info className="h-3.5 w-3.5 text-warning" /> Креатив не прошёл модерацию или отсутствует ERID</li>}
-              {campaign.status === "error" && <li className="flex items-center gap-2"><AlertTriangle className="h-3.5 w-3.5 text-destructive" /> Ошибка ОРД — проверьте вкладку ОРД / Маркировка</li>}
+            <ul className="space-y-0.5 text-[13px] text-muted-foreground pl-6">
+              {budgetPercent >= 100 && <li className="flex items-center gap-2"><Ban className="h-3.5 w-3.5 text-destructive" /> Бюджет исчерпан</li>}
+              {campaign.impressions === 0 && campaign.status === "draft" && <li className="flex items-center gap-2"><Info className="h-3.5 w-3.5 text-warning" /> Кампания в черновике</li>}
+              {campaign.impressions === 0 && campaign.status === "active" && <li className="flex items-center gap-2"><Info className="h-3.5 w-3.5 text-warning" /> Нет модерации или ERID</li>}
+              {campaign.status === "error" && <li className="flex items-center gap-2"><AlertTriangle className="h-3.5 w-3.5 text-destructive" /> Ошибка ОРД</li>}
             </ul>
           </CardContent>
         </Card>
