@@ -771,6 +771,8 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
   // Store uploaded sources info so retry can reuse them
   const uploadedSourcesRef = useRef<{ storage_path: string; file_name: string; source_id: string }[]>([]);
   const pastedTextRef = useRef<string>("");
+  // Keep original File objects for client-side extraction (avoids re-downloading from Storage)
+  const extractFilesRef = useRef<Map<string, File>>(new Map());
 
   const runStageUpload = async (projId: string): Promise<void> => {
     // Upload stage is already done when we call runPipeline (docs extracted in handleGenerate)
@@ -785,18 +787,29 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
     const allChunks: { content: string; metadata: any; source_id: string }[] = [];
     const failedFiles: string[] = [];
 
-    // Extract text from each uploaded file on client side
+    // Extract text from original File objects (stored in extractFilesRef) — no re-download needed
     for (const src of sources) {
       try {
-        // Download file from storage
-        const { data: blob, error: dlErr } = await supabase.storage
-          .from("ai_sources")
-          .download(src.storage_path);
-        if (dlErr || !blob) { failedFiles.push(src.file_name); continue; }
+        const originalFile = extractFilesRef.current.get(src.file_name);
+        let text = "";
 
-        // Convert Blob to File for extractTextFromFile
-        const file = new File([blob], src.file_name);
-        const text = await extractTextFromFile(file);
+        if (originalFile) {
+          // Fast path: extract from the original File object in memory
+          text = await extractTextFromFile(originalFile);
+        } else {
+          // Fallback: download from storage (e.g. on retry)
+          const { data: blob, error: dlErr } = await supabase.storage
+            .from("ai_sources")
+            .download(src.storage_path);
+          if (dlErr || !blob) {
+            console.warn(`Download failed for ${src.file_name}:`, dlErr);
+            failedFiles.push(src.file_name);
+            continue;
+          }
+          const file = new File([blob], src.file_name);
+          text = await extractTextFromFile(file);
+        }
+
         if (!text.trim()) { failedFiles.push(src.file_name); continue; }
 
         const chunks = chunkText(text);
@@ -808,7 +821,6 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
           });
         }
 
-        // Update source status
         await supabase.from("project_sources").update({ status: "processed", chunk_count: chunks.length }).eq("id", src.source_id);
         await yieldToUI();
       } catch (e: any) {
@@ -819,7 +831,6 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
 
     // Add pasted text
     if (pastedText?.trim()) {
-      // Create a source record for pasted text
       const { data: srcRec } = await supabase.from("project_sources").insert({
         project_id: projId, user_id: user.id,
         file_name: "pasted_text.txt", file_type: "txt",
@@ -827,53 +838,52 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
         status: "processed", file_size: pastedText.length,
       }).select("id").single();
 
-      const sourceId = srcRec?.id;
-      if (sourceId) {
+      if (srcRec?.id) {
         const chunks = chunkText(pastedText);
         for (const c of chunks) {
           allChunks.push({
             content: c.content,
             metadata: { file_name: "pasted_text.txt", chunk_index: c.chunk_index, start_char: c.start_char, end_char: c.end_char },
-            source_id: sourceId,
+            source_id: srcRec.id,
           });
         }
       }
     }
 
     if (allChunks.length === 0) {
-      throw { functionName: "project_ingest", status: 0, body: "Не удалось извлечь текст ни из одного файла. Убедитесь, что файлы содержат читаемый текст." } as EdgeError;
+      const msg = failedFiles.length > 0
+        ? `Не удалось извлечь текст из: ${failedFiles.join(", ")}. Поддерживаемые форматы: PDF, DOCX, TXT, MD.`
+        : "Не удалось извлечь текст. Убедитесь, что файлы содержат читаемый текст.";
+      throw { functionName: "project_ingest", status: 0, body: msg } as EdgeError;
     }
 
     const totalChars = allChunks.reduce((sum, c) => sum + c.content.length, 0);
     if (totalChars < 200) {
-      throw { functionName: "project_ingest", status: 0, body: "Слишком мало текстового контента. Загрузите файлы с большим объёмом текста." } as EdgeError;
+      throw { functionName: "project_ingest", status: 0, body: "Слишком мало текстового контента (< 200 символов). Загрузите файлы с большим объёмом текста." } as EdgeError;
     }
 
-    // Delete old chunks and insert new ones
+    // Delete old chunks and insert new ones in batches
     await supabase.from("project_chunks").delete().eq("project_id", projId);
 
     let inserted = 0;
     for (let i = 0; i < allChunks.length; i += 50) {
       const batch = allChunks.slice(i, i + 50).map(c => ({
-        project_id: projId,
-        user_id: user.id,
-        content: c.content,
-        metadata: c.metadata,
-        source_id: c.source_id,
+        project_id: projId, user_id: user.id,
+        content: c.content, metadata: c.metadata, source_id: c.source_id,
       }));
       const { error: insertErr } = await supabase.from("project_chunks").insert(batch);
       if (insertErr) { console.error("Chunk insert error:", insertErr); continue; }
       inserted += batch.length;
+      await yieldToUI();
     }
 
     if (inserted === 0) {
-      throw { functionName: "project_ingest", status: 0, body: "Не удалось сохранить данные. Попробуйте ещё раз." } as EdgeError;
+      throw { functionName: "project_ingest", status: 0, body: "Не удалось сохранить данные в БД. Попробуйте ещё раз." } as EdgeError;
     }
 
     await supabase.from("projects").update({ status: "ingested" }).eq("id", projId);
-
     if (failedFiles.length > 0) {
-      console.warn("Files failed client-side extraction:", failedFiles);
+      toast.warning(`Не удалось обработать: ${failedFiles.join(", ")}`);
     }
   };
 
@@ -956,62 +966,51 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
     }
   };
 
-  // Legacy compat wrapper for demo — simulates ingest locally if edge function unavailable
+  // Demo pipeline — uses client-side ingest directly (no edge function)
   const runPipeline = async (projId: string, inlineDocs: { text: string; file_name: string }[], format: OutputFormat) => {
     uploadedSourcesRef.current = [];
-    pastedTextRef.current = "";
+    pastedTextRef.current = inlineDocs.map(d => d.text).join("\n\n");
+    extractFilesRef.current = new Map();
     updateStage("uploading", "done");
     setGenStatus("ingesting");
     updateStage("ingesting", "running");
 
     try {
-      const body: any = { project_id: projId, documents: inlineDocs };
-      await withTimeout(callEdge("project_ingest", body), STAGE_TIMEOUT_MS, "project_ingest");
+      const allText = inlineDocs.map(d => d.text).join("\n\n");
+      if (allText.length < 50) throw { functionName: "project_ingest", status: 0, body: "Слишком мало текста для демо" } as EdgeError;
+
+      // Create a source record
+      const { data: srcRec } = await supabase.from("project_sources").insert({
+        project_id: projId, user_id: user!.id,
+        file_name: inlineDocs[0]?.file_name || "demo.txt",
+        file_type: "txt", storage_path: `demo/${projId}/text.txt`,
+        status: "processed", file_size: allText.length,
+      }).select("id").single();
+
+      const sourceId = srcRec?.id;
+      if (!sourceId) throw { functionName: "project_ingest", status: 0, body: "Не удалось создать source запись" } as EdgeError;
+
+      // Chunk and insert using shared chunkText
+      const chunks = chunkText(allText);
+      await supabase.from("project_chunks").delete().eq("project_id", projId);
+      for (let i = 0; i < chunks.length; i += 50) {
+        await supabase.from("project_chunks").insert(
+          chunks.slice(i, i + 50).map(c => ({
+            project_id: projId, user_id: user!.id,
+            content: c.content,
+            metadata: { file_name: "demo.txt", chunk_index: c.chunk_index },
+            source_id: sourceId,
+          }))
+        );
+      }
+      await supabase.from("projects").update({ status: "ingested" }).eq("id", projId);
       updateStage("ingesting", "done");
     } catch (e: any) {
-      // DEMO FALLBACK: if edge function fails, simulate ingest locally
-      console.warn("Demo ingest fallback — simulating locally:", e);
-      try {
-        // Insert chunks directly for demo text
-        const allText = inlineDocs.map(d => d.text).join("\n\n");
-        if (allText.length < 50) throw e; // Too little text, re-throw
-
-        // Create a source record
-        const { data: srcRec } = await supabase.from("project_sources").insert({
-          project_id: projId, user_id: user!.id,
-          file_name: inlineDocs[0]?.file_name || "demo.txt",
-          file_type: "txt", storage_path: `demo/${projId}/text.txt`,
-          status: "processed", file_size: allText.length,
-        }).select("id").single();
-
-        const sourceId = srcRec?.id || projId;
-
-        // Chunk and insert
-        const maxChars = 1200, overlap = 150;
-        const chunks: { content: string; metadata: any; source_id: string }[] = [];
-        let start = 0, ci = 0;
-        while (start < allText.length) {
-          const end = Math.min(start + maxChars, allText.length);
-          chunks.push({ content: allText.slice(start, end), metadata: { file_name: "demo.txt", chunk_index: ci }, source_id: sourceId });
-          start = end - overlap;
-          if (start >= allText.length) break;
-          ci++;
-        }
-
-        await supabase.from("project_chunks").delete().eq("project_id", projId);
-        for (let i = 0; i < chunks.length; i += 50) {
-          await supabase.from("project_chunks").insert(
-            chunks.slice(i, i + 50).map(c => ({ project_id: projId, user_id: user!.id, content: c.content, metadata: c.metadata, source_id: c.source_id }))
-          );
-        }
-        await supabase.from("projects").update({ status: "ingested" }).eq("id", projId);
-        updateStage("ingesting", "done");
-      } catch (fallbackErr) {
-        const edgeErr = e.functionName ? e : { functionName: "project_ingest", status: 0, body: e.message || String(e) };
-        updateStage("ingesting", "error", edgeErr);
-        throw edgeErr;
-      }
+      const edgeErr = e.functionName ? e : { functionName: "project_ingest", status: 0, body: e.message || String(e) };
+      updateStage("ingesting", "error", edgeErr);
+      throw edgeErr;
     }
+
     // Continue with planning and generating
     await runPipelineFrom(projId, "planning", [], format);
   };
@@ -1042,7 +1041,11 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
       }
       setProjectId(proj.id);
 
-      // Upload files to storage in parallel (no client-side extraction!)
+      // Upload files to storage in parallel and keep originals for client-side extraction
+      extractFilesRef.current = new Map();
+      for (const file of intake.files) {
+        extractFilesRef.current.set(file.name, file);
+      }
       const uploadedSources: { storage_path: string; file_name: string; source_id: string }[] = [];
       const uploadPromises = intake.files.map(async (file) => {
         try {
