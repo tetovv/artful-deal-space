@@ -468,6 +468,72 @@ export type Database = {
         }
         Relationships: []
       }
+      creator_offers: {
+        Row: {
+          created_at: string
+          creator_id: string
+          id: string
+          is_active: boolean
+          offer_type: string
+          price: number
+          turnaround_days: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          creator_id: string
+          id?: string
+          is_active?: boolean
+          offer_type: string
+          price?: number
+          turnaround_days?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          creator_id?: string
+          id?: string
+          is_active?: boolean
+          offer_type?: string
+          price?: number
+          turnaround_days?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      creator_platforms: {
+        Row: {
+          avg_views: number | null
+          channel_url: string | null
+          created_at: string
+          creator_id: string
+          id: string
+          platform_name: string
+          subscriber_count: number
+          updated_at: string
+        }
+        Insert: {
+          avg_views?: number | null
+          channel_url?: string | null
+          created_at?: string
+          creator_id: string
+          id?: string
+          platform_name: string
+          subscriber_count?: number
+          updated_at?: string
+        }
+        Update: {
+          avg_views?: number | null
+          channel_url?: string | null
+          created_at?: string
+          creator_id?: string
+          id?: string
+          platform_name?: string
+          subscriber_count?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       deal_audit_log: {
         Row: {
           action: string
@@ -1050,6 +1116,7 @@ export type Database = {
           bio: string | null
           content_count: number | null
           created_at: string
+          deals_count: number | null
           display_name: string
           email: string | null
           followers: number | null
@@ -1058,6 +1125,8 @@ export type Database = {
           niche: string[] | null
           rating: number | null
           reach: number | null
+          response_hours: number | null
+          safe_deal: boolean | null
           updated_at: string
           user_id: string
           verified: boolean | null
@@ -1067,6 +1136,7 @@ export type Database = {
           bio?: string | null
           content_count?: number | null
           created_at?: string
+          deals_count?: number | null
           display_name?: string
           email?: string | null
           followers?: number | null
@@ -1075,6 +1145,8 @@ export type Database = {
           niche?: string[] | null
           rating?: number | null
           reach?: number | null
+          response_hours?: number | null
+          safe_deal?: boolean | null
           updated_at?: string
           user_id: string
           verified?: boolean | null
@@ -1084,6 +1156,7 @@ export type Database = {
           bio?: string | null
           content_count?: number | null
           created_at?: string
+          deals_count?: number | null
           display_name?: string
           email?: string | null
           followers?: number | null
@@ -1092,6 +1165,8 @@ export type Database = {
           niche?: string[] | null
           rating?: number | null
           reach?: number | null
+          response_hours?: number | null
+          safe_deal?: boolean | null
           updated_at?: string
           user_id?: string
           verified?: boolean | null
@@ -1490,6 +1565,33 @@ export type Database = {
           created_at?: string
           creator_id?: string
           id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_balances: {
+        Row: {
+          available: number
+          created_at: string
+          id: string
+          reserved: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          available?: number
+          created_at?: string
+          id?: string
+          reserved?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          available?: number
+          created_at?: string
+          id?: string
+          reserved?: number
+          updated_at?: string
           user_id?: string
         }
         Relationships: []

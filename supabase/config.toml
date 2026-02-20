@@ -29,3 +29,6 @@ verify_jwt = false
 
 [functions.extract-contract]
 verify_jwt = false
+
+[functions.ocr-pdf]
+verify_jwt = false

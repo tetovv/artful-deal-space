@@ -43,6 +43,35 @@ export function useLogDealEvent() {
   });
 }
 
+/* ─── User Balance ─── */
+export function useUserBalance() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["user_balance", user?.id],
+    queryFn: async () => {
+      if (!user) return null;
+      const { data, error } = await supabase
+        .from("user_balances")
+        .select("*")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (error) throw error;
+      // Auto-create balance row if missing
+      if (!data) {
+        const { data: created, error: createErr } = await supabase
+          .from("user_balances")
+          .insert({ user_id: user.id, available: 0, reserved: 0 })
+          .select()
+          .single();
+        if (createErr) throw createErr;
+        return created;
+      }
+      return data;
+    },
+    enabled: !!user,
+  });
+}
+
 /* ─── Escrow ─── */
 export function useDealEscrow(dealId: string | undefined) {
   return useQuery({
@@ -62,10 +91,35 @@ export function useDealEscrow(dealId: string | undefined) {
 }
 
 export function useReserveEscrow() {
+  const { user } = useAuth();
   const qc = useQueryClient();
   const logEvent = useLogDealEvent();
   return useMutation({
     mutationFn: async (params: { dealId: string; label: string; amount: number; milestoneId?: string }) => {
+      if (!user) throw new Error("Not authenticated");
+
+      // Check balance
+      const { data: balance } = await supabase
+        .from("user_balances")
+        .select("available, reserved")
+        .eq("user_id", user.id)
+        .single();
+
+      if (!balance || balance.available < params.amount) {
+        throw new Error(`Недостаточно средств. Доступно: ${balance?.available || 0} ₽, требуется: ${params.amount} ₽`);
+      }
+
+      // Reserve funds in balance
+      const { error: balErr } = await supabase
+        .from("user_balances")
+        .update({
+          available: balance.available - params.amount,
+          reserved: balance.reserved + params.amount,
+        })
+        .eq("user_id", user.id);
+      if (balErr) throw balErr;
+
+      // Create escrow record
       const { data, error } = await supabase.from("deal_escrow").insert({
         deal_id: params.dealId,
         milestone_id: params.milestoneId || null,
@@ -79,8 +133,12 @@ export function useReserveEscrow() {
     },
     onSuccess: (data, vars) => {
       qc.invalidateQueries({ queryKey: ["deal_escrow", vars.dealId] });
+      qc.invalidateQueries({ queryKey: ["user_balance"] });
       logEvent.mutate({ dealId: vars.dealId, action: `Средства зарезервированы: ${vars.amount} ₽ — ${vars.label}`, category: "payments" });
       toast.success("Средства зарезервированы");
+    },
+    onError: (err: Error) => {
+      toast.error(err.message);
     },
   });
 }
@@ -92,6 +150,37 @@ export function useReleaseEscrow() {
   return useMutation({
     mutationFn: async (params: { escrowId: string; dealId: string }) => {
       if (!user) throw new Error("Not authenticated");
+
+      // Get escrow record
+      const { data: escrow, error: getErr } = await supabase
+        .from("deal_escrow")
+        .select("amount, deal_id")
+        .eq("id", params.escrowId)
+        .single();
+      if (getErr || !escrow) throw new Error("Запись эскроу не найдена");
+
+      // Release: reduce reserved in advertiser balance
+      // Find advertiser for this deal
+      const { data: deal } = await supabase
+        .from("deals")
+        .select("advertiser_id")
+        .eq("id", params.dealId)
+        .single();
+
+      if (deal?.advertiser_id) {
+        const { data: advBalance } = await supabase
+          .from("user_balances")
+          .select("reserved")
+          .eq("user_id", deal.advertiser_id)
+          .single();
+        if (advBalance) {
+          await supabase
+            .from("user_balances")
+            .update({ reserved: Math.max(0, advBalance.reserved - escrow.amount) })
+            .eq("user_id", deal.advertiser_id);
+        }
+      }
+
       const { data, error } = await supabase
         .from("deal_escrow")
         .update({ status: "released", released_at: new Date().toISOString(), released_by: user.id })
@@ -103,6 +192,7 @@ export function useReleaseEscrow() {
     },
     onSuccess: (data, vars) => {
       qc.invalidateQueries({ queryKey: ["deal_escrow", vars.dealId] });
+      qc.invalidateQueries({ queryKey: ["user_balance"] });
       logEvent.mutate({ dealId: vars.dealId, action: `Выплата подтверждена: ${data.amount} ₽ — ${data.label}`, category: "payments" });
       toast.success("Выплата подтверждена");
     },
@@ -207,7 +297,6 @@ export function useAcceptTerms() {
       });
       if (error) throw error;
 
-      // Check if both parties accepted — then update terms status
       const { data: acceptances } = await supabase
         .from("deal_terms_acceptance")
         .select("user_id")
@@ -215,7 +304,6 @@ export function useAcceptTerms() {
 
       if (acceptances && acceptances.length >= 2) {
         await supabase.from("deal_terms").update({ status: "accepted" }).eq("id", params.termsId);
-        // Update deal status to in_progress if it was pending
         const { data: deal } = await supabase.from("deals").select("status").eq("id", params.dealId).single();
         if (deal && (deal.status === "pending" || deal.status === "briefing")) {
           await supabase.from("deals").update({ status: "in_progress" }).eq("id", params.dealId);
