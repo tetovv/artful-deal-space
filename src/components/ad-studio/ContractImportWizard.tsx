@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { useSaveContract, useConfirmContract } from "@/hooks/useContracts";
 
 // ─── Types ───
 interface ExtractedField {
@@ -267,11 +268,12 @@ function UploadStep({ onNext, storeDoc, setStoreDoc, redactSensitive, setRedactS
 // ═══════════════════════════════════════════════════════
 // ─── Step 2: AI Extraction (REAL) ───
 // ═══════════════════════════════════════════════════════
-function ExtractionStep({ onNext, file, redactSensitive, onFieldsExtracted }: {
+function ExtractionStep({ onNext, file, redactSensitive, onFieldsExtracted, onTextExtracted }: {
   onNext: () => void;
   file: File;
   redactSensitive: boolean;
   onFieldsExtracted: (fields: ExtractedField[]) => void;
+  onTextExtracted?: (text: string) => void;
 }) {
   const [progress, setProgress] = useState(0);
   const [stage, setStage] = useState<"parsing" | "extracting" | "validating" | "done" | "error">("parsing");
@@ -293,6 +295,8 @@ function ExtractionStep({ onNext, file, redactSensitive, onFieldsExtracted }: {
         if (!text || text.trim().length < 50) {
           throw new Error("Не удалось извлечь текст из документа. Убедитесь, что файл содержит текст.");
         }
+
+        onTextExtracted?.(text);
 
         // Stage 2: AI extraction
         setStage("extracting");
@@ -663,34 +667,79 @@ export function ContractImportWizard({ onBack, onComplete }: ContractImportWizar
     setFields(extractedFields);
   }, []);
 
-  const handleComplete = () => {
+  const saveContract = useSaveContract();
+  const confirmContract = useConfirmContract();
+  const [saving, setSaving] = useState(false);
+  // Store extracted text for DB persistence
+  const [extractedText, setExtractedText] = useState<string | null>(null);
+
+  const handleComplete = async () => {
     const getVal = (key: string) => fields.find((f) => f.key === key)?.value || "";
-    const data: ContractCampaignData = {
-      contractNumber: getVal("contractNumber"),
-      contractDate: getVal("contractDate"),
-      partyAdvertiser: getVal("partyAdvertiser"),
-      partyExecutor: getVal("partyExecutor"),
-      advertiserInn: getVal("advertiserInn"),
-      executorInn: getVal("executorInn"),
-      budget: Number(getVal("budget")) || 0,
-      currency: getVal("currency"),
-      startDate: getVal("startDate"),
-      endDate: getVal("endDate"),
-      contentType: getVal("contentType"),
-      placement: getVal("placement"),
-      ordRequirements: getVal("ordRequirements"),
-      paymentTerms: getVal("paymentTerms"),
-      cancellationClause: getVal("cancellationClause"),
-      storeFullDocument: storeDoc,
-      fileName: file?.name || "",
-      auditLog: [
-        { timestamp: new Date().toISOString(), action: "contract_imported", user: "current_user" },
-        { timestamp: new Date().toISOString(), action: "ai_extraction_completed", user: "system" },
-        { timestamp: new Date().toISOString(), action: "data_confirmed", user: "current_user" },
-        { timestamp: new Date().toISOString(), action: "campaign_created", user: "current_user" },
-      ],
-    };
-    onComplete(data);
+
+    setSaving(true);
+    try {
+      // Build extracted fields, confidence, and snippets maps
+      const extractedFields: Record<string, string> = {};
+      const confidenceMap: Record<string, number> = {};
+      const sourceSnippets: Record<string, string> = {};
+      for (const f of fields) {
+        extractedFields[f.key] = f.value;
+        confidenceMap[f.key] = f.confidence;
+        sourceSnippets[f.key] = f.sourceSnippet;
+      }
+
+      // Save to DB
+      const campaignId = `camp_${Date.now()}`;
+      const saved = await saveContract.mutateAsync({
+        campaignId,
+        version: 1,
+        documentType: "original",
+        fileName: file?.name,
+        fileSize: file?.size,
+        storedText: storeDoc ? extractedText : null,
+        extractedFields,
+        confidenceMap,
+        sourceSnippets,
+        status: "extracted",
+      });
+
+      // Confirm it
+      await confirmContract.mutateAsync(saved.id);
+
+      toast.success("Договор сохранён в базу данных");
+
+      const data: ContractCampaignData = {
+        contractNumber: getVal("contractNumber"),
+        contractDate: getVal("contractDate"),
+        partyAdvertiser: getVal("partyAdvertiser"),
+        partyExecutor: getVal("partyExecutor"),
+        advertiserInn: getVal("advertiserInn"),
+        executorInn: getVal("executorInn"),
+        budget: Number(getVal("budget")) || 0,
+        currency: getVal("currency"),
+        startDate: getVal("startDate"),
+        endDate: getVal("endDate"),
+        contentType: getVal("contentType"),
+        placement: getVal("placement"),
+        ordRequirements: getVal("ordRequirements"),
+        paymentTerms: getVal("paymentTerms"),
+        cancellationClause: getVal("cancellationClause"),
+        storeFullDocument: storeDoc,
+        fileName: file?.name || "",
+        auditLog: [
+          { timestamp: new Date().toISOString(), action: "contract_imported", user: "current_user" },
+          { timestamp: new Date().toISOString(), action: "ai_extraction_completed", user: "system" },
+          { timestamp: new Date().toISOString(), action: "data_confirmed", user: "current_user" },
+          { timestamp: new Date().toISOString(), action: "campaign_created", user: "current_user" },
+        ],
+      };
+      onComplete(data);
+    } catch (err: any) {
+      console.error("Save contract error:", err);
+      toast.error("Ошибка сохранения договора: " + (err.message || "Неизвестная ошибка"));
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -723,6 +772,7 @@ export function ContractImportWizard({ onBack, onComplete }: ContractImportWizar
             file={file}
             redactSensitive={redactSensitive}
             onFieldsExtracted={handleFieldsExtracted}
+            onTextExtracted={setExtractedText}
           />
         )}
         {step === 2 && (
