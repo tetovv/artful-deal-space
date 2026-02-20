@@ -464,7 +464,6 @@ export default function Settings() {
                     <SelectItem value="/creator-studio">Студия</SelectItem>
                     <SelectItem value="/ad-studio">Биржа</SelectItem>
                     <SelectItem value="/marketplace">Предложения</SelectItem>
-                    <SelectItem value="/trust-rating">Рейтинг</SelectItem>
                     <SelectItem value="/ai-workspace">AI</SelectItem>
                     <SelectItem value="/library">Библиотека</SelectItem>
                   </SelectContent>

@@ -1,4 +1,4 @@
-import { Home, Compass, Palette, Megaphone, Store, Shield, Brain, Settings, LogOut, ChevronLeft, ChevronRight, Sun, Moon, Library, Trophy } from "lucide-react";
+import { Home, Compass, Palette, Megaphone, Store, Brain, Settings, LogOut, ChevronLeft, ChevronRight, Sun, Moon, Library, Trophy } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -12,8 +12,7 @@ const mainNav = [
   { title: "Библиотека", url: "/library", icon: Library },
   { title: "Студия автора", url: "/creator-studio", icon: Palette },
   { title: "Рекламная студия", url: "/ad-studio", icon: Megaphone },
-  { title: "Биржа", url: "/marketplace", icon: Store },
-  { title: "Рейтинг", url: "/trust-rating", icon: Shield },
+  { title: "Предложения", url: "/marketplace", icon: Store },
   { title: "AI Workspace", url: "/ai-workspace", icon: Brain },
   { title: "Достижения", url: "/achievements", icon: Trophy },
 ];
