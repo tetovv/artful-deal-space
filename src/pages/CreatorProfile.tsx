@@ -3,14 +3,20 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { creators, contentItems } from "@/data/mockData";
-import { ContentCard } from "@/components/content/ContentCard";
-import { ArrowLeft, MapPin, Users, CheckCircle, Eye, Package, Handshake, User, Crown, Trophy, Rss, Globe, Building2, ShieldCheck, Tag, Mail } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { ArrowLeft } from "lucide-react";
 import { PageTransition } from "@/components/layout/PageTransition";
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
+
+import { ProfileHero } from "@/components/creator-profile/ProfileHero";
+import { ProfileActionCard } from "@/components/creator-profile/ProfileActionCard";
+import {
+  BrandCard,
+  PortfolioSection,
+  AudienceCard,
+  WorkingTermsCard,
+  AchievementsSection,
+} from "@/components/creator-profile/ProfileModules";
 
 const CreatorProfile = () => {
   const { id } = useParams();
@@ -21,7 +27,6 @@ const CreatorProfile = () => {
 
   const isOwnProfile = id === user?.id || id === "me";
   const profileUserId = isOwnProfile ? user?.id : id;
-
   const mockCreator = creators.find((c) => c.userId === id);
 
   const { data: dbProfile, isLoading } = useQuery({
@@ -44,7 +49,6 @@ const CreatorProfile = () => {
     enabled: !mockCreator && !!profileUserId,
   });
 
-  // Free subscription (follow)
   const { data: isFollowing } = useQuery({
     queryKey: ["is-following", user?.id, profileUserId],
     queryFn: async () => {
@@ -55,7 +59,6 @@ const CreatorProfile = () => {
     enabled: !!user?.id && !!profileUserId && !isOwnProfile,
   });
 
-  // Paid subscription
   const { data: hasPaidSub } = useQuery({
     queryKey: ["has-paid-sub", user?.id, profileUserId],
     queryFn: async () => {
@@ -66,7 +69,6 @@ const CreatorProfile = () => {
     enabled: !!user?.id && !!profileUserId && !isOwnProfile,
   });
 
-  // Achievements
   const { data: achievements = [] } = useQuery({
     queryKey: ["achievements", profileUserId],
     queryFn: async () => {
@@ -77,7 +79,6 @@ const CreatorProfile = () => {
     enabled: !!profileUserId,
   });
 
-  // Advertiser brand info (public via RPC)
   const { data: brandData } = useQuery({
     queryKey: ["advertiser-brand", profileUserId],
     queryFn: async () => {
@@ -88,7 +89,6 @@ const CreatorProfile = () => {
     enabled: !!profileUserId,
   });
 
-  // Check if user is advertiser (using existing has_role function)
   const { data: isAdvertiser } = useQuery({
     queryKey: ["is-advertiser", profileUserId],
     queryFn: async () => {
@@ -157,180 +157,56 @@ const CreatorProfile = () => {
 
   return (
     <PageTransition>
-      <div className="p-6 lg:p-8 max-w-5xl mx-auto space-y-8">
-        <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
-          <ArrowLeft className="h-4 w-4" /> Назад
+      <div className="p-4 lg:p-8 max-w-6xl mx-auto space-y-6">
+        <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors">
+          <ArrowLeft className="h-3.5 w-3.5" /> Назад
         </button>
 
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row items-start gap-6">
-          <div className="h-20 w-20 rounded-2xl border-2 border-border bg-muted flex items-center justify-center overflow-hidden shrink-0">
-            {profileData.avatar ? <img src={profileData.avatar} alt="" className="h-full w-full object-cover" /> : <User className="h-8 w-8 text-muted-foreground" />}
-          </div>
-          <div className="flex-1 space-y-2">
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold text-foreground">{profileData.name}</h1>
-              {profileData.verified && <CheckCircle className="h-5 w-5 text-primary" />}
-            </div>
-            {profileData.geo && <p className="text-sm text-muted-foreground flex items-center gap-1"><MapPin className="h-4 w-4" />{profileData.geo}</p>}
-            {profileData.bio && <p className="text-sm text-muted-foreground">{profileData.bio}</p>}
-            {profileData.niche.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 pt-1">
-                {profileData.niche.map((n) => <Badge key={n} variant="secondary" className="text-xs">{n}</Badge>)}
-              </div>
-            )}
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6 items-start">
+          <div className="space-y-6 min-w-0">
+            <ProfileHero
+              avatar={profileData.avatar}
+              name={profileData.name}
+              verified={profileData.verified}
+              geo={profileData.geo}
+              bio={profileData.bio}
+              niche={profileData.niche}
+              rating={profileData.rating}
+            />
+
+            {brandData && isAdvertiser && <BrandCard data={brandData} />}
+
+            <PortfolioSection
+              items={contentToShow}
+              onRequestDeal={!isOwnProfile ? () => setDealSent(true) : undefined}
+            />
+
+            <AudienceCard />
+
+            <WorkingTermsCard />
+
+            <AchievementsSection
+              achievements={achievements}
+              onViewAll={() => navigate("/achievements")}
+            />
           </div>
 
-          {/* Actions */}
-          <div className="flex flex-col gap-2 shrink-0">
-            {isOwnProfile ? (
-              <Button variant="outline" onClick={() => navigate("/settings")}>Редактировать профиль</Button>
-            ) : (
-              <>
-                <Button
-                  variant={isFollowing ? "outline" : "default"}
-                  onClick={() => followMutation.mutate()}
-                  disabled={followMutation.isPending}
-                  size="sm"
-                >
-                  <Rss className="h-4 w-4 mr-2" />
-                  {isFollowing ? "Отписаться" : "Подписаться"}
-                </Button>
-                <Button
-                  variant={hasPaidSub ? "outline" : "default"}
-                  onClick={() => paidSubMutation.mutate()}
-                  disabled={paidSubMutation.isPending}
-                  size="sm"
-                  className={cn(!hasPaidSub && "bg-gradient-to-r from-warning to-destructive/80 hover:from-warning/90 hover:to-destructive/70 text-primary-foreground border-0")}
-                >
-                  <Crown className="h-4 w-4 mr-2" />
-                  {hasPaidSub ? "Отменить подписку" : "Платная подписка"}
-                </Button>
-                <Button className="glow-primary" size="sm" disabled={dealSent} onClick={() => setDealSent(true)}>
-                  <Handshake className="h-4 w-4 mr-2" />
-                  {dealSent ? "Заявка отправлена" : "Предложить сделку"}
-                </Button>
-              </>
-            )}
-          </div>
+          <ProfileActionCard
+            isOwnProfile={isOwnProfile}
+            isFollowing={!!isFollowing}
+            hasPaidSub={!!hasPaidSub}
+            dealSent={dealSent}
+            followPending={followMutation.isPending}
+            paidSubPending={paidSubMutation.isPending}
+            onFollow={() => followMutation.mutate()}
+            onPaidSub={() => paidSubMutation.mutate()}
+            onDeal={() => setDealSent(true)}
+            onEditProfile={() => navigate("/settings")}
+            followers={profileData.followers}
+            reach={profileData.reach}
+            contentCount={profileData.contentCount}
+          />
         </div>
-
-        {/* Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-          {[
-            { label: "Подписчики", value: profileData.followers > 1000 ? `${(profileData.followers / 1000).toFixed(0)}K` : String(profileData.followers), icon: Users },
-            { label: "Охват", value: profileData.reach > 1000 ? `${(profileData.reach / 1000).toFixed(0)}K` : String(profileData.reach), icon: Eye },
-            { label: "Контент", value: String(profileData.contentCount), icon: Package },
-          ].map((s) => (
-            <div key={s.label} className="rounded-xl border border-border bg-card p-4 text-center">
-              <s.icon className="h-4 w-4 mx-auto mb-2 text-muted-foreground" />
-              <p className="text-xl font-bold text-card-foreground">{s.value}</p>
-              <p className="text-xs text-muted-foreground">{s.label}</p>
-            </div>
-          ))}
-        </div>
-
-        {/* Advertiser Brand Card */}
-        {brandData && isAdvertiser && (
-          <section className="rounded-xl border border-border bg-card p-5 space-y-3">
-            <div className="flex items-center gap-3">
-              {brandData.brand_logo_url ? (
-                <div className="h-12 w-12 rounded-lg border border-border overflow-hidden flex-shrink-0">
-                  <img src={brandData.brand_logo_url} alt={brandData.brand_name} className="h-full w-full object-cover" />
-                </div>
-              ) : (
-                <div className="h-12 w-12 rounded-lg border border-border bg-muted flex items-center justify-center flex-shrink-0">
-                  <Building2 className="h-5 w-5 text-muted-foreground" />
-                </div>
-              )}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-base font-semibold text-card-foreground truncate">{brandData.brand_name}</h3>
-                  {brandData.business_verified && brandData.ord_verified && (
-                    <Badge variant="outline" className="text-[10px] gap-1 border-green-500/30 text-green-600 bg-green-500/10 flex-shrink-0">
-                      <ShieldCheck className="h-3 w-3" /> Верифицирован
-                    </Badge>
-                  )}
-                </div>
-                {brandData.brand_website && (
-                  <a href={brandData.brand_website} target="_blank" rel="noopener noreferrer"
-                    className="text-xs text-primary hover:underline flex items-center gap-1 mt-0.5">
-                    <Globe className="h-3 w-3" /> {brandData.brand_website.replace(/^https?:\/\//, "")}
-                  </a>
-                )}
-              </div>
-              <Badge variant="secondary" className="text-xs flex-shrink-0">Рекламодатель</Badge>
-            </div>
-            {(brandData.business_category || brandData.contact_email) && (
-              <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-                {brandData.business_category && (
-                  <span className="flex items-center gap-1">
-                    <Tag className="h-3.5 w-3.5" />
-                    {{
-                      ecommerce: "E-commerce", saas: "SaaS / IT", finance: "Финансы",
-                      education: "Образование", health: "Здоровье", food: "Еда и напитки",
-                      fashion: "Мода и красота", travel: "Путешествия", entertainment: "Развлечения",
-                      realestate: "Недвижимость", auto: "Авто", other: "Другое",
-                    }[brandData.business_category] || brandData.business_category}
-                  </span>
-                )}
-                {brandData.contact_email && (
-                  <a href={`mailto:${brandData.contact_email}`} className="flex items-center gap-1 text-primary hover:underline">
-                    <Mail className="h-3.5 w-3.5" /> {brandData.contact_email}
-                  </a>
-                )}
-              </div>
-            )}
-            {brandData.brand_description && (
-              <p className="text-sm text-muted-foreground">{brandData.brand_description}</p>
-            )}
-          </section>
-        )}
-
-        {/* Achievements */}
-         <section className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
-              <Trophy className="h-5 w-5 text-warning" /> Достижения
-            </h2>
-            <Button variant="ghost" size="sm" onClick={() => navigate("/achievements")} className="text-xs text-muted-foreground hover:text-primary">
-              Все достижения →
-            </Button>
-          </div>
-          {achievements.length > 0 ? (
-            <div className="flex flex-wrap gap-3">
-              {achievements.map((a: any) => (
-                <div key={a.id} className="flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 hover:border-primary/30 transition-colors">
-                  <span className="text-xl">{a.icon || "🏆"}</span>
-                  <div>
-                    <p className="text-sm font-medium text-card-foreground">{a.title}</p>
-                    {a.description && <p className="text-[11px] text-muted-foreground">{a.description}</p>}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-6 text-muted-foreground rounded-xl border border-border bg-card text-sm">
-              Достижений пока нет
-            </div>
-          )}
-        </section>
-
-        {/* Portfolio */}
-        <section className="space-y-4">
-          <h2 className="text-lg font-semibold text-foreground">Портфолио</h2>
-          {contentToShow.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {contentToShow.map((item) => (
-                <ContentCard key={item.id} item={item} />
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-12 text-muted-foreground rounded-xl border border-border bg-card">
-              У автора пока нет опубликованного контента
-            </div>
-          )}
-        </section>
       </div>
     </PageTransition>
   );
