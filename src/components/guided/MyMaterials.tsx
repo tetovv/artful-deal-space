@@ -50,12 +50,10 @@ const GOAL_LABELS: Record<string, string> = {
 };
 
 /* ─── Guide status types ─── */
-type GuideStatus = "ready" | "generating" | "error";
+type GuideStatus = "ready" | "error";
 
 function deriveStatus(proj: any): GuideStatus {
   const s = proj.status as string;
-  if (s === "completed" || s === "planned") return "ready";
-  if (["draft", "ingesting", "planning", "ingested"].includes(s)) return "generating";
   if (s === "error" || s === "failed") return "error";
   return "ready";
 }
@@ -84,10 +82,7 @@ export const MyMaterials = ({ onResume, onNewProject }: MyMaterialsProps) => {
       return data || [];
     },
     enabled: !!user,
-    refetchInterval: (query) => {
-      const data = query.state.data as any[] | undefined;
-      return data?.some((p) => ["draft", "ingesting", "planning", "ingested"].includes(p.status)) ? 4000 : false;
-    },
+    refetchInterval: false,
   });
 
   const handleDelete = async (id: string) => {
@@ -152,11 +147,9 @@ export const MyMaterials = ({ onResume, onNewProject }: MyMaterialsProps) => {
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2.5 min-w-0">
                     <div className={cn("h-9 w-9 rounded-lg flex items-center justify-center shrink-0",
-                      status === "error" ? "bg-destructive/10" :
-                      status === "generating" ? "bg-warning/10" : "bg-primary/10"
+                      status === "error" ? "bg-destructive/10" : "bg-primary/10"
                     )}>
                       {status === "error" ? <AlertTriangle className="h-4 w-4 text-destructive" /> :
-                       status === "generating" ? <Loader2 className="h-4 w-4 text-warning animate-spin" /> :
                        <FormatIcon className="h-4 w-4 text-primary" />}
                     </div>
                     <div className="min-w-0">
@@ -202,7 +195,7 @@ export const MyMaterials = ({ onResume, onNewProject }: MyMaterialsProps) => {
                   </DropdownMenu>
                 </div>
 
-                {/* Status-specific content */}
+              {/* Status-specific content */}
                 {status === "error" && (
                   <div className="flex items-center gap-2 text-[12px] text-destructive">
                     <AlertTriangle className="h-3 w-3" />
@@ -226,8 +219,17 @@ export const MyMaterials = ({ onResume, onNewProject }: MyMaterialsProps) => {
                   </div>
                 )}
 
-                {/* Single primary action */}
-                {status === "ready" && (
+                {/* Always show a single action button */}
+                {status === "error" ? (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    className="w-full text-xs gap-1.5"
+                    onClick={() => handleRetry(proj.id)}
+                  >
+                    <RotateCcw className="h-3 w-3" /> Повторить
+                  </Button>
+                ) : (
                   <Button
                     variant="default"
                     size="sm"
@@ -239,28 +241,6 @@ export const MyMaterials = ({ onResume, onNewProject }: MyMaterialsProps) => {
                     ) : (
                       <><BookOpen className="h-3 w-3" /> Начать изучать</>
                     )}
-                  </Button>
-                )}
-
-                {status === "generating" && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full text-xs gap-1.5"
-                    onClick={() => onResume(proj.id)}
-                  >
-                    <Loader2 className="h-3 w-3 animate-spin" /> Создаётся…
-                  </Button>
-                )}
-
-                {status === "error" && (
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    className="w-full text-xs gap-1.5"
-                    onClick={() => handleRetry(proj.id)}
-                  >
-                    <RotateCcw className="h-3 w-3" /> Повторить
                   </Button>
                 )}
               </Card>
