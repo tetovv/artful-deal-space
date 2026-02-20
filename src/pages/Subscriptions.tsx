@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Search, UserPlus, UserCheck, Star, Eye, FileText, Rss, Sparkles, ArrowRight } from "lucide-react";
+import { Search, UserPlus, UserCheck, Star, Eye, FileText, Rss, Sparkles, ArrowRight, ArrowUpDown } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
