@@ -154,6 +154,17 @@ export function DealProposalForm({ open, onClose, creator }: DealProposalFormPro
         }
       }
 
+      // 5. Notify creator about new proposal
+      if (creator.userId) {
+        await supabase.from("notifications").insert({
+          user_id: creator.userId,
+          title: "Новое предложение о сделке",
+          message: `${advertiserName} предлагает сотрудничество: ${PLACEMENT_LABEL_MAP[placementType]}, бюджет ${parseInt(budgetFixed).toLocaleString()} ₽`,
+          type: "deal",
+          link: "/marketplace",
+        });
+      }
+
       toast.success("Предложение отправлено автору");
       onClose();
     } catch (err: any) {
