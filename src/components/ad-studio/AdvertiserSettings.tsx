@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { useBlocker } from "react-router-dom";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -212,20 +217,58 @@ export function AdvertiserSettings() {
     });
   }, []);
 
-  // BIK auto-fill bank name
+  // BIK auto-fill bank name via edge function
+  const [bikLoading, setBikLoading] = useState(false);
+  const bikLookupTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const handleBikChange = useCallback((rawValue: string) => {
     const v = rawValue.replace(/\D/g, "").slice(0, 9);
     setForm((prev) => {
       const next = { ...prev, bank_bik: v, bank_verified: false };
-      if (v.length === 9) {
-        next.bank_name = "Банк (определяется по БИК)";
-      } else {
+      if (v.length !== 9) {
         next.bank_name = "";
       }
       setVerifyStates((s) => ({ ...s, bank: "idle" }));
       return next;
     });
+
+    if (bikLookupTimer.current) clearTimeout(bikLookupTimer.current);
+
+    if (v.length === 9) {
+      setBikLoading(true);
+      bikLookupTimer.current = setTimeout(async () => {
+        try {
+          const { data, error } = await supabase.functions.invoke("bik-lookup", { body: { bik: v } });
+          if (!error && data && data.bank_name) {
+            setForm((prev) => ({
+              ...prev,
+              bank_name: data.bank_name,
+              ...(data.corr_account && !prev.bank_corr_account ? { bank_corr_account: data.corr_account } : {}),
+            }));
+          } else {
+            setForm((prev) => ({ ...prev, bank_name: "" }));
+            if (!error) toast.info("Банк не найден по данному БИК");
+          }
+        } catch {
+          setForm((prev) => ({ ...prev, bank_name: "" }));
+        } finally {
+          setBikLoading(false);
+        }
+      }, 300);
+    }
   }, []);
+
+  // Navigation guard for unsaved changes
+  const blocker = useBlocker(dirty);
+
+  // Also warn on browser close/refresh
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (dirty) { e.preventDefault(); }
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [dirty]);
 
   const save = useMutation({
     mutationFn: async () => {
@@ -531,9 +574,12 @@ export function AdvertiserSettings() {
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Банк</Label>
-                <Input value={form.bank_name} readOnly
-                  placeholder={form.bank_bik.length === 9 ? "Определяется…" : "Заполнится автоматически по БИК"}
-                  className="text-sm h-9 bg-muted/30 cursor-not-allowed" />
+                <div className="relative">
+                  <Input value={form.bank_name} readOnly
+                    placeholder={bikLoading ? "Определяется…" : "Заполнится автоматически по БИК"}
+                    className="text-sm h-9 bg-muted/30 cursor-not-allowed" />
+                  {bikLoading && <Loader2 className="h-3.5 w-3.5 animate-spin absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />}
+                </div>
                 <p className="text-[10px] text-muted-foreground"><Info className="h-2.5 w-2.5 inline mr-0.5 -mt-px" />Определяется автоматически по БИК</p>
               </div>
             </div>
@@ -642,6 +688,24 @@ export function AdvertiserSettings() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Navigation guard dialog */}
+      <AlertDialog open={blocker.state === "blocked"}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Несохранённые изменения</AlertDialogTitle>
+            <AlertDialogDescription>
+              У вас есть несохранённые изменения в настройках. Если вы покинете страницу, изменения будут потеряны.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => blocker.reset?.()}>Остаться</AlertDialogCancel>
+            <AlertDialogAction onClick={() => blocker.proceed?.()} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Покинуть
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
