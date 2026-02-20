@@ -1215,36 +1215,7 @@ export type Database = {
       }
     }
     Views: {
-      advertiser_brand_public: {
-        Row: {
-          brand_description: string | null
-          brand_logo_url: string | null
-          brand_name: string | null
-          brand_website: string | null
-          business_verified: boolean | null
-          ord_verified: boolean | null
-          user_id: string | null
-        }
-        Insert: {
-          brand_description?: string | null
-          brand_logo_url?: string | null
-          brand_name?: string | null
-          brand_website?: string | null
-          business_verified?: boolean | null
-          ord_verified?: boolean | null
-          user_id?: string | null
-        }
-        Update: {
-          brand_description?: string | null
-          brand_logo_url?: string | null
-          brand_name?: string | null
-          brand_website?: string | null
-          business_verified?: boolean | null
-          ord_verified?: boolean | null
-          user_id?: string | null
-        }
-        Relationships: []
-      }
+      [_ in never]: never
     }
     Functions: {
       award_achievement: {
@@ -1256,6 +1227,18 @@ export type Database = {
           _user_id: string
         }
         Returns: undefined
+      }
+      get_advertiser_brand: {
+        Args: { p_user_id: string }
+        Returns: {
+          brand_description: string
+          brand_logo_url: string
+          brand_name: string
+          brand_website: string
+          business_verified: boolean
+          ord_verified: boolean
+          user_id: string
+        }[]
       }
       has_role: {
         Args: {
