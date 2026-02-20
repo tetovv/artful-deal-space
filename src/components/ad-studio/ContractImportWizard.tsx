@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -8,21 +8,19 @@ import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose,
-} from "@/components/ui/dialog";
-import {
   ArrowLeft, ArrowRight, Upload, FileText, Loader2, CheckCircle2, AlertTriangle,
   ShieldCheck, Lock, Eye, Info, Sparkles, ClipboardCopy, Calendar, Building2,
-  Banknote, Hash, Globe, FileCheck, History, User,
+  Banknote, Hash, Globe, FileCheck, History, User, XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 // ─── Types ───
 interface ExtractedField {
   key: string;
   label: string;
   value: string;
-  confidence: number; // 0-1
+  confidence: number;
   sourceSnippet: string;
   editable: boolean;
   category: "parties" | "contract" | "budget" | "schedule" | "deliverables" | "legal";
@@ -60,24 +58,24 @@ export interface ContractCampaignData {
   auditLog: AuditEntry[];
 }
 
-// ─── Mock extracted fields ───
-const mockExtractedFields: ExtractedField[] = [
-  { key: "partyAdvertiser", label: "Рекламодатель", value: "ООО «Технологии Будущего»", confidence: 0.95, sourceSnippet: "…между ООО «Технологии Будущего» (далее — Рекламодатель), ИНН 7701234567…", editable: true, category: "parties" },
-  { key: "advertiserInn", label: "ИНН рекламодателя", value: "7701234567", confidence: 0.98, sourceSnippet: "…ИНН 7701234567, ОГРН 1177700001234…", editable: true, category: "parties" },
-  { key: "advertiserOgrn", label: "ОГРН рекламодателя", value: "1177700001234", confidence: 0.97, sourceSnippet: "…ОГРН 1177700001234, юр. адрес: г. Москва…", editable: true, category: "parties" },
-  { key: "partyExecutor", label: "Исполнитель (площадка)", value: "ИП Иванов Алексей Сергеевич", confidence: 0.92, sourceSnippet: "…и ИП Иванов Алексей Сергеевич (далее — Исполнитель), ОГРНИП 321770100012345…", editable: true, category: "parties" },
-  { key: "executorInn", label: "ИНН исполнителя", value: "770100012345", confidence: 0.96, sourceSnippet: "…ИНН 770100012345, ОГРНИП 321770100012345…", editable: true, category: "parties" },
-  { key: "contractNumber", label: "Номер договора", value: "РК-2026/042", confidence: 0.99, sourceSnippet: "Договор № РК-2026/042 от 15 февраля 2026 г.", editable: true, category: "contract" },
-  { key: "contractDate", label: "Дата договора", value: "2026-02-15", confidence: 0.99, sourceSnippet: "Договор № РК-2026/042 от 15 февраля 2026 г.", editable: true, category: "contract" },
-  { key: "budget", label: "Бюджет / лимит", value: "250000", confidence: 0.94, sourceSnippet: "…общая стоимость услуг составляет 250 000 (двести пятьдесят тысяч) рублей…", editable: true, category: "budget" },
-  { key: "currency", label: "Валюта", value: "RUB", confidence: 0.99, sourceSnippet: "…250 000 (двести пятьдесят тысяч) рублей 00 копеек, включая НДС…", editable: true, category: "budget" },
-  { key: "startDate", label: "Дата начала", value: "2026-03-01", confidence: 0.91, sourceSnippet: "…размещение осуществляется в период с 1 марта 2026 г. по 31 мая 2026 г.…", editable: true, category: "schedule" },
-  { key: "endDate", label: "Дата окончания", value: "2026-05-31", confidence: 0.91, sourceSnippet: "…по 31 мая 2026 г. включительно…", editable: true, category: "schedule" },
-  { key: "contentType", label: "Тип контента", value: "Баннерная реклама 728×90", confidence: 0.88, sourceSnippet: "…размещение баннерной рекламы формата 728×90 пикселей на главной странице…", editable: true, category: "deliverables" },
-  { key: "placement", label: "Размещение", value: "Баннер в каталоге", confidence: 0.85, sourceSnippet: "…на главной странице каталога и в разделе рекомендаций…", editable: true, category: "deliverables" },
-  { key: "ordRequirements", label: "Требования ОРД", value: "Маркировка по ФЗ-347, ежедневная отчётность", confidence: 0.82, sourceSnippet: "…обязан обеспечить маркировку рекламных материалов в соответствии с ФЗ-347…", editable: true, category: "legal" },
-  { key: "paymentTerms", label: "Условия оплаты", value: "Предоплата 50%, остаток по завершении", confidence: 0.87, sourceSnippet: "…оплата: 50% предоплата в течение 5 рабочих дней, остаток — в течение 10 рабочих дней после окончания…", editable: true, category: "legal" },
-  { key: "cancellationClause", label: "Условия расторжения", value: "За 14 дней с уведомлением, неустойка 10%", confidence: 0.80, sourceSnippet: "…любая сторона вправе расторгнуть договор, уведомив за 14 календарных дней, при этом неустойка составляет 10%…", editable: true, category: "legal" },
+// Field metadata for mapping AI response to UI
+const fieldMeta: Array<{ key: string; label: string; category: ExtractedField["category"] }> = [
+  { key: "partyAdvertiser", label: "Рекламодатель", category: "parties" },
+  { key: "advertiserInn", label: "ИНН рекламодателя", category: "parties" },
+  { key: "advertiserOgrn", label: "ОГРН рекламодателя", category: "parties" },
+  { key: "partyExecutor", label: "Исполнитель (площадка)", category: "parties" },
+  { key: "executorInn", label: "ИНН исполнителя", category: "parties" },
+  { key: "contractNumber", label: "Номер договора", category: "contract" },
+  { key: "contractDate", label: "Дата договора", category: "contract" },
+  { key: "budget", label: "Бюджет / лимит", category: "budget" },
+  { key: "currency", label: "Валюта", category: "budget" },
+  { key: "startDate", label: "Дата начала", category: "schedule" },
+  { key: "endDate", label: "Дата окончания", category: "schedule" },
+  { key: "contentType", label: "Тип контента", category: "deliverables" },
+  { key: "placement", label: "Размещение", category: "deliverables" },
+  { key: "ordRequirements", label: "Требования ОРД", category: "legal" },
+  { key: "paymentTerms", label: "Условия оплаты", category: "legal" },
+  { key: "cancellationClause", label: "Условия расторжения", category: "legal" },
 ];
 
 const categoryLabels: Record<string, { label: string; icon: any }> = {
@@ -99,6 +97,31 @@ function confidenceLabel(c: number): string {
   if (c >= 0.9) return "Высокая";
   if (c >= 0.7) return "Средняя";
   return "Низкая";
+}
+
+// ─── Text extraction from files ───
+async function extractTextFromFile(file: File): Promise<string> {
+  if (file.name.endsWith(".docx")) {
+    const mammoth = await import("mammoth");
+    const arrayBuffer = await file.arrayBuffer();
+    const result = await mammoth.extractRawText({ arrayBuffer });
+    return result.value;
+  }
+  // PDF extraction
+  if (file.type === "application/pdf") {
+    const pdfjs = await import("pdfjs-dist");
+    pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+    const pages: string[] = [];
+    for (let i = 1; i <= Math.min(pdf.numPages, 30); i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      pages.push(content.items.map((item: any) => item.str).join(" "));
+    }
+    return pages.join("\n\n");
+  }
+  return await file.text();
 }
 
 // ─── Step indicator ───
@@ -153,7 +176,6 @@ function UploadStep({ onNext, storeDoc, setStoreDoc, redactSensitive, setRedactS
 
   return (
     <div className="space-y-5">
-      {/* Compliance notice */}
       <Card className="border-warning/30">
         <CardContent className="p-4 space-y-3">
           <div className="flex items-start gap-3">
@@ -177,7 +199,6 @@ function UploadStep({ onNext, storeDoc, setStoreDoc, redactSensitive, setRedactS
         </CardContent>
       </Card>
 
-      {/* Upload zone */}
       <div
         onDrop={handleDrop}
         onDragOver={(e) => e.preventDefault()}
@@ -213,7 +234,6 @@ function UploadStep({ onNext, storeDoc, setStoreDoc, redactSensitive, setRedactS
         )}
       </div>
 
-      {/* Toggles */}
       <Card>
         <CardContent className="p-4 space-y-4">
           <div className="flex items-center justify-between">
@@ -245,30 +265,89 @@ function UploadStep({ onNext, storeDoc, setStoreDoc, redactSensitive, setRedactS
 }
 
 // ═══════════════════════════════════════════════════════
-// ─── Step 2: AI Extraction ───
+// ─── Step 2: AI Extraction (REAL) ───
 // ═══════════════════════════════════════════════════════
-function ExtractionStep({ onNext, fileName }: { onNext: () => void; fileName: string }) {
+function ExtractionStep({ onNext, file, redactSensitive, onFieldsExtracted }: {
+  onNext: () => void;
+  file: File;
+  redactSensitive: boolean;
+  onFieldsExtracted: (fields: ExtractedField[]) => void;
+}) {
   const [progress, setProgress] = useState(0);
-  const [stage, setStage] = useState<"parsing" | "extracting" | "validating" | "done">("parsing");
+  const [stage, setStage] = useState<"parsing" | "extracting" | "validating" | "done" | "error">("parsing");
+  const [errorMsg, setErrorMsg] = useState("");
+  const [fieldsCount, setFieldsCount] = useState(0);
+  const started = useRef(false);
 
-  useState(() => {
-    const stages: Array<{ s: typeof stage; p: number; delay: number }> = [
-      { s: "parsing", p: 30, delay: 800 },
-      { s: "extracting", p: 65, delay: 1500 },
-      { s: "validating", p: 90, delay: 2200 },
-      { s: "done", p: 100, delay: 3000 },
-    ];
-    stages.forEach(({ s, p, delay }) => {
-      setTimeout(() => { setStage(s); setProgress(p); }, delay);
-    });
-  });
+  useEffect(() => {
+    if (started.current) return;
+    started.current = true;
+
+    (async () => {
+      try {
+        // Stage 1: Parse document
+        setStage("parsing");
+        setProgress(20);
+        const text = await extractTextFromFile(file);
+
+        if (!text || text.trim().length < 50) {
+          throw new Error("Не удалось извлечь текст из документа. Убедитесь, что файл содержит текст.");
+        }
+
+        // Stage 2: AI extraction
+        setStage("extracting");
+        setProgress(50);
+
+        const { data, error } = await supabase.functions.invoke("extract-contract", {
+          body: { text, redactSensitive },
+        });
+
+        if (error) throw new Error(error.message || "Ошибка вызова AI");
+        if (data?.error) throw new Error(data.error);
+
+        const extracted = data.fields;
+        if (!extracted) throw new Error("AI не вернул данные");
+
+        // Stage 3: Map to fields
+        setStage("validating");
+        setProgress(85);
+
+        const mappedFields: ExtractedField[] = fieldMeta.map((fm) => {
+          const aiField = extracted[fm.key];
+          return {
+            key: fm.key,
+            label: fm.label,
+            value: aiField?.value || "",
+            confidence: aiField?.confidence || 0,
+            sourceSnippet: aiField?.sourceSnippet || "",
+            editable: true,
+            category: fm.category,
+          };
+        }).filter((f) => f.value || f.sourceSnippet);
+
+        setFieldsCount(mappedFields.length);
+        onFieldsExtracted(mappedFields);
+
+        setStage("done");
+        setProgress(100);
+      } catch (e: any) {
+        console.error("Extraction error:", e);
+        setStage("error");
+        setErrorMsg(e.message || "Неизвестная ошибка");
+        toast.error("Ошибка извлечения данных из договора");
+      }
+    })();
+  }, [file, redactSensitive, onFieldsExtracted]);
 
   const stageLabels = {
     parsing: "Разбор документа…",
-    extracting: "Извлечение ключевых полей…",
+    extracting: "AI извлекает ключевые поля…",
     validating: "Валидация данных…",
     done: "Извлечение завершено",
+    error: "Ошибка извлечения",
   };
+
+  const stagesOrder = ["parsing", "extracting", "validating", "done"] as const;
 
   return (
     <div className="space-y-5">
@@ -277,19 +356,28 @@ function ExtractionStep({ onNext, fileName }: { onNext: () => void; fileName: st
           <div className="flex items-center gap-3">
             {stage === "done" ? (
               <CheckCircle2 className="h-8 w-8 text-success" />
+            ) : stage === "error" ? (
+              <XCircle className="h-8 w-8 text-destructive" />
             ) : (
               <Loader2 className="h-8 w-8 text-primary animate-spin" />
             )}
             <div>
               <p className="text-base font-bold text-card-foreground">{stageLabels[stage]}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">{fileName}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{file.name}</p>
             </div>
           </div>
 
-          <Progress value={progress} className="h-2" />
+          {stage !== "error" && <Progress value={progress} className="h-2" />}
+
+          {stage === "error" && (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4">
+              <p className="text-sm text-destructive font-medium">{errorMsg}</p>
+              <p className="text-xs text-muted-foreground mt-1">Попробуйте другой файл или повторите попытку позже.</p>
+            </div>
+          )}
 
           <div className="space-y-2">
-            {(["parsing", "extracting", "validating", "done"] as const).map((s) => {
+            {stagesOrder.map((s) => {
               const icons = {
                 parsing: FileText,
                 extracting: Sparkles,
@@ -303,11 +391,13 @@ function ExtractionStep({ onNext, fileName }: { onNext: () => void; fileName: st
                 done: "Готово к проверке",
               };
               const Icon = icons[s];
-              const isActive = s === stage;
-              const isDone = ["parsing", "extracting", "validating", "done"].indexOf(s) < ["parsing", "extracting", "validating", "done"].indexOf(stage) || (stage === "done");
+              const currentIdx = stagesOrder.indexOf(stage === "error" ? "extracting" : stage as any);
+              const sIdx = stagesOrder.indexOf(s);
+              const isDone = sIdx < currentIdx || stage === "done";
+              const isActive = sIdx === currentIdx && stage !== "done" && stage !== "error";
               return (
                 <div key={s} className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
-                  isActive && stage !== "done" ? "bg-primary/10" : isDone ? "bg-success/5" : "opacity-40"
+                  isActive ? "bg-primary/10" : isDone ? "bg-success/5" : "opacity-40"
                 }`}>
                   {isDone ? (
                     <CheckCircle2 className="h-4 w-4 text-success flex-shrink-0" />
@@ -328,7 +418,7 @@ function ExtractionStep({ onNext, fileName }: { onNext: () => void; fileName: st
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-sm text-success">
             <CheckCircle2 className="h-4 w-4" />
-            <span className="font-medium">Извлечено {mockExtractedFields.length} полей</span>
+            <span className="font-medium">Извлечено {fieldsCount} полей</span>
           </div>
           <Button className="h-10 text-sm gap-2" onClick={onNext}>
             Проверить данные
@@ -349,7 +439,6 @@ function ReviewStep({ onNext, fields, setFields }: {
   setFields: (f: ExtractedField[]) => void;
 }) {
   const [expandedSnippet, setExpandedSnippet] = useState<string | null>(null);
-
   const categories = ["parties", "contract", "budget", "schedule", "deliverables", "legal"];
 
   const updateField = (key: string, value: string) => {
@@ -390,21 +479,23 @@ function ReviewStep({ onNext, fields, setFields }: {
                     <div className="flex items-center justify-between">
                       <label className="text-xs text-muted-foreground">{field.label}</label>
                       <div className="flex items-center gap-2">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <button
-                              type="button"
-                              className="text-xs underline text-muted-foreground hover:text-card-foreground transition-colors flex items-center gap-1"
-                              onClick={() => setExpandedSnippet(expandedSnippet === field.key ? null : field.key)}
-                            >
-                              <Eye className="h-3 w-3" />
-                              Источник
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent className="max-w-[320px]">
-                            <p className="text-xs">Показать фрагмент из договора</p>
-                          </TooltipContent>
-                        </Tooltip>
+                        {field.sourceSnippet && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button
+                                type="button"
+                                className="text-xs underline text-muted-foreground hover:text-card-foreground transition-colors flex items-center gap-1"
+                                onClick={() => setExpandedSnippet(expandedSnippet === field.key ? null : field.key)}
+                              >
+                                <Eye className="h-3 w-3" />
+                                Источник
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-[320px]">
+                              <p className="text-xs">Показать фрагмент из договора</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
                         <Badge variant="outline" className={`text-[10px] ${confidenceColor(field.confidence)}`}>
                           {Math.round(field.confidence * 100)}% · {confidenceLabel(field.confidence)}
                         </Badge>
@@ -415,7 +506,7 @@ function ReviewStep({ onNext, fields, setFields }: {
                       onChange={(e) => updateField(field.key, e.target.value)}
                       className="h-9"
                     />
-                    {expandedSnippet === field.key && (
+                    {expandedSnippet === field.key && field.sourceSnippet && (
                       <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground leading-relaxed">
                         <span className="text-[10px] uppercase tracking-wider text-primary font-medium">Фрагмент из договора:</span>
                         <p className="mt-1 italic">«{field.sourceSnippet}»</p>
@@ -466,7 +557,6 @@ function CreatedStep({ fields, fileName, onComplete }: {
         </CardContent>
       </Card>
 
-      {/* Summary */}
       <Card>
         <CardContent className="p-5 space-y-4">
           <p className="text-sm font-semibold text-card-foreground">Параметры кампании</p>
@@ -497,7 +587,6 @@ function CreatedStep({ fields, fileName, onComplete }: {
         </CardContent>
       </Card>
 
-      {/* Badges */}
       <div className="flex items-center gap-3 flex-wrap">
         <Badge variant="outline" className="text-xs border-primary/30 text-primary bg-primary/10 py-1.5 px-3">
           <Lock className="h-3 w-3 mr-1.5" />
@@ -513,7 +602,6 @@ function CreatedStep({ fields, fileName, onComplete }: {
         </Badge>
       </div>
 
-      {/* Audit log */}
       <Card>
         <CardContent className="p-5 space-y-3">
           <div className="flex items-center gap-2">
@@ -540,7 +628,6 @@ function CreatedStep({ fields, fileName, onComplete }: {
         </CardContent>
       </Card>
 
-      {/* Next steps */}
       <Card className="border-primary/20 bg-primary/5">
         <CardContent className="p-5 space-y-3">
           <p className="text-sm font-semibold text-card-foreground">Следующие шаги</p>
@@ -570,7 +657,11 @@ export function ContractImportWizard({ onBack, onComplete }: ContractImportWizar
   const [file, setFile] = useState<File | null>(null);
   const [storeDoc, setStoreDoc] = useState(true);
   const [redactSensitive, setRedactSensitive] = useState(true);
-  const [fields, setFields] = useState<ExtractedField[]>(mockExtractedFields);
+  const [fields, setFields] = useState<ExtractedField[]>([]);
+
+  const handleFieldsExtracted = useCallback((extractedFields: ExtractedField[]) => {
+    setFields(extractedFields);
+  }, []);
 
   const handleComplete = () => {
     const getVal = (key: string) => fields.find((f) => f.key === key)?.value || "";
@@ -594,6 +685,7 @@ export function ContractImportWizard({ onBack, onComplete }: ContractImportWizar
       fileName: file?.name || "",
       auditLog: [
         { timestamp: new Date().toISOString(), action: "contract_imported", user: "current_user" },
+        { timestamp: new Date().toISOString(), action: "ai_extraction_completed", user: "system" },
         { timestamp: new Date().toISOString(), action: "data_confirmed", user: "current_user" },
         { timestamp: new Date().toISOString(), action: "campaign_created", user: "current_user" },
       ],
@@ -604,7 +696,6 @@ export function ContractImportWizard({ onBack, onComplete }: ContractImportWizar
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="w-full max-w-[720px] mx-auto px-6 py-6 space-y-6">
-        {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Button size="sm" variant="ghost" onClick={onBack} className="h-9 w-9 p-0">
@@ -626,8 +717,13 @@ export function ContractImportWizard({ onBack, onComplete }: ContractImportWizar
             file={file} setFile={setFile}
           />
         )}
-        {step === 1 && (
-          <ExtractionStep onNext={() => setStep(2)} fileName={file?.name || "document.pdf"} />
+        {step === 1 && file && (
+          <ExtractionStep
+            onNext={() => setStep(2)}
+            file={file}
+            redactSensitive={redactSensitive}
+            onFieldsExtracted={handleFieldsExtracted}
+          />
         )}
         {step === 2 && (
           <ReviewStep onNext={() => setStep(3)} fields={fields} setFields={setFields} />
