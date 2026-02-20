@@ -61,12 +61,14 @@ const TT = {
   },
 };
 
-type Section = "content" | "analytics" | "monetization";
+type Section = "content" | "analytics" | "monetization" | "promos" | "studio-settings";
 
 const NAV_ITEMS: { id: Section; label: string; icon: React.ElementType }[] = [
   { id: "content", label: "Контент", icon: FolderOpen },
   { id: "analytics", label: "Аналитика", icon: LineChartIcon },
   { id: "monetization", label: "Монетизация", icon: Wallet },
+  { id: "promos", label: "Промокоды", icon: Crown },
+  { id: "studio-settings", label: "Настройки студии", icon: Edit },
 ];
 
 function mapItem(item: any) {
@@ -267,7 +269,6 @@ const CreatorStudio = () => {
       <aside className="w-64 shrink-0 border-r border-border bg-card flex flex-col ml-0">
         <div className="p-4 pb-2">
           <h2 className="text-sm font-bold text-foreground tracking-tight">Студия</h2>
-          <p className="text-[11px] text-muted-foreground truncate">{profile?.display_name || "автора"}</p>
         </div>
         <nav className="flex-1 px-2 py-1 space-y-0.5">
           {NAV_ITEMS.map((item) => {
@@ -289,20 +290,10 @@ const CreatorStudio = () => {
             );
           })}
         </nav>
-        <div className="p-3 border-t border-border space-y-1">
-          {([
-            { type: "video" as const, icon: Video, label: "Видео" },
-            { type: "book" as const, icon: BookOpen, label: "Книга" },
-            { type: "music" as const, icon: Music, label: "Музыка" },
-            { type: "podcast" as const, icon: Mic, label: "Подкаст" },
-            { type: "post" as const, icon: FileText, label: "Пост" },
-            { type: "template" as const, icon: Layout, label: "Шаблон" },
-          ] as const).map(({ type, icon: BtnIcon, label }) => (
-            <Button key={type} size="sm" variant={type === "video" ? "default" : "outline"} className="w-full text-xs justify-start"
-              onClick={() => { setEditorMode("create"); setEditorContentType(type); setEditingItem(null); }}>
-              <BtnIcon className="h-3.5 w-3.5 mr-1.5" /> {label}
-            </Button>
-          ))}
+        <div className="p-3 border-t border-border">
+          <Button size="sm" className="w-full" onClick={() => { setEditorMode("create"); setEditingItem(null); setEditorContentType(null); }}>
+            <Plus className="h-3.5 w-3.5 mr-1.5" /> Создать
+          </Button>
         </div>
       </aside>
       )}
@@ -313,7 +304,7 @@ const CreatorStudio = () => {
           <div className="h-full">
             {editorMode === "create" && !editingItem && !editorContentType ? (
               /* ── Create Dashboard Panel ── */
-              <div className="p-6 lg:p-8 max-w-6xl mx-auto space-y-6">
+              <div className="p-6 lg:p-8 max-w-lg mx-auto space-y-4">
                 <div className="flex items-center justify-between">
                   <h1 className="text-xl font-bold text-foreground">Создание контента</h1>
                   <Button variant="ghost" size="sm" onClick={() => setEditorMode("none")}>
@@ -321,106 +312,33 @@ const CreatorStudio = () => {
                   </Button>
                 </div>
 
-                {/* Quick stats */}
-                <motion.div variants={stagger} initial="hidden" animate="show" className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                  {[
-                    { icon: Package, label: "Публикации", value: myItems.length, trend: "+3", color: "bg-primary/10 text-primary" },
-                    { icon: Eye, label: "Просмотры", value: fmtNum(totalViews), trend: "+12%", color: "bg-accent/10 text-accent-foreground" },
-                    { icon: Heart, label: "Лайки", value: fmtNum(totalLikes), trend: "+8%", color: "bg-destructive/10 text-destructive" },
-                    { icon: DollarSign, label: "Доход", value: `₽${fmtNum(totalRevenue)}`, trend: "+15%", color: "bg-success/10 text-success" },
-                  ].map((s) => (
-                    <motion.div key={s.label} variants={fade} className="rounded-xl border border-border bg-card p-4 space-y-2 hover:border-primary/20 transition-all">
-                      <div className="flex items-center justify-between">
-                        <div className={cn("h-9 w-9 rounded-lg flex items-center justify-center", s.color.split(" ")[0])}>
-                          <s.icon className={cn("h-4 w-4", s.color.split(" ")[1])} />
-                        </div>
-                        <span className="text-[11px] font-medium text-success flex items-center gap-0.5">
-                          <ArrowUpRight className="h-3 w-3" />{s.trend}
-                        </span>
-                      </div>
-                      <div>
-                        <p className="text-xl font-bold text-card-foreground">{s.value}</p>
-                        <p className="text-xs text-muted-foreground">{s.label}</p>
-                      </div>
-                    </motion.div>
+                <p className="text-sm text-muted-foreground">Выберите тип контента для создания</p>
+
+                <motion.div variants={stagger} initial="hidden" animate="show" className="space-y-1.5">
+                  {([
+                    { type: "video" as const, icon: Video, label: "Видео" },
+                    { type: "book" as const, icon: BookOpen, label: "Книга" },
+                    { type: "music" as const, icon: Music, label: "Музыка" },
+                    { type: "podcast" as const, icon: Mic, label: "Подкаст" },
+                    { type: "post" as const, icon: FileText, label: "Пост" },
+                    { type: "template" as const, icon: Layout, label: "Шаблон" },
+                  ] as const).map((ct, i) => (
+                    <motion.button
+                      key={ct.type}
+                      variants={fade}
+                      onClick={() => setEditorContentType(ct.type)}
+                      className={cn(
+                        "flex items-center gap-3 w-full px-4 py-3 rounded-xl text-sm font-medium transition-all",
+                        i === 0
+                          ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                          : "bg-card border border-border text-foreground hover:bg-muted/50 hover:border-primary/30"
+                      )}
+                    >
+                      <ct.icon className="h-5 w-5 shrink-0" />
+                      <span>{ct.label}</span>
+                    </motion.button>
                   ))}
                 </motion.div>
-
-                {/* Deal stats */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                  {[
-                    { icon: Clock, label: "Ожидают ответа", value: String(pendingDeals.length), color: "bg-warning/10 text-warning" },
-                    { icon: Activity, label: "В работе", value: String(activeDeals.length), color: "bg-primary/10 text-primary" },
-                    { icon: CheckCircle, label: "Завершено", value: String(completedDeals.length), color: "bg-success/10 text-success" },
-                    { icon: Handshake, label: "Заработано", value: `₽${fmtNum(dealsEarned)}`, color: "bg-accent/10 text-accent-foreground" },
-                  ].map((s) => (
-                    <div key={s.label} className="rounded-xl border border-border bg-card p-3 flex items-center gap-3">
-                      <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center shrink-0", s.color.split(" ")[0])}>
-                        <s.icon className={cn("h-4 w-4", s.color.split(" ")[1])} />
-                      </div>
-                      <div>
-                        <p className="text-base font-bold text-card-foreground">{s.value}</p>
-                        <p className="text-[11px] text-muted-foreground">{s.label}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Quick create */}
-                <Card className="overflow-hidden">
-                  <CardContent className="p-0">
-                    <div className="border-b border-border px-5 py-2.5 flex items-center gap-2">
-                      <Plus className="h-4 w-4 text-primary" />
-                      <span className="text-sm font-semibold">Быстрое создание</span>
-                    </div>
-                    <div className="grid grid-cols-3 sm:grid-cols-6 divide-x divide-border">
-                      {([
-                        { type: "video" as const, icon: Video, label: "Видео", color: "text-destructive" },
-                        { type: "book" as const, icon: BookOpen, label: "Книга", color: "text-success" },
-                        { type: "music" as const, icon: Music, label: "Музыка", color: "text-warning" },
-                        { type: "podcast" as const, icon: Mic, label: "Подкаст", color: "text-info" },
-                        { type: "post" as const, icon: FileText, label: "Пост", color: "text-primary" },
-                        { type: "template" as const, icon: Layout, label: "Шаблон", color: "text-muted-foreground" },
-                      ] as const).map((ct) => (
-                        <button key={ct.type} onClick={() => { setEditorContentType(ct.type); }}
-                          className="flex flex-col items-center gap-2 py-4 hover:bg-muted/50 transition-colors group">
-                          <ct.icon className={cn("h-5 w-5 transition-transform group-hover:scale-110", ct.color)} />
-                          <span className="text-[11px] text-muted-foreground group-hover:text-foreground">{ct.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Pending deals */}
-                {pendingDeals.length > 0 && (
-                  <Card className="border-warning/20">
-                    <CardHeader className="pb-2 pt-4 px-5">
-                      <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                        <Handshake className="h-4 w-4 text-warning" /> Новые предложения
-                        <Badge variant="destructive" className="ml-1 text-[10px]">{pendingDeals.length}</Badge>
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="px-5 pb-4 space-y-1">
-                      {pendingDeals.slice(0, 3).map((deal: any) => (
-                        <div key={deal.id} onClick={() => { setEditorMode("none"); navigate("/marketplace"); }}
-                          className="flex items-center gap-3 rounded-lg p-2 hover:bg-muted/50 cursor-pointer transition-colors">
-                          <div className="h-8 w-8 rounded-full bg-warning/10 flex items-center justify-center shrink-0">
-                            <Handshake className="h-4 w-4 text-warning" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">{deal.title}</p>
-                            <p className="text-[11px] text-muted-foreground">{deal.advertiser_name}</p>
-                          </div>
-                          <span className="text-xs font-semibold text-success">₽{(deal.budget || 0).toLocaleString()}</span>
-                        </div>
-                      ))}
-                      <Button variant="ghost" size="sm" className="w-full mt-1 text-xs" onClick={() => { setEditorMode("none"); navigate("/marketplace"); }}>
-                        Все предложения <ChevronRight className="h-3 w-3 ml-1" />
-                      </Button>
-                    </CardContent>
-                  </Card>
-                )}
               </div>
             ) : (
             (() => {
@@ -1028,6 +946,62 @@ const CreatorStudio = () => {
                         <span className="text-sm font-semibold text-success">₽{item.price?.toLocaleString()}</span>
                       </div>
                     ))}
+                  </CardContent>
+                </Card>
+              </>
+            )}
+
+            {/* ═══ PROMOS ═══ */}
+            {section === "promos" && (
+              <>
+                <div className="space-y-1">
+                  <h1 className="text-xl font-bold text-foreground">Промокоды</h1>
+                  <p className="text-sm text-muted-foreground">Управление промокодами и скидками</p>
+                </div>
+
+                <Card>
+                  <CardContent className="p-8 text-center space-y-4">
+                    <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto">
+                      <Crown className="h-7 w-7 text-primary" />
+                    </div>
+                    <div className="space-y-1">
+                      <h3 className="text-base font-semibold">Создавайте промокоды</h3>
+                      <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                        Создавайте промокоды для скидок на ваш платный контент, делитесь с аудиторией и отслеживайте использование.
+                      </p>
+                    </div>
+                    <Button size="sm" disabled>
+                      <Plus className="h-3.5 w-3.5 mr-1.5" /> Создать промокод
+                    </Button>
+                    <p className="text-xs text-muted-foreground">Скоро</p>
+                  </CardContent>
+                </Card>
+              </>
+            )}
+
+            {/* ═══ STUDIO SETTINGS ═══ */}
+            {section === "studio-settings" && (
+              <>
+                <div className="space-y-1">
+                  <h1 className="text-xl font-bold text-foreground">Настройки студии</h1>
+                  <p className="text-sm text-muted-foreground">Персонализация и параметры вашей студии</p>
+                </div>
+
+                <Card>
+                  <CardContent className="p-8 text-center space-y-4">
+                    <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto">
+                      <Edit className="h-7 w-7 text-primary" />
+                    </div>
+                    <div className="space-y-1">
+                      <h3 className="text-base font-semibold">Настройте студию</h3>
+                      <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                        Управляйте оформлением канала, настройками уведомлений и параметрами публикации контента.
+                      </p>
+                    </div>
+                    <Button size="sm" disabled>
+                      Настроить
+                    </Button>
+                    <p className="text-xs text-muted-foreground">Скоро</p>
                   </CardContent>
                 </Card>
               </>
