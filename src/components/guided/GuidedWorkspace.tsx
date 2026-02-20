@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -84,19 +84,16 @@ const PREF_OPTIONS = [
 async function extractText(file: File): Promise<string> {
   const ext = file.name.toLowerCase().split(".").pop();
   if (ext === "txt" || ext === "md") {
-    return new Promise((resolve, reject) => {
-      const r = new FileReader();
-      r.onload = () => resolve(r.result as string);
-      r.onerror = reject;
-      r.readAsText(file);
-    });
+    return file.text();
   }
   if (ext === "pdf") {
     try {
       const pdfjsLib = await import("pdfjs-dist");
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+      // Use bundled worker via Vite ?url import
+      const workerModule = await import("pdfjs-dist/build/pdf.worker.mjs?url");
+      pdfjsLib.GlobalWorkerOptions.workerSrc = workerModule.default;
       const arrayBuf = await file.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuf }).promise;
+      const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuf) }).promise;
       const pages: string[] = [];
       for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
@@ -106,9 +103,7 @@ async function extractText(file: File): Promise<string> {
       return pages.join("\n\n");
     } catch (e) {
       console.warn("PDF.js extraction failed:", e);
-      return new Promise((resolve, reject) => {
-        const r = new FileReader(); r.onload = () => resolve(r.result as string); r.onerror = reject; r.readAsText(file);
-      });
+      return file.text();
     }
   }
   if (ext === "docx") {
@@ -119,14 +114,10 @@ async function extractText(file: File): Promise<string> {
       return result.value;
     } catch (e) {
       console.warn("mammoth extraction failed:", e);
-      return new Promise((resolve, reject) => {
-        const r = new FileReader(); r.onload = () => resolve(r.result as string); r.onerror = reject; r.readAsText(file);
-      });
+      return file.text();
     }
   }
-  return new Promise((resolve, reject) => {
-    const r = new FileReader(); r.onload = () => resolve(r.result as string); r.onerror = reject; r.readAsText(file);
-  });
+  return file.text();
 }
 
 /* ═══════════════ Recommend format from intake ═══════════════ */
@@ -337,7 +328,12 @@ function getAssistantActions(format: OutputFormat, artifactKind: string | null, 
 }
 
 /* ═══════════════ MAIN COMPONENT ═══════════════ */
-export const GuidedWorkspace = () => {
+interface GuidedWorkspaceProps {
+  resumeProjectId?: string | null;
+  onResumeComplete?: () => void;
+}
+
+export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWorkspaceProps) => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -369,6 +365,16 @@ export const GuidedWorkspace = () => {
   // Checkin
   const [checkinAnswers, setCheckinAnswers] = useState({ hardTopics: "", pace: "normal", addMore: "" });
 
+  // Resume from MyGuides
+  useEffect(() => {
+    if (resumeProjectId && resumeProjectId !== projectId) {
+      setProjectId(resumeProjectId);
+      setPhase("work");
+      setGenStatus("done");
+      onResumeComplete?.();
+    }
+  }, [resumeProjectId]);
+
   // Roadmap & artifacts from DB
   const { data: project } = useQuery({
     queryKey: ["guided-project", projectId],
@@ -391,6 +397,13 @@ export const GuidedWorkspace = () => {
     },
     enabled: !!projectId,
   });
+
+  // Auto-set active artifact when resuming
+  useEffect(() => {
+    if (artifacts.length > 0 && !activeArtifact && phase === "work") {
+      setActiveArtifact(artifacts[artifacts.length - 1]);
+    }
+  }, [artifacts, activeArtifact, phase]);
 
   const roadmap = (project?.roadmap as any[]) || [];
 
