@@ -18,6 +18,7 @@ import {
   MoreVertical, Copy, Archive, Ban, CalendarDays, AlertTriangle, CheckCircle2,
   ImagePlus, ExternalLink, RefreshCw, Send, Info, Globe, Link2, Save,
   Lock, PlusCircle, XCircle, ShieldCheck, ClipboardCopy, Loader2, Download, StopCircle,
+  FileText, History, User, Upload, FilePlus, ArrowUpRight,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -42,6 +43,31 @@ export interface Campaign {
   ordStatus?: "connected" | "error" | "pending";
   ordLastSync?: string;
   creativeLocked?: boolean;
+  // Contract-linked fields
+  contractLinked?: boolean;
+  contractNumber?: string;
+  contractDate?: string;
+  contractParty?: string;
+  contractBudgetFixed?: boolean;
+  addenda?: Addendum[];
+  auditLog?: AuditLogEntry[];
+}
+
+export interface Addendum {
+  id: number;
+  title: string;
+  fileName: string;
+  date: string;
+  budgetDelta: number;
+  dateDelta?: string;
+  status: "pending" | "confirmed";
+}
+
+export interface AuditLogEntry {
+  timestamp: string;
+  action: string;
+  user: string;
+  details?: string;
 }
 
 const placementLabels: Record<Placement, string> = {
@@ -766,12 +792,186 @@ function OrdTab({ campaign }: { campaign: Campaign }) {
   );
 }
 
+// ─── Contract Badge ───
+function ContractBadge({ campaign }: { campaign: Campaign }) {
+  if (!campaign.contractLinked) return null;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className="flex items-center gap-1.5 rounded-lg bg-accent/10 border border-accent/20 px-2.5 py-1">
+          <FileText className="h-3 w-3 text-accent" />
+          <span className="text-[10px] font-semibold text-accent">Договор {campaign.contractNumber}</span>
+          <Lock className="h-2.5 w-2.5 text-accent/60" />
+        </div>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-[280px]">
+        <p className="text-xs">Кампания создана из договора {campaign.contractNumber} от {campaign.contractDate}. Бюджет зафиксирован по договору — изменение только через доп. соглашение.</p>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+// ─── Addendum Upload Dialog ───
+function AddendumSection({ campaign }: { campaign: Campaign }) {
+  const [uploading, setUploading] = useState(false);
+  const addenda = campaign.addenda || [
+    { id: 1, title: "Доп. соглашение №1", fileName: "addendum_01.pdf", date: "2026-02-18", budgetDelta: 50000, status: "confirmed" as const },
+  ];
+
+  return (
+    <Card>
+      <CardContent className="p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <FilePlus className="h-4 w-4 text-muted-foreground" />
+            <p className="text-sm font-semibold text-card-foreground">Дополнительные соглашения</p>
+          </div>
+          <Button size="sm" variant="outline" className="h-8 text-sm gap-1.5" onClick={() => {
+            setUploading(true);
+            setTimeout(() => {
+              setUploading(false);
+              toast.success("Доп. соглашение загружено. AI извлекает изменения…");
+            }, 1500);
+          }}>
+            {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+            Загрузить доп. соглашение
+          </Button>
+        </div>
+        {addenda.length > 0 ? (
+          <div className="space-y-2">
+            {addenda.map((a) => (
+              <div key={a.id} className="flex items-center justify-between gap-3 text-sm py-2 px-3 rounded-lg border border-border bg-muted/10">
+                <div className="flex items-center gap-3 min-w-0">
+                  <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium text-card-foreground truncate">{a.title}</p>
+                    <p className="text-[10px] text-muted-foreground">{a.fileName} · {a.date}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {a.budgetDelta > 0 && (
+                    <Badge variant="outline" className="text-[10px] border-success/30 text-success bg-success/10">
+                      +{formatNum(a.budgetDelta)} ₽
+                    </Badge>
+                  )}
+                  <Badge variant="outline" className={`text-[10px] ${
+                    a.status === "confirmed" ? "border-success/30 text-success" : "border-warning/30 text-warning"
+                  }`}>
+                    {a.status === "confirmed" ? "Подтверждено" : "На проверке"}
+                  </Badge>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">Дополнительных соглашений нет</p>
+        )}
+        <p className="text-[10px] text-muted-foreground">
+          Изменение бюджета или сроков по договорной кампании возможно только через доп. соглашение.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Audit Log Tab ───
+function AuditLogTab({ campaign }: { campaign: Campaign }) {
+  const mockAudit: AuditLogEntry[] = campaign.auditLog || [
+    { timestamp: "20.02.2026 10:15", action: "Договор загружен", user: "Иванов А.С.", details: "contract_v1.pdf" },
+    { timestamp: "20.02.2026 10:16", action: "AI-извлечение данных", user: "Система" },
+    { timestamp: "20.02.2026 10:18", action: "Данные подтверждены пользователем", user: "Иванов А.С." },
+    { timestamp: "20.02.2026 10:18", action: "Кампания создана из договора", user: "Иванов А.С.", details: "Договор РК-2026/042" },
+    { timestamp: "20.02.2026 14:30", action: "Креатив загружен", user: "Иванов А.С.", details: "banner_728x90.png" },
+    { timestamp: "20.02.2026 14:32", action: "Креатив отправлен в ОРД", user: "Система" },
+    { timestamp: "20.02.2026 14:33", action: "ERID получен", user: "Система", details: "2VfnxxYzBs8" },
+    { timestamp: "21.02.2026 09:00", action: "Кампания запущена", user: "Иванов А.С." },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardContent className="p-5 space-y-3">
+          <div className="flex items-center gap-2">
+            <History className="h-4 w-4 text-muted-foreground" />
+            <p className="text-sm font-semibold text-card-foreground">Журнал действий</p>
+          </div>
+          <p className="text-xs text-muted-foreground">Все действия с кампанией, включая импорт договора, изменения и отправки в ОРД.</p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="p-5">
+          <div className="space-y-0">
+            {mockAudit.map((entry, i) => (
+              <div key={i} className="flex items-start gap-3 py-2.5 border-b border-border/50 last:border-0">
+                <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <CheckCircle2 className="h-3 w-3 text-primary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-card-foreground">{entry.action}</p>
+                  {entry.details && (
+                    <p className="text-[10px] text-muted-foreground mt-0.5">{entry.details}</p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0 text-right">
+                  <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                    <User className="h-2.5 w-2.5" />
+                    {entry.user}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">{entry.timestamp}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Version history */}
+      {campaign.contractLinked && (
+        <Card>
+          <CardContent className="p-5 space-y-3">
+            <div className="flex items-center gap-2">
+              <FileText className="h-4 w-4 text-muted-foreground" />
+              <p className="text-sm font-semibold text-card-foreground">Версии документов</p>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-3 text-sm py-2 px-3 rounded-lg border border-border bg-muted/10">
+                <div className="flex items-center gap-3">
+                  <FileText className="h-4 w-4 text-primary flex-shrink-0" />
+                  <div>
+                    <p className="text-xs font-medium text-card-foreground">Основной договор</p>
+                    <p className="text-[10px] text-muted-foreground">{campaign.contractNumber} · {campaign.contractDate}</p>
+                  </div>
+                </div>
+                <Badge variant="outline" className="text-[10px] border-primary/30 text-primary">Оригинал</Badge>
+              </div>
+              {(campaign.addenda || []).map((a, i) => (
+                <div key={i} className="flex items-center justify-between gap-3 text-sm py-2 px-3 rounded-lg border border-border bg-muted/10">
+                  <div className="flex items-center gap-3">
+                    <FilePlus className="h-4 w-4 text-accent flex-shrink-0" />
+                    <div>
+                      <p className="text-xs font-medium text-card-foreground">{a.title}</p>
+                      <p className="text-[10px] text-muted-foreground">{a.fileName} · {a.date}</p>
+                    </div>
+                  </div>
+                  <Badge variant="outline" className="text-[10px] border-accent/30 text-accent">Доп. соглашение</Badge>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════════════════
 // ─── Main CampaignManageView ───
 // ═══════════════════════════════════════════════════════
 export function CampaignManageView({ campaign: initialCampaign, onBack }: { campaign: Campaign; onBack: () => void }) {
   const [terminateOpen, setTerminateOpen] = useState(false);
   const [campaignStatus, setCampaignStatus] = useState<CampaignStatus>(initialCampaign.status);
+  const [changeRequestOpen, setChangeRequestOpen] = useState(false);
 
   // Enrich campaign with mock ORD data for demo
   const campaign: Campaign = {
@@ -782,6 +982,12 @@ export function CampaignManageView({ campaign: initialCampaign, onBack }: { camp
     ordStatus: campaignStatus === "ord_error" ? "error" : initialCampaign.ordStatus || (isStarted({ ...initialCampaign, status: campaignStatus }) ? "connected" : "pending"),
     ordLastSync: initialCampaign.ordLastSync || (isStarted({ ...initialCampaign, status: campaignStatus }) ? "19.02.2026 14:33" : undefined),
     creativeLocked: isStarted({ ...initialCampaign, status: campaignStatus }) || !!initialCampaign.erid,
+    // Mock contract data for first campaign
+    contractLinked: initialCampaign.contractLinked ?? (initialCampaign.id === 1),
+    contractNumber: initialCampaign.contractNumber || (initialCampaign.id === 1 ? "РК-2026/042" : undefined),
+    contractDate: initialCampaign.contractDate || (initialCampaign.id === 1 ? "15.02.2026" : undefined),
+    contractParty: initialCampaign.contractParty || (initialCampaign.id === 1 ? "ООО «Технологии Будущего»" : undefined),
+    contractBudgetFixed: initialCampaign.contractBudgetFixed ?? (initialCampaign.id === 1),
   };
 
   const canTerminate = campaignStatus === "active" || campaignStatus === "paused";
@@ -872,9 +1078,10 @@ export function CampaignManageView({ campaign: initialCampaign, onBack }: { camp
                 <ArrowLeft className="h-4 w-4" />
               </Button>
               <div className="min-w-0">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <h2 className="text-base font-bold text-foreground tracking-tight truncate">{campaign.name}</h2>
                   <EridBadge erid={campaign.erid} />
+                  <ContractBadge campaign={campaign} />
                 </div>
                 <div className="flex items-center gap-2 mt-0.5">
                   <Badge variant="outline" className={`text-[10px] ${statusStyles[campaign.status]}`}>
@@ -948,6 +1155,11 @@ export function CampaignManageView({ campaign: initialCampaign, onBack }: { camp
                       <Download className="h-3.5 w-3.5" /> Экспорт отчёта
                     </DropdownMenuItem>
                   )}
+                  {campaign.contractLinked && !fullyLocked && (
+                    <DropdownMenuItem className="text-sm gap-2" onClick={() => setChangeRequestOpen(true)}>
+                      <ArrowUpRight className="h-3.5 w-3.5" /> Запросить изменение
+                    </DropdownMenuItem>
+                  )}
                   {canTerminate && (
                     <DropdownMenuItem className="text-sm gap-2 text-destructive" onClick={() => setTerminateOpen(true)}>
                       <Ban className="h-3.5 w-3.5" /> Завершить досрочно
@@ -969,6 +1181,8 @@ export function CampaignManageView({ campaign: initialCampaign, onBack }: { camp
             <TabsTrigger value="settings" className="text-sm">Настройки</TabsTrigger>
             <TabsTrigger value="creative" className="text-sm">Креатив</TabsTrigger>
             <TabsTrigger value="ord" className="text-sm">ОРД / Маркировка</TabsTrigger>
+            {campaign.contractLinked && <TabsTrigger value="contract" className="text-sm">Договор</TabsTrigger>}
+            <TabsTrigger value="audit" className="text-sm">Аудит</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview"><OverviewTab campaign={campaign} /></TabsContent>
@@ -987,6 +1201,53 @@ export function CampaignManageView({ campaign: initialCampaign, onBack }: { camp
           </TabsContent>
           <TabsContent value="creative"><CreativeTab campaign={campaign} /></TabsContent>
           <TabsContent value="ord"><OrdTab campaign={campaign} /></TabsContent>
+          {campaign.contractLinked && (
+            <TabsContent value="contract">
+              <div className="space-y-4">
+                {/* Contract info card */}
+                <Card className="border-accent/20 bg-accent/5">
+                  <CardContent className="p-5">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-lg bg-accent/15 flex items-center justify-center flex-shrink-0">
+                        <FileText className="h-5 w-5 text-accent" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-sm font-bold text-card-foreground">Договор {campaign.contractNumber}</p>
+                          <Badge variant="outline" className="text-[10px] border-accent/30 text-accent bg-accent/10">
+                            <Lock className="h-2.5 w-2.5 mr-1" />
+                            Зафиксирован
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          от {campaign.contractDate} · {campaign.contractParty}
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Budget lock notice */}
+                <Card className="border-warning/20">
+                  <CardContent className="p-4">
+                    <div className="flex items-start gap-3">
+                      <Lock className="h-4 w-4 text-warning flex-shrink-0 mt-0.5" />
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-card-foreground">Бюджет зафиксирован по договору</p>
+                        <p className="text-xs text-muted-foreground">
+                          Бюджет {formatNum(campaign.budget)} ₽ установлен согласно договору. Уменьшение невозможно.
+                          Увеличение допускается только через загрузку дополнительного соглашения.
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <AddendumSection campaign={campaign} />
+              </div>
+            </TabsContent>
+          )}
+          <TabsContent value="audit"><AuditLogTab campaign={campaign} /></TabsContent>
         </Tabs>
       </div>
 
