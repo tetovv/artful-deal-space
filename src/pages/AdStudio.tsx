@@ -1,5 +1,6 @@
-import { useState, useMemo } from "react";
-import { deals, messages as allMessages, creators } from "@/data/mockData";
+import { useState, useMemo, useEffect } from "react";
+import { deals, messages as allMessages } from "@/data/mockData";
+import { supabase } from "@/integrations/supabase/client";
 import { useRealtimeMessages } from "@/hooks/useRealtimeMessages";
 import { useAdvertiserScores } from "@/hooks/useAdvertiserScores";
 import { useAdvertiserVerification } from "@/components/ad-studio/AdvertiserSettings";
@@ -15,7 +16,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Send, Paperclip, CheckCircle2, AlertTriangle, ShieldAlert, Palette,
-  Search, Star, MapPin, Users, Filter, MessageSquarePlus, Eye, Megaphone, MonitorPlay, Settings,
+  Search, Star, MapPin, Users, Filter, MessageSquarePlus, Eye, Megaphone, MonitorPlay, Settings, Tag, Loader2,
 } from "lucide-react";
 import { Deal, DealStatus } from "@/types";
 import { cn } from "@/lib/utils";
@@ -58,6 +59,20 @@ const CHAT_BG_PRESETS = [
 
 const NICHES = ["Образование", "Технологии", "Дизайн", "Фото", "Музыка", "Подкасты", "Бизнес", "Видео", "Motion"];
 const GEOS = ["Россия", "Беларусь", "Казахстан", "Украина"];
+const BUSINESS_CATEGORIES: Record<string, string> = {
+  ecommerce: "E-commerce",
+  saas: "SaaS / IT",
+  finance: "Финансы",
+  education: "Образование",
+  health: "Здоровье",
+  food: "Еда / FMCG",
+  fashion: "Мода / Красота",
+  travel: "Путешествия",
+  entertainment: "Развлечения",
+  realty: "Недвижимость",
+  auto: "Авто",
+  other: "Другое",
+};
 
 /* ── Soft-block banner ── */
 function VerificationBanner({ onGoToSettings }: { onGoToSettings: () => void }) {
@@ -76,36 +91,87 @@ function VerificationBanner({ onGoToSettings }: { onGoToSettings: () => void }) 
 }
 
 /* ── Биржа (Marketplace) Tab ── */
+interface ProfileRow {
+  user_id: string;
+  display_name: string;
+  bio: string | null;
+  avatar_url: string | null;
+  niche: string[] | null;
+  followers: number | null;
+  reach: number | null;
+  geo: string | null;
+  verified: boolean | null;
+}
+
 function BirzhaTab({ isVerified, onGoToSettings }: { isVerified: boolean; onGoToSettings: () => void }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedNiche, setSelectedNiche] = useState<string>("all");
   const [selectedGeo, setSelectedGeo] = useState<string>("all");
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [sortBy, setSortBy] = useState<string>("followers");
+  const [profiles, setProfiles] = useState<ProfileRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [brandCategories, setBrandCategories] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    const fetchProfiles = async () => {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("user_id, display_name, bio, avatar_url, niche, followers, reach, geo, verified");
+      if (!error && data) {
+        setProfiles(data as ProfileRow[]);
+      }
+      setLoading(false);
+    };
+    fetchProfiles();
+  }, []);
+
+  // Fetch brand categories for all profiles to enable filtering
+  useEffect(() => {
+    if (profiles.length === 0) return;
+    const fetchCategories = async () => {
+      const { data } = await supabase
+        .from("studio_settings")
+        .select("user_id, business_category");
+      if (data) {
+        const map: Record<string, string> = {};
+        data.forEach((row: { user_id: string; business_category: string | null }) => {
+          if (row.business_category) map[row.user_id] = row.business_category;
+        });
+        setBrandCategories(map);
+      }
+    };
+    fetchCategories();
+  }, [profiles]);
 
   const filtered = useMemo(() => {
-    let result = [...creators];
+    let result = [...profiles];
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       result = result.filter(
         (c) =>
-          c.displayName.toLowerCase().includes(q) ||
-          c.bio.toLowerCase().includes(q) ||
-          c.niche.some((n) => n.toLowerCase().includes(q))
+          c.display_name.toLowerCase().includes(q) ||
+          (c.bio || "").toLowerCase().includes(q) ||
+          (c.niche || []).some((n) => n.toLowerCase().includes(q))
       );
     }
     if (selectedNiche !== "all") {
-      result = result.filter((c) => c.niche.includes(selectedNiche));
+      result = result.filter((c) => (c.niche || []).includes(selectedNiche));
     }
     if (selectedGeo !== "all") {
       result = result.filter((c) => c.geo === selectedGeo);
     }
+    if (selectedCategory !== "all") {
+      result = result.filter((c) => brandCategories[c.user_id] === selectedCategory);
+    }
     result.sort((a, b) => {
-      if (sortBy === "followers") return b.followers - a.followers;
-      if (sortBy === "reach") return b.reach - a.reach;
+      if (sortBy === "followers") return (b.followers || 0) - (a.followers || 0);
+      if (sortBy === "reach") return (b.reach || 0) - (a.reach || 0);
       return 0;
     });
     return result;
-  }, [searchQuery, selectedNiche, selectedGeo, sortBy]);
+  }, [searchQuery, selectedNiche, selectedGeo, selectedCategory, sortBy, profiles, brandCategories]);
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -113,8 +179,8 @@ function BirzhaTab({ isVerified, onGoToSettings }: { isVerified: boolean; onGoTo
 
       {/* Filters */}
       <div className="p-4 border-b border-border bg-card space-y-3">
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               value={searchQuery}
@@ -147,6 +213,18 @@ function BirzhaTab({ isVerified, onGoToSettings }: { isVerified: boolean; onGoTo
               ))}
             </SelectContent>
           </Select>
+          <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+            <SelectTrigger className="w-44">
+              <Tag className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+              <SelectValue placeholder="Категория" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Все категории</SelectItem>
+              {Object.entries(BUSINESS_CATEGORIES).map(([key, label]) => (
+                <SelectItem key={key} value={key}>{label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Select value={sortBy} onValueChange={setSortBy}>
             <SelectTrigger className="w-44">
               <SelectValue placeholder="Сортировка" />
@@ -164,37 +242,50 @@ function BirzhaTab({ isVerified, onGoToSettings }: { isVerified: boolean; onGoTo
 
       {/* Creator cards */}
       <div className="p-4 grid gap-3">
-        {filtered.map((creator) => (
-          <Card key={creator.userId} className="overflow-hidden hover:border-primary/30 transition-colors">
+        {loading && (
+          <div className="text-center py-16 flex flex-col items-center gap-2 text-muted-foreground">
+            <Loader2 className="h-6 w-6 animate-spin" />
+            <span className="text-sm">Загрузка авторов...</span>
+          </div>
+        )}
+        {!loading && filtered.map((creator) => (
+          <Card key={creator.user_id} className="overflow-hidden hover:border-primary/30 transition-colors">
             <CardContent className="p-4 flex items-start gap-4">
               <img
-                src={creator.avatar}
-                alt={creator.displayName}
+                src={creator.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${creator.user_id}`}
+                alt={creator.display_name}
                 className="h-14 w-14 rounded-full bg-muted shrink-0"
               />
               <div className="flex-1 min-w-0 space-y-1.5">
                 <div className="flex items-center gap-2">
-                  <p className="text-sm font-semibold text-foreground">{creator.displayName}</p>
+                  <p className="text-sm font-semibold text-foreground">{creator.display_name}</p>
                   {creator.verified && (
                     <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground line-clamp-1">{creator.bio}</p>
+                <p className="text-xs text-muted-foreground line-clamp-1">{creator.bio || "Нет описания"}</p>
                 <div className="flex flex-wrap gap-1.5">
-                  {creator.niche.map((n) => (
+                  {(creator.niche || []).map((n) => (
                     <Badge key={n} variant="secondary" className="text-[10px]">{n}</Badge>
                   ))}
+                  {brandCategories[creator.user_id] && (
+                    <Badge variant="outline" className="text-[10px]">
+                      {BUSINESS_CATEGORIES[brandCategories[creator.user_id]] || brandCategories[creator.user_id]}
+                    </Badge>
+                  )}
                 </div>
                 <div className="flex items-center gap-4 text-xs text-muted-foreground pt-1">
                   <span className="flex items-center gap-1">
-                    <Users className="h-3 w-3" /> {(creator.followers / 1000).toFixed(0)}K
+                    <Users className="h-3 w-3" /> {((creator.followers || 0) / 1000).toFixed(0)}K
                   </span>
                   <span className="flex items-center gap-1">
-                    <Eye className="h-3 w-3" /> {(creator.reach / 1000).toFixed(0)}K охват
+                    <Eye className="h-3 w-3" /> {((creator.reach || 0) / 1000).toFixed(0)}K охват
                   </span>
-                  <span className="flex items-center gap-1">
-                    <MapPin className="h-3 w-3" /> {creator.geo}
-                  </span>
+                  {creator.geo && (
+                    <span className="flex items-center gap-1">
+                      <MapPin className="h-3 w-3" /> {creator.geo}
+                    </span>
+                  )}
                 </div>
               </div>
               <div className="flex flex-col gap-2 shrink-0">
@@ -212,7 +303,7 @@ function BirzhaTab({ isVerified, onGoToSettings }: { isVerified: boolean; onGoTo
                   )}
                 </Tooltip>
                 <Button size="sm" variant="outline" className="text-xs" asChild>
-                  <a href={`/creator/${creator.userId}`}>
+                  <a href={`/creator/${creator.user_id}`}>
                     <Eye className="h-3.5 w-3.5 mr-1.5" />
                     Профиль
                   </a>
@@ -221,7 +312,7 @@ function BirzhaTab({ isVerified, onGoToSettings }: { isVerified: boolean; onGoTo
             </CardContent>
           </Card>
         ))}
-        {filtered.length === 0 && (
+        {!loading && filtered.length === 0 && (
           <div className="text-center py-16 text-sm text-muted-foreground">
             Авторы не найдены. Попробуйте изменить параметры поиска.
           </div>
