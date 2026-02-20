@@ -610,13 +610,52 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
   }, []);
 
   /* ─── Generate pipeline ─── */
-  const runPipeline = async (projId: string, sources: { source_id: string; storage_path: string; file_name: string; mime: string }[], format: OutputFormat) => {
+  const runPipeline = async (projId: string, extractedDocs: { text: string; file_name: string }[], format: OutputFormat) => {
     setPipelineError(null);
 
     try {
-      // Ingest via storage references (no large text in payload)
+      // Ingest: do chunking on client, insert directly via Supabase SDK (avoids edge function memory limits)
       setGenStatus("ingesting");
-      await callEdge("project_ingest", { project_id: projId, sources });
+      const maxChars = 1200;
+      const overlap = 150;
+      const allChunks: { project_id: string; user_id: string; content: string; metadata: any; source_id: string }[] = [];
+
+      for (const doc of extractedDocs) {
+        if (!doc.text.trim()) continue;
+        let start = 0;
+        let chunkIndex = 0;
+        while (start < doc.text.length) {
+          const end = Math.min(start + maxChars, doc.text.length);
+          allChunks.push({
+            project_id: projId,
+            user_id: user!.id,
+            content: doc.text.slice(start, end),
+            metadata: { file_name: doc.file_name, chunk_index: chunkIndex, start_char: start, end_char: end },
+            source_id: projId,
+          });
+          start = end - overlap;
+          if (start >= doc.text.length) break;
+          chunkIndex++;
+        }
+      }
+
+      if (!allChunks.length) {
+        throw { functionName: "chunking", status: 0, body: "Не удалось создать чанки из текста" } as EdgeError;
+      }
+
+      // Delete old chunks
+      await supabase.from("project_chunks").delete().eq("project_id", projId);
+
+      // Insert in batches of 50
+      for (let i = 0; i < allChunks.length; i += 50) {
+        const batch = allChunks.slice(i, i + 50);
+        const { error: insertErr } = await supabase.from("project_chunks").insert(batch);
+        if (insertErr) {
+          throw { functionName: "chunk_insert", status: 0, body: insertErr.message } as EdgeError;
+        }
+      }
+
+      await supabase.from("projects").update({ status: "ingested" }).eq("id", projId);
 
       // Plan
       setGenStatus("planning");
@@ -672,33 +711,14 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
       if (projErr) throw { functionName: "create_project", status: 0, body: projErr.message };
       setProjectId(proj.id);
 
-      // Extract text on client, upload as .txt to Storage, collect source refs
-      const sources: { source_id: string; storage_path: string; file_name: string; mime: string }[] = [];
+      // Extract text on client, collect docs for client-side chunking
+      const extractedDocs: { text: string; file_name: string }[] = [];
 
       for (const file of intake.files) {
         try {
           const text = await extractText(file);
           if (!text.trim()) continue;
-
-          // Upload extracted text as .txt (small payload to Storage)
-          const txtBlob = new Blob([text], { type: "text/plain" });
-          const baseName = file.name.replace(/\.\w+$/, "");
-          const storagePath = `${user.id}/${proj.id}/extracted/${baseName}.txt`;
-          const { error: uploadErr } = await supabase.storage
-            .from("ai_sources")
-            .upload(storagePath, txtBlob, { upsert: true, contentType: "text/plain" });
-
-          if (uploadErr) {
-            console.warn(`Upload failed ${file.name}:`, uploadErr);
-            continue;
-          }
-
-          sources.push({
-            source_id: proj.id,
-            storage_path: storagePath,
-            file_name: file.name,
-            mime: file.type || "text/plain",
-          });
+          extractedDocs.push({ text, file_name: file.name });
 
           // Also upload original file for reference
           const rawPath = `${user.id}/${proj.id}/raw/${file.name}`;
@@ -708,11 +728,11 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
         }
       }
 
-      if (!sources.length) {
+      if (!extractedDocs.length) {
         throw { functionName: "extractText", status: 0, body: "Не удалось извлечь текст ни из одного файла" } as EdgeError;
       }
 
-      await runPipeline(proj.id, sources, selectedFormat);
+      await runPipeline(proj.id, extractedDocs, selectedFormat);
     } catch (e: any) {
       console.error("Generate error:", e);
       setGenStatus("error");
@@ -777,12 +797,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
 
       const demoText = `TypeScript — язык программирования от Microsoft, надмножество JavaScript с статической типизацией.\n\nОсновные типы: string, number, boolean, any, void, null, undefined, never.\n\nИнтерфейсы описывают структуру объектов:\ninterface User { name: string; age: number; email?: string; }\n\nДженерики обеспечивают переиспользование:\nfunction identity<T>(arg: T): T { return arg; }\n\nEnum — именованные константы:\nenum Direction { Up, Down, Left, Right }\n\nUnion и Intersection типы:\ntype StringOrNumber = string | number;\ntype NamedAndAged = Named & Aged;`;
 
-      // Upload demo text to storage and pass as sources
-      const txtBlob = new Blob([demoText], { type: "text/plain" });
-      const storagePath = `${user.id}/${proj.id}/extracted/typescript.txt`;
-      await supabase.storage.from("ai_sources").upload(storagePath, txtBlob, { upsert: true, contentType: "text/plain" });
-
-      await runPipeline(proj.id, [{ source_id: proj.id, storage_path: storagePath, file_name: "typescript.md", mime: "text/plain" }], "COURSE_LEARN");
+      await runPipeline(proj.id, [{ text: demoText, file_name: "typescript.md" }], "COURSE_LEARN");
     } catch (e: any) {
       setGenStatus("error");
       setPipelineError(e.functionName ? e : { functionName: "unknown", status: 0, body: e.message || String(e) });
