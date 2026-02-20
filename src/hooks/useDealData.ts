@@ -2,6 +2,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { notifyDealCounterparty } from "./useDealNotifications";
+import { useEffect } from "react";
 
 /* ─── Audit Log ─── */
 export function useDealAuditLog(dealId: string | undefined) {
@@ -135,6 +137,14 @@ export function useReserveEscrow() {
       qc.invalidateQueries({ queryKey: ["deal_escrow", vars.dealId] });
       qc.invalidateQueries({ queryKey: ["user_balance"] });
       logEvent.mutate({ dealId: vars.dealId, action: `Средства зарезервированы: ${vars.amount} ₽ — ${vars.label}`, category: "payments" });
+      if (user) {
+        notifyDealCounterparty({
+          dealId: vars.dealId,
+          currentUserId: user.id,
+          title: "Средства зарезервированы",
+          message: `Зарезервировано ${vars.amount} ₽ — ${vars.label}`,
+        });
+      }
       toast.success("Средства зарезервированы");
     },
     onError: (err: Error) => {
@@ -194,6 +204,14 @@ export function useReleaseEscrow() {
       qc.invalidateQueries({ queryKey: ["deal_escrow", vars.dealId] });
       qc.invalidateQueries({ queryKey: ["user_balance"] });
       logEvent.mutate({ dealId: vars.dealId, action: `Выплата подтверждена: ${data.amount} ₽ — ${data.label}`, category: "payments" });
+      if (user) {
+        notifyDealCounterparty({
+          dealId: vars.dealId,
+          currentUserId: user.id,
+          title: "Выплата подтверждена",
+          message: `Выплачено ${data.amount} ₽ — ${data.label}`,
+        });
+      }
       toast.success("Выплата подтверждена");
     },
   });
@@ -243,6 +261,14 @@ export function useUploadDealFile() {
     onSuccess: (data, vars) => {
       qc.invalidateQueries({ queryKey: ["deal_files", vars.dealId] });
       logEvent.mutate({ dealId: vars.dealId, action: `Загрузил файл: ${data.file_name}`, category: "files", metadata: { file_id: data.id } });
+      if (user) {
+        notifyDealCounterparty({
+          dealId: vars.dealId,
+          currentUserId: user.id,
+          title: "Новый файл",
+          message: `Загружен файл: ${data.file_name}`,
+        });
+      }
       toast.success("Файл загружен");
     },
   });
@@ -314,7 +340,54 @@ export function useAcceptTerms() {
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ["deal_terms", vars.dealId] });
       logEvent.mutate({ dealId: vars.dealId, action: `Подтвердил условия v${vars.version}`, category: "terms" });
+      if (user) {
+        notifyDealCounterparty({
+          dealId: vars.dealId,
+          currentUserId: user.id,
+          title: "Условия подтверждены",
+          message: `Контрагент подтвердил условия v${vars.version}`,
+        });
+      }
       toast.success("Условия подтверждены");
     },
   });
+}
+
+/* ─── Realtime subscriptions ─── */
+export function useRealtimeAuditLog(dealId: string | undefined) {
+  const qc = useQueryClient();
+  useEffect(() => {
+    if (!dealId) return;
+    const channel = supabase
+      .channel(`audit-${dealId}`)
+      .on("postgres_changes", {
+        event: "INSERT",
+        schema: "public",
+        table: "deal_audit_log",
+        filter: `deal_id=eq.${dealId}`,
+      }, () => {
+        qc.invalidateQueries({ queryKey: ["deal_audit_log", dealId] });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [dealId, qc]);
+}
+
+export function useRealtimeEscrow(dealId: string | undefined) {
+  const qc = useQueryClient();
+  useEffect(() => {
+    if (!dealId) return;
+    const channel = supabase
+      .channel(`escrow-${dealId}`)
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "deal_escrow",
+        filter: `deal_id=eq.${dealId}`,
+      }, () => {
+        qc.invalidateQueries({ queryKey: ["deal_escrow", dealId] });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [dealId, qc]);
 }
