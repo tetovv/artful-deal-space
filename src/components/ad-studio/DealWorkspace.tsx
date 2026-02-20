@@ -685,24 +685,25 @@ function FilesTab() {
 }
 
 /* ═══════════════════════════════════════════════════════
-   PAYMENT TAB
+   PAYMENT TAB — simplified, single summary line
    ═══════════════════════════════════════════════════════ */
 function PaymentTab() {
+  const remaining = mockPayment.total - mockPayment.released;
+
   return (
     <div className="p-4 space-y-3 max-w-[820px] mx-auto">
-      <div className="grid grid-cols-3 gap-2">
-        {[
-          { label: "Сумма", value: `${mockPayment.total.toLocaleString()} ₽`, color: "text-card-foreground" },
-          { label: "Зарезервировано", value: `${mockPayment.reserved.toLocaleString()} ₽`, color: "text-card-foreground" },
-          { label: "Выплачено", value: `${mockPayment.released.toLocaleString()} ₽`, color: "text-success" },
-        ].map((item) => (
-          <div key={item.label} className="p-2 rounded bg-muted/30">
-            <p className="text-[12px] text-muted-foreground">{item.label}</p>
-            <p className={cn("text-[16px] font-bold", item.color)}>{item.value}</p>
-          </div>
-        ))}
+      {/* Compact summary line */}
+      <div className="flex items-center gap-3 flex-wrap text-[14px]">
+        <span className="text-muted-foreground">Итого: <span className="font-semibold text-card-foreground">{mockPayment.total.toLocaleString()} ₽</span></span>
+        <span className="text-border">·</span>
+        <span className="text-muted-foreground">Резерв: <span className="font-semibold text-card-foreground">{mockPayment.reserved.toLocaleString()} ₽</span></span>
+        <span className="text-border">·</span>
+        <span className="text-muted-foreground">Выплачено: <span className="font-semibold text-success">{mockPayment.released.toLocaleString()} ₽</span></span>
+        <span className="text-border">·</span>
+        <span className="text-muted-foreground">Остаток: <span className="font-semibold text-card-foreground">{remaining.toLocaleString()} ₽</span></span>
       </div>
 
+      {/* Milestones — main block */}
       <Card>
         <CardContent className="p-3 space-y-0">
           <p className="text-[14px] font-semibold text-card-foreground mb-1">Этапы оплаты</p>
@@ -717,21 +718,41 @@ function PaymentTab() {
               <span className="text-[14px] font-medium text-card-foreground">{ms.amount.toLocaleString()} ₽</span>
             </div>
           ))}
+          {/* Platform fee — subtle inline */}
+          <div className="flex items-center justify-between pt-1.5 mt-1 border-t border-border/30">
+            <span className="text-[12px] text-muted-foreground/60" title={`Комиссия платформы ${mockPayment.commissionPercent}% от суммы сделки`}>
+              Комиссия платформы ({mockPayment.commissionPercent}%)
+            </span>
+            <span className="text-[12px] text-muted-foreground/60">{mockPayment.commission.toLocaleString()} ₽</span>
+          </div>
         </CardContent>
       </Card>
 
-      <div className="flex items-center justify-between px-3 py-1.5 rounded bg-muted/20 text-[12px]">
-        <span className="text-muted-foreground">Комиссия ({mockPayment.commissionPercent}%)</span>
-        <span className="font-medium text-card-foreground">{mockPayment.commission.toLocaleString()} ₽</span>
-      </div>
+      {/* Primary action */}
+      <Button size="sm" className="text-[13px] h-8">
+        <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+        Подтвердить выполнение
+      </Button>
 
-      <button className="text-[12px] text-primary hover:underline flex items-center gap-1">
-        <Radio className="h-3 w-3" /> Маркировка (ОРД) →
-      </button>
+      {/* Dispute — collapsible "Problem" section */}
+      <Collapsible>
+        <CollapsibleTrigger className="flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground transition-colors">
+          <ChevronRight className="h-3 w-3" />
+          Проблема
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="pl-4 pt-1.5 space-y-1.5">
+            <p className="text-[12px] text-muted-foreground">Если результат не соответствует условиям, вы можете открыть спор.</p>
+            <Button size="sm" variant="outline" className="text-[12px] h-7 text-destructive border-destructive/30 hover:bg-destructive/10">
+              <AlertTriangle className="h-3 w-3 mr-1.5" />
+              Открыть спор
+            </Button>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
     </div>
   );
 }
-
 /* ═══════════════════════════════════════════════════════
    ORD TAB
    ═══════════════════════════════════════════════════════ */
