@@ -741,38 +741,62 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
   const runStageIngest = async (projId: string, docs: { text: string; file_name: string }[]): Promise<void> => {
     const maxChars = 1200;
     const overlap = 150;
-    const allChunks: { project_id: string; user_id: string; content: string; metadata: any; source_id: string }[] = [];
+
+    // Delete old chunks before re-ingesting
+    await supabase.from("project_chunks").delete().eq("project_id", projId);
 
     for (const doc of docs) {
       if (!doc.text.trim()) continue;
+
+      // Create a project_source record for each doc (source_id FK requires this)
+      const { data: sourceRec, error: srcErr } = await supabase.from("project_sources").insert({
+        project_id: projId,
+        user_id: user!.id,
+        file_name: doc.file_name,
+        file_type: doc.file_name.split(".").pop() || "txt",
+        storage_path: `${user!.id}/${projId}/raw/${doc.file_name}`,
+        status: "processed",
+        file_size: doc.text.length,
+      }).select("id").single();
+
+      if (srcErr) {
+        throw { functionName: "source_insert", status: 0, body: srcErr.message } as EdgeError;
+      }
+
+      const sourceId = sourceRec.id;
+      const chunks: { project_id: string; user_id: string; content: string; metadata: any; source_id: string }[] = [];
+
       let start = 0;
       let chunkIndex = 0;
       while (start < doc.text.length) {
         const end = Math.min(start + maxChars, doc.text.length);
-        allChunks.push({
+        chunks.push({
           project_id: projId, user_id: user!.id,
           content: doc.text.slice(start, end),
           metadata: { file_name: doc.file_name, chunk_index: chunkIndex, start_char: start, end_char: end },
-          source_id: projId,
+          source_id: sourceId,
         });
         start = end - overlap;
         if (start >= doc.text.length) break;
         chunkIndex++;
       }
-    }
 
-    if (!allChunks.length) {
-      throw { functionName: "chunking", status: 0, body: "Не удалось создать чанки из текста" } as EdgeError;
-    }
-
-    await supabase.from("project_chunks").delete().eq("project_id", projId);
-    for (let i = 0; i < allChunks.length; i += 50) {
-      const batch = allChunks.slice(i, i + 50);
-      const { error: insertErr } = await supabase.from("project_chunks").insert(batch);
-      if (insertErr) {
-        throw { functionName: "chunk_insert", status: 0, body: insertErr.message } as EdgeError;
+      // Insert chunks in batches
+      for (let i = 0; i < chunks.length; i += 50) {
+        const batch = chunks.slice(i, i + 50);
+        const { error: insertErr } = await supabase.from("project_chunks").insert(batch);
+        if (insertErr) {
+          throw { functionName: "chunk_insert", status: 0, body: insertErr.message } as EdgeError;
+        }
       }
     }
+
+    // Verify at least some chunks were created
+    const { count } = await supabase.from("project_chunks").select("id", { count: "exact", head: true }).eq("project_id", projId);
+    if (!count || count === 0) {
+      throw { functionName: "chunking", status: 0, body: "Не удалось создать чанки из текста — проверьте содержимое файлов" } as EdgeError;
+    }
+
     await supabase.from("projects").update({ status: "ingested" }).eq("id", projId);
   };
 
@@ -1040,7 +1064,18 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
         const text = await extractText(file);
         if (!text.trim()) continue;
 
-        // Chunk and insert
+        // Create a project_source record first
+        const { data: sourceRec, error: srcErr } = await supabase.from("project_sources").insert({
+          project_id: projectId, user_id: user.id,
+          file_name: file.name,
+          file_type: file.name.split(".").pop() || "txt",
+          storage_path: `${user.id}/${projectId}/raw/${file.name}`,
+          status: "processed",
+          file_size: text.length,
+        }).select("id").single();
+
+        if (srcErr) { toast.error(`Ошибка: ${srcErr.message}`); continue; }
+
         const maxChars = 1200;
         const overlap = 150;
         let start = 0;
@@ -1051,7 +1086,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
             project_id: projectId, user_id: user.id,
             content: text.slice(start, end),
             metadata: { file_name: file.name, chunk_index: chunkIndex },
-            source_id: projectId,
+            source_id: sourceRec.id,
           });
           start = end - overlap;
           if (start >= text.length) break;
@@ -1168,7 +1203,10 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">Зачем вам этот материал?</p>
             {GOAL_OPTIONS.map((opt) => (
-              <button key={opt.value} onClick={() => setIntake((p) => ({ ...p, goal: opt.value }))}
+              <button key={opt.value} onClick={() => {
+                setIntake((p) => ({ ...p, goal: opt.value }));
+                setTimeout(() => setIntakeStep(2), 200);
+              }}
                 className={cn("w-full text-left p-4 rounded-lg border transition-all text-sm",
                   intake.goal === opt.value ? "border-primary bg-primary/10 text-foreground" : "border-border hover:border-primary/30 text-muted-foreground")}>
                 {opt.label}
@@ -1181,7 +1219,10 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">Ваш текущий уровень знаний по теме?</p>
             {KNOWLEDGE_LEVELS.map((opt) => (
-              <button key={opt.value} onClick={() => setIntake((p) => ({ ...p, knowledgeLevel: opt.value }))}
+              <button key={opt.value} onClick={() => {
+                setIntake((p) => ({ ...p, knowledgeLevel: opt.value }));
+                setTimeout(() => setIntakeStep(3), 200);
+              }}
                 className={cn("w-full text-left p-4 rounded-lg border transition-all",
                   intake.knowledgeLevel === opt.value ? "border-primary bg-primary/10" : "border-border hover:border-primary/30")}>
                 <span className="text-sm font-medium text-foreground">{opt.label}</span>
@@ -1196,7 +1237,10 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
             <p className="text-sm text-muted-foreground">Насколько глубоко изучать?</p>
             <div className="flex gap-2">
               {DEPTH_OPTIONS.map((opt) => (
-                <button key={opt.value} onClick={() => setIntake((p) => ({ ...p, depth: opt.value }))}
+                <button key={opt.value} onClick={() => {
+                  setIntake((p) => ({ ...p, depth: opt.value }));
+                  setTimeout(() => setIntakeStep(4), 200);
+                }}
                   className={cn("flex-1 p-4 rounded-lg border text-center transition-all text-sm",
                     intake.depth === opt.value ? "border-primary bg-primary/10 text-foreground" : "border-border hover:border-primary/30 text-muted-foreground")}>
                   {opt.label}
@@ -1246,11 +1290,18 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
           <Button variant="ghost" size="sm" onClick={() => intakeStep > 0 ? setIntakeStep((s) => (s - 1) as IntakeStep) : null} disabled={intakeStep === 0}>
             <ChevronLeft className="h-4 w-4 mr-1" /> Назад
           </Button>
-          {intakeStep < 5 ? (
-            <Button size="sm" disabled={!canProceed} onClick={() => setIntakeStep((s) => (s + 1) as IntakeStep)}>
+          {/* Steps 1-3 auto-advance on click; only show Далее for step 0 (sources) and step 4 (optional) */}
+          {intakeStep === 0 && (
+            <Button size="sm" disabled={!canProceed} onClick={() => setIntakeStep(1)}>
               Далее <ChevronRight className="h-4 w-4 ml-1" />
             </Button>
-          ) : (
+          )}
+          {intakeStep === 4 && (
+            <Button size="sm" variant="ghost" onClick={() => setIntakeStep(5)}>
+              Пропустить <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          )}
+          {intakeStep === 5 && (
             <Button size="sm" onClick={() => {
               const rec = recommendFormat(intake);
               setRecommendedFormat(rec);
