@@ -108,7 +108,7 @@ const PREF_OPTIONS = [
 
 /* ═══════════════ Helpers ═══════════════ */
 
-/** Upload raw file to storage — no extraction on client */
+/** Upload raw file to storage */
 async function uploadFileToStorage(
   file: File,
   userId: string,
@@ -118,6 +118,16 @@ async function uploadFileToStorage(
   const { error } = await supabase.storage.from("ai_sources").upload(storagePath, file, { upsert: true });
   if (error) throw new Error(`Storage upload failed: ${error.message}`);
   return { storagePath, fileName: file.name };
+}
+
+/** Extract text from file on client side — keeps UI responsive via yieldToUI */
+async function extractTextOnClient(
+  file: File,
+  signal?: AbortSignal,
+  onProgress?: (p: { page?: number; totalPages?: number; file?: string; stage?: string }) => void,
+): Promise<string> {
+  const { extractTextFromFile } = await import("@/lib/clientExtract");
+  return extractTextFromFile(file, signal, onProgress);
 }
 
 function recommendFormat(intake: IntakeData): OutputFormat {
@@ -722,7 +732,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
                 updateStage("ingesting", "done");
                 setGenStages(prev => prev.map(s => s.key === "ingesting" ? { ...s, label: "Индексация в фоне" } : s));
                 // Continue with planning
-                runPipelineFrom(resumeProjectId, "planning", uploadedSourcesRef.current, selectedFormat);
+                runPipelineFrom(resumeProjectId, "planning", selectedFormat);
                 return;
               }
               if (p.status === "error") {
@@ -855,24 +865,26 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
     setGenStages(prev => prev.map(s => s.key === key ? { ...s, status, error } : s));
   };
 
-  // Store uploaded sources info so retry can reuse them
-  const uploadedSourcesRef = useRef<{ storage_path: string; file_name: string; source_id: string }[]>([]);
-  const pastedTextRef = useRef<string>("");
+  // Store extracted documents for retry
+  const extractedDocsRef = useRef<{ text: string; file_name: string; source_id?: string }[]>([]);
 
   const runStageUpload = async (projId: string): Promise<void> => {
     // Upload stage is already done when we call runPipeline
   };
 
-  /** Server-side ingest: calls edge function which returns immediately,
-   *  then polls project status/progress until done or error. */
-  const runStageIngest = async (projId: string, sources: { storage_path: string; file_name: string; source_id: string }[], pastedText?: string, signal?: AbortSignal): Promise<void> => {
+  /** Server-side ingest: sends pre-extracted text documents to edge function,
+   *  which returns immediately. Then polls project status/progress until done or error. */
+  const runStageIngest = async (
+    projId: string,
+    documents: { text: string; file_name: string; source_id?: string }[],
+    signal?: AbortSignal,
+  ): Promise<void> => {
     if (!user) throw { functionName: "project_ingest", status: 0, body: "Не авторизован" } as EdgeError;
 
-    // Call edge function — returns immediately, processing happens in background
+    // Call edge function with pre-extracted text — NO binary parsing on server
     await callEdge("project_ingest", {
       project_id: projId,
-      sources: sources.map(s => ({ storage_path: s.storage_path, file_name: s.file_name, source_id: s.source_id })),
-      documents: pastedText?.trim() ? [{ text: pastedText, file_name: "pasted_text.txt" }] : undefined,
+      documents,
     });
 
     // Poll project status until ingested/error
@@ -915,7 +927,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
     return actData?.artifact_id || null;
   };
 
-  const runPipelineFrom = async (projId: string, fromStage: GenStageKey, uploadedSources: { storage_path: string; file_name: string; source_id: string }[], format: OutputFormat, pastedText?: string) => {
+  const runPipelineFrom = async (projId: string, fromStage: GenStageKey, format: OutputFormat) => {
     setPipelineError(null);
     const stageOrder: GenStageKey[] = ["uploading", "ingesting", "planning", "generating"];
     const startIdx = stageOrder.indexOf(fromStage);
@@ -944,7 +956,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
           if (key === "uploading") {
             await withTimeout(runStageUpload(projId), 60_000, "uploading");
           } else if (key === "ingesting") {
-            await withTimeout(runStageIngest(projId, uploadedSources, pastedText, signal), STAGE_TIMEOUT_MS, "ingesting");
+            await withTimeout(runStageIngest(projId, extractedDocsRef.current, signal), STAGE_TIMEOUT_MS, "ingesting");
           } else if (key === "planning") {
             await runStagePlan(projId);
           } else if (key === "generating") {
@@ -1003,8 +1015,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
 
   // Demo pipeline — uses edge function for ingest
   const runPipeline = async (projId: string, inlineDocs: { text: string; file_name: string }[], format: OutputFormat) => {
-    uploadedSourcesRef.current = [];
-    pastedTextRef.current = inlineDocs.map(d => d.text).join("\n\n");
+    extractedDocsRef.current = inlineDocs;
     updateStage("uploading", "done");
     setGenStatus("ingesting");
     updateStage("ingesting", "running");
@@ -1024,8 +1035,8 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
       const sourceId = srcRec?.id;
       if (!sourceId) throw { functionName: "project_ingest", status: 0, body: "Не удалось создать source запись" } as EdgeError;
 
-      // Use edge function for ingest (inline documents mode)
-      await runStageIngest(projId, [], allText);
+      // Send pre-extracted text to lightweight edge function
+      await runStageIngest(projId, inlineDocs.map(d => ({ ...d, source_id: sourceId })));
       updateStage("ingesting", "done");
     } catch (e: any) {
       const edgeErr = e.functionName ? e : { functionName: "project_ingest", status: 0, body: e.message || String(e) };
@@ -1034,7 +1045,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
     }
 
     // Continue with planning and generating
-    await runPipelineFrom(projId, "planning", [], format);
+    await runPipelineFrom(projId, "planning", format);
   };
 
   const handleGenerate = async () => {
@@ -1063,10 +1074,11 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
       }
       setProjectId(proj.id);
 
-      // Upload files to storage in parallel
-      const uploadedSources: { storage_path: string; file_name: string; source_id: string }[] = [];
+      // Upload files to storage + extract text on client in parallel
+      const extractedDocs: { text: string; file_name: string; source_id?: string }[] = [];
       const uploadPromises = intake.files.map(async (file) => {
         try {
+          // Upload to storage (for backup/reference)
           const { storagePath, fileName } = await uploadFileToStorage(file, user.id, proj.id);
 
           // Create project_source record
@@ -1085,30 +1097,41 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
             return null;
           }
 
-          return { storage_path: storagePath, file_name: fileName, source_id: sourceRec.id };
+          // Extract text on client — yields to UI after each page
+          const text = await extractTextOnClient(file);
+          if (!text.trim()) {
+            console.warn(`No text extracted from ${fileName}`);
+            return null;
+          }
+
+          return { text, file_name: fileName, source_id: sourceRec.id };
         } catch (e: any) {
-          console.warn(`Upload failed ${file.name}:`, e);
+          console.warn(`Upload/extract failed ${file.name}:`, e);
           return null;
         }
       });
       const results = await Promise.all(uploadPromises);
       for (const r of results) {
-        if (r) uploadedSources.push(r);
+        if (r) extractedDocs.push(r);
+      }
+
+      // Add pasted text if any
+      if (intake.pastedText.trim()) {
+        extractedDocs.push({ text: intake.pastedText.trim(), file_name: "pasted_text.txt" });
       }
 
       // Check that we have at least something to process
-      if (uploadedSources.length === 0 && !intake.pastedText.trim()) {
-        const err = { functionName: "quality_check", status: 0, body: "Не удалось загрузить ни один файл. Проверьте формат файлов." } as EdgeError;
+      if (extractedDocs.length === 0) {
+        const err = { functionName: "quality_check", status: 0, body: "Не удалось извлечь текст ни из одного файла. Проверьте формат файлов." } as EdgeError;
         updateStage("uploading", "error", err);
         throw err;
       }
 
-      uploadedSourcesRef.current = uploadedSources;
-      pastedTextRef.current = intake.pastedText.trim();
+      extractedDocsRef.current = extractedDocs;
       updateStage("uploading", "done");
 
-      // Run server-side ingest + planning + generating
-      await runPipelineFrom(proj.id, "ingesting", uploadedSources, selectedFormat, intake.pastedText.trim());
+      // Send extracted text to lightweight edge function for chunking + DB insert
+      await runPipelineFrom(proj.id, "ingesting", selectedFormat);
     } catch (e: any) {
       console.error("Generate error:", e);
       setGenStatus("error");
@@ -1128,7 +1151,7 @@ export const GuidedWorkspace = ({ resumeProjectId, onResumeComplete }: GuidedWor
 
     setPipelineError(null);
     setPhase("generate");
-    runPipelineFrom(projectId, failedStage, uploadedSourcesRef.current, selectedFormat, pastedTextRef.current);
+    runPipelineFrom(projectId, failedStage, selectedFormat);
   };
 
   // Back-compat alias
