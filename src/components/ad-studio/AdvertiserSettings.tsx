@@ -407,15 +407,9 @@ export function AdvertiserSettings() {
 
       <div className="w-full max-w-[1040px] mx-auto px-6 py-6 space-y-5">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
+        <div>
             <h2 className="text-lg font-bold text-foreground tracking-tight">Настройки рекламодателя</h2>
             <p className="text-sm text-muted-foreground mt-0.5">Верификация и данные бренда для размещения рекламы</p>
-          </div>
-          <Button size="sm" disabled={!dirty || save.isPending} onClick={() => save.mutate()} className="h-9 text-sm gap-1.5">
-            <Save className="h-4 w-4" />
-            {save.isPending ? "Сохранение…" : "Сохранить"}
-          </Button>
         </div>
 
         {/* Readiness block */}
