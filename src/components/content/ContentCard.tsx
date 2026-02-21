@@ -5,13 +5,14 @@ import { Badge } from "@/components/ui/badge";
 import { motion } from "framer-motion";
 import { formatDistanceToNow } from "date-fns";
 import { ru } from "date-fns/locale";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { useReaction } from "@/hooks/useReaction";
+import { usePostImpressionTracker } from "@/hooks/usePostImpressions";
 
 interface ContentCardProps {
   item: ContentItem & { duration?: number | null };
@@ -25,6 +26,10 @@ export function ContentCard({ item }: ContentCardProps) {
   const [commentText, setCommentText] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [bouncing, setBouncing] = useState<"like" | "dislike" | null>(null);
+  const postRef = useRef<HTMLDivElement>(null);
+
+  // Track post impression (≥50% visible for ≥1s)
+  usePostImpressionTracker(item.type === "post" ? item.id : undefined, postRef);
 
   // Like/dislike state (real-time, persisted)
   const { likes, dislikes, userReaction, toggleReaction } = useReaction(item.id);
@@ -85,6 +90,7 @@ export function ContentCard({ item }: ContentCardProps) {
 
   return (
     <motion.div
+      ref={item.type === "post" ? postRef : undefined}
       onClick={() => navigate(`/product/${item.id}`)}
       className="group cursor-pointer rounded-xl border border-border bg-card overflow-hidden hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 transition-all duration-300"
       whileHover={{ y: -4, scale: 1.01 }}
