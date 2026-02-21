@@ -14,6 +14,7 @@ import {
   useDealTerms, useAcceptTerms,
   useRealtimeAuditLog, useRealtimeEscrow,
 } from "@/hooks/useDealData";
+import { useDealInvoices, usePayInvoice, useRealtimeInvoices } from "@/hooks/useDealInvoices";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -55,6 +56,8 @@ const statusColors: Record<DealStatus, string> = {
 const statusLabels: Record<string, string> = {
   pending: "Ожидание автора",
   briefing: "Бриф",
+  invoice_needed: "Ожидание счёта",
+  waiting_payment: "Ожидает оплаты",
   in_progress: "В работе",
   review: "На проверке",
   completed: "Завершено",
@@ -83,9 +86,11 @@ const placementTypeFromTitle = (title: string): string | null => {
 /* ─── State-specific primary CTA — explicit next step, not generic ─── */
 function getPrimaryAction(status: string, _role?: string): { label: string; icon: any } | null {
   switch (status) {
-    case "pending": return null; // Waiting for creator — no action
+    case "pending": return null;
     case "needs_changes": return { label: "Просмотреть правки", icon: ScrollText };
     case "accepted": return { label: "Зарезервировать средства", icon: CreditCard };
+    case "invoice_needed": return null; // waiting for creator to send invoice
+    case "waiting_payment": return { label: "Оплатить / Зарезервировать", icon: CreditCard };
     case "briefing": return { label: "Отправить черновик на проверку", icon: Send };
     case "in_progress": return { label: "Отправить черновик на проверку", icon: Upload };
     case "review": return { label: "Принять черновик", icon: CheckCircle2 };
@@ -99,6 +104,8 @@ function getNextStepHint(status: string): string | null {
     case "pending": return "Ожидаем ответа автора на ваше предложение";
     case "needs_changes": return "Автор предложил изменения — проверьте условия";
     case "accepted": return "Предложение принято — зарезервируйте средства для начала работы";
+    case "invoice_needed": return "Автор принял предложение. Ожидайте счёт.";
+    case "waiting_payment": return "Получен счёт — оплатите или зарезервируйте средства для начала работы";
     case "briefing": return "Следующий шаг: Отправить черновик интеграции на проверку";
     case "in_progress": return "Следующий шаг: Загрузить черновик и отправить на проверку";
     case "review": return "Следующий шаг: Принять или запросить правки черновика";
@@ -115,6 +122,8 @@ function getNextStepShort(status: string): string | null {
     case "pending": return "Ожидание автора";
     case "needs_changes": return "Проверить правки";
     case "accepted": return "Зарезервировать";
+    case "invoice_needed": return "Ожидание счёта";
+    case "waiting_payment": return "Оплатить";
     case "briefing": return "Отправить черновик";
     case "in_progress": return "Загрузить черновик";
     case "review": return "Принять черновик";
@@ -1034,6 +1043,9 @@ function FilesTab({ dealId }: { dealId: string }) {
 function PaymentTab({ dealId }: { dealId: string }) {
   const { data: escrowItems = [] } = useDealEscrow(dealId);
   const releaseEscrow = useReleaseEscrow();
+  const { data: invoices = [] } = useDealInvoices(dealId);
+  const payInvoice = usePayInvoice();
+  const latestInvoice = invoices.length > 0 ? invoices[0] : null;
 
   const milestones = escrowItems.length > 0
     ? escrowItems.map((e: any) => ({ id: e.id, label: e.label, amount: e.amount, status: e.status as string }))
@@ -1047,43 +1059,107 @@ function PaymentTab({ dealId }: { dealId: string }) {
 
   return (
     <div className="p-5 space-y-4 max-w-[820px] mx-auto">
-      <div className="flex items-center gap-3 flex-wrap text-[15px]">
-        <span className="text-muted-foreground">Итого: <span className="font-semibold text-card-foreground">{total.toLocaleString()} ₽</span></span>
-        <span className="text-border">·</span>
-        <span className="text-muted-foreground">Резерв: <span className="font-semibold text-card-foreground">{reserved.toLocaleString()} ₽</span></span>
-        <span className="text-border">·</span>
-        <span className="text-muted-foreground">Выплачено: <span className="font-semibold text-success">{released.toLocaleString()} ₽</span></span>
-        <span className="text-border">·</span>
-        <span className="text-muted-foreground">Остаток: <span className="font-semibold text-card-foreground">{remaining.toLocaleString()} ₽</span></span>
-      </div>
-
-      <Card>
-        <CardContent className="p-4 space-y-0">
-          <p className="text-[15px] font-semibold text-card-foreground mb-2">Этапы оплаты</p>
-          {milestones.map((ms: any, i: number) => (
-            <div key={ms.id} className={cn("flex items-center justify-between py-2", i > 0 && "border-t border-border/50")}>
-              <div className="flex items-center gap-2.5">
-                <span className={cn("text-[12px] font-medium px-1.5 py-0.5 rounded", paymentStatusColors[ms.status] || "bg-muted text-muted-foreground")}>
-                  {paymentStatusLabels[ms.status] || ms.status}
-                </span>
-                <span className="text-[15px] text-card-foreground">{ms.label}</span>
-              </div>
+      {/* Invoice card — shown when invoice exists */}
+      {latestInvoice && (
+        <Card className={latestInvoice.status === "pending" ? "border-warning/30" : ""}>
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="text-[15px] font-medium text-card-foreground">{ms.amount.toLocaleString()} ₽</span>
-                {ms.status === "reserved" && escrowItems.length > 0 && (
-                  <Button size="sm" variant="outline" className="text-[12px] h-7 px-2" onClick={() => releaseEscrow.mutate({ escrowId: ms.id, dealId })} disabled={releaseEscrow.isPending}>
-                    Выплатить
-                  </Button>
-                )}
+                <FileText className="h-4 w-4 text-primary" />
+                <span className="text-[15px] font-semibold text-card-foreground">Счёт {latestInvoice.invoice_number}</span>
               </div>
+              <Badge variant="outline" className={cn("text-[11px]",
+                latestInvoice.status === "paid"
+                  ? "bg-success/15 text-success border-success/30"
+                  : "bg-warning/15 text-warning border-warning/30"
+              )}>
+                {latestInvoice.status === "paid" ? "Оплачено" : "Ожидает оплаты"}
+              </Badge>
             </div>
-          ))}
-          <div className="flex items-center justify-between pt-2 mt-1 border-t border-border/30">
-            <span className="text-[13px] text-muted-foreground/60">Комиссия платформы (10%)</span>
-            <span className="text-[13px] text-muted-foreground/60">{commission.toLocaleString()} ₽</span>
+            <div className="space-y-1.5 text-[14px]">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Сумма</span>
+                <span className="font-bold text-card-foreground">{Number(latestInvoice.amount).toLocaleString("ru-RU")} ₽</span>
+              </div>
+              {latestInvoice.due_date && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Срок оплаты</span>
+                  <span className="text-card-foreground">{new Date(latestInvoice.due_date).toLocaleDateString("ru-RU")}</span>
+                </div>
+              )}
+              {latestInvoice.comment && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Комментарий</span>
+                  <span className="text-card-foreground/80 text-right max-w-[60%]">{latestInvoice.comment}</span>
+                </div>
+              )}
+              {latestInvoice.paid_at && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Оплачен</span>
+                  <span className="text-success font-medium">{new Date(latestInvoice.paid_at).toLocaleDateString("ru-RU")}</span>
+                </div>
+              )}
+            </div>
+            {latestInvoice.status === "pending" && (
+              <Button className="w-full text-[14px] h-10 mt-1" onClick={() => payInvoice.mutate({ invoiceId: latestInvoice.id, dealId })} disabled={payInvoice.isPending}>
+                {payInvoice.isPending ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <CreditCard className="h-4 w-4 mr-1.5" />}
+                Оплатить / Зарезервировать средства
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Escrow summary */}
+      {total > 0 && (
+        <>
+          <div className="flex items-center gap-3 flex-wrap text-[15px]">
+            <span className="text-muted-foreground">Итого: <span className="font-semibold text-card-foreground">{total.toLocaleString()} ₽</span></span>
+            <span className="text-border">·</span>
+            <span className="text-muted-foreground">Резерв: <span className="font-semibold text-card-foreground">{reserved.toLocaleString()} ₽</span></span>
+            <span className="text-border">·</span>
+            <span className="text-muted-foreground">Выплачено: <span className="font-semibold text-success">{released.toLocaleString()} ₽</span></span>
+            <span className="text-border">·</span>
+            <span className="text-muted-foreground">Остаток: <span className="font-semibold text-card-foreground">{remaining.toLocaleString()} ₽</span></span>
           </div>
-        </CardContent>
-      </Card>
+
+          <Card>
+            <CardContent className="p-4 space-y-0">
+              <p className="text-[15px] font-semibold text-card-foreground mb-2">Этапы оплаты</p>
+              {milestones.map((ms: any, i: number) => (
+                <div key={ms.id} className={cn("flex items-center justify-between py-2", i > 0 && "border-t border-border/50")}>
+                  <div className="flex items-center gap-2.5">
+                    <span className={cn("text-[12px] font-medium px-1.5 py-0.5 rounded", paymentStatusColors[ms.status] || "bg-muted text-muted-foreground")}>
+                      {paymentStatusLabels[ms.status] || ms.status}
+                    </span>
+                    <span className="text-[15px] text-card-foreground">{ms.label}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[15px] font-medium text-card-foreground">{ms.amount.toLocaleString()} ₽</span>
+                    {ms.status === "reserved" && escrowItems.length > 0 && (
+                      <Button size="sm" variant="outline" className="text-[12px] h-7 px-2" onClick={() => releaseEscrow.mutate({ escrowId: ms.id, dealId })} disabled={releaseEscrow.isPending}>
+                        Выплатить
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
+              <div className="flex items-center justify-between pt-2 mt-1 border-t border-border/30">
+                <span className="text-[13px] text-muted-foreground/60">Комиссия платформы (10%)</span>
+                <span className="text-[13px] text-muted-foreground/60">{commission.toLocaleString()} ₽</span>
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      )}
+
+      {!latestInvoice && total === 0 && (
+        <div className="text-center py-12 space-y-2">
+          <CreditCard className="h-8 w-8 mx-auto text-muted-foreground/40" />
+          <p className="text-[14px] text-muted-foreground">Ожидайте счёт от автора</p>
+          <p className="text-[13px] text-muted-foreground/60">После принятия предложения автор выставит счёт</p>
+        </div>
+      )}
 
       {/* Dispute — collapsed by default, no visible red button */}
       <Collapsible>
@@ -1380,7 +1456,7 @@ export function DealWorkspace() {
                 {primaryAction ? (
                   <Button size="sm" className="text-[14px] h-9" onClick={() => {
                     if ((activeDeal.status as string) === "needs_changes") setActiveSubTab("terms");
-                    if ((activeDeal.status as string) === "accepted") setActiveSubTab("payment");
+                    if ((activeDeal.status as string) === "accepted" || (activeDeal.status as string) === "waiting_payment") setActiveSubTab("payment");
                   }}>
                     <primaryAction.icon className="h-4 w-4 mr-1.5" />
                     {primaryAction.label}
