@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import type { Campaign, Placement } from "./CampaignManageView";
-import { saveDraft, deleteDraft, createDraftId, type CampaignDraft } from "./campaignDrafts";
+import { saveDraft, deleteDraft, createDraftId, fileToDataUrl, dataUrlToFile, type CampaignDraft } from "./campaignDrafts";
 
 interface ManualCampaignWizardProps {
   isVerified: boolean;
@@ -64,8 +64,13 @@ export function ManualCampaignWizard({ isVerified, ordConnected, onBack, onCompl
   const [placement, setPlacement] = useState<Placement | null>(initialDraft?.placement ?? null);
 
   // Step 2 - Creative
-  const [creativeFile, setCreativeFile] = useState<File | null>(null);
-  const [creativePreview, setCreativePreview] = useState<string | null>(null);
+  const [creativeFile, setCreativeFile] = useState<File | null>(() => {
+    if (initialDraft?.creativeDataUrl && initialDraft.creativeFileName) {
+      return dataUrlToFile(initialDraft.creativeDataUrl, initialDraft.creativeFileName);
+    }
+    return null;
+  });
+  const [creativePreview, setCreativePreview] = useState<string | null>(initialDraft?.creativeDataUrl ?? null);
   const [creativeType, setCreativeType] = useState<"image" | "video" | null>(initialDraft?.creativeType ?? null);
   const [destinationUrl, setDestinationUrl] = useState(initialDraft?.destinationUrl ?? "");
   const [utmParams, setUtmParams] = useState(initialDraft?.utmParams ?? "");
@@ -89,6 +94,18 @@ export function ManualCampaignWizard({ isVerified, ordConnected, onBack, onCompl
   // Audit log
   const [auditLog, setAuditLog] = useState<{ timestamp: string; action: string; user: string }[]>([]);
 
+  // Track creative data URL for draft persistence
+  const [creativeDataUrl, setCreativeDataUrl] = useState<string | null>(initialDraft?.creativeDataUrl ?? null);
+
+  // Convert file to data URL when creative changes
+  useEffect(() => {
+    if (creativeFile && !creativeDataUrl) {
+      fileToDataUrl(creativeFile).then((url) => {
+        if (url) setCreativeDataUrl(url);
+      });
+    }
+  }, [creativeFile]);
+
   // ── Auto-save draft ──
   useEffect(() => {
     const draft: CampaignDraft = {
@@ -108,9 +125,10 @@ export function ManualCampaignWizard({ isVerified, ordConnected, onBack, onCompl
       creativeFileName: creativeFile?.name ?? initialDraft?.creativeFileName ?? null,
       creativeFileSize: creativeFile?.size ?? initialDraft?.creativeFileSize ?? null,
       creativeType,
+      creativeDataUrl,
     };
     saveDraft(draft);
-  }, [step, placement, destinationUrl, utmParams, creativeTitle, creativeText, totalBudget, startDateVal, endDateVal, noEndDate, dailyCap, creativeFile, creativeType]);
+  }, [step, placement, destinationUrl, utmParams, creativeTitle, creativeText, totalBudget, startDateVal, endDateVal, noEndDate, dailyCap, creativeFile, creativeType, creativeDataUrl]);
 
   const addAudit = (action: string) => {
     setAuditLog((prev) => [...prev, { timestamp: new Date().toISOString(), action, user: "Вы" }]);
@@ -152,6 +170,7 @@ export function ManualCampaignWizard({ isVerified, ordConnected, onBack, onCompl
     setCreativeFile(file);
     setCreativeType(isVideo ? "video" : "image");
     setCreativePreview(URL.createObjectURL(file));
+    setCreativeDataUrl(null); // will be computed by useEffect
     addAudit("Креатив загружен: " + file.name);
   };
 
