@@ -1,4 +1,7 @@
-import { Trophy, Briefcase, BarChart3, FileText, Handshake, Building2, Globe, ShieldCheck, Tag, Mail } from "lucide-react";
+import {
+  Trophy, Briefcase, BarChart3, FileText, Handshake, Building2, Globe,
+  ShieldCheck, Tag, Mail, Video, FileEdit, Mic, AlertCircle,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ContentCard } from "@/components/content/ContentCard";
@@ -8,6 +11,12 @@ const CATEGORY_LABELS: Record<string, string> = {
   education: "Образование", health: "Здоровье", food: "Еда и напитки",
   fashion: "Мода и красота", travel: "Путешествия", entertainment: "Развлечения",
   realestate: "Недвижимость", auto: "Авто", other: "Другое",
+};
+
+const OFFER_ICONS: Record<string, React.ElementType> = {
+  "Видео-интеграция": Video,
+  "Пост": FileEdit,
+  "Подкаст": Mic,
 };
 
 /* ─── Brand Card ─── */
@@ -70,35 +79,99 @@ export const BrandCard = ({ data }: { data: BrandData }) => (
   </section>
 );
 
+/* ─── Offers Section (must-have) ─── */
+interface OfferData {
+  id: string;
+  offer_type: string;
+  price: number;
+  turnaround_days: number;
+  is_active: boolean;
+}
+
+export const OffersSection = ({ offers, onDeal }: { offers: OfferData[]; onDeal?: () => void }) => {
+  const activeOffers = offers.filter((o) => o.is_active);
+  const ALL_TYPES = ["Видео-интеграция", "Пост", "Подкаст"];
+
+  return (
+    <section className="space-y-3">
+      <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
+        <Briefcase className="h-4 w-4 text-muted-foreground" /> Услуги и цены
+      </h2>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {ALL_TYPES.map((type) => {
+          const offer = activeOffers.find((o) => o.offer_type === type);
+          const Icon = OFFER_ICONS[type] || FileEdit;
+          return (
+            <div
+              key={type}
+              className={`rounded-xl border p-4 space-y-2 ${
+                offer ? "border-border bg-card" : "border-border/50 bg-muted/20 opacity-60"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <Icon className="h-4 w-4 text-muted-foreground" />
+                <span className="text-[13px] font-semibold text-foreground">{type}</span>
+              </div>
+              {offer ? (
+                <>
+                  <p className="text-lg font-bold text-foreground">
+                    от {offer.price.toLocaleString("ru-RU")} <span className="text-[13px] font-normal text-muted-foreground">₽</span>
+                  </p>
+                  <div className="space-y-1 text-[12px] text-muted-foreground">
+                    <p>Срок: {offer.turnaround_days} дн</p>
+                    <p>Правки: по договорённости</p>
+                  </div>
+                </>
+              ) : (
+                <p className="text-[12px] text-muted-foreground">Не предлагается</p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {activeOffers.length > 0 && onDeal && (
+        <Button variant="outline" size="sm" className="text-xs gap-1.5" onClick={onDeal}>
+          <Handshake className="h-3.5 w-3.5" /> Предложить сделку по выбранному типу
+        </Button>
+      )}
+    </section>
+  );
+};
+
 /* ─── Portfolio Section ─── */
-export const PortfolioSection = ({ items, onRequestDeal }: { items: any[]; onRequestDeal?: () => void }) => (
+export const PortfolioSection = ({ items }: { items: any[] }) => (
   <section className="space-y-3">
     <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
-      <Briefcase className="h-4 w-4 text-muted-foreground" /> Портфолио и кампании
+      <Briefcase className="h-4 w-4 text-muted-foreground" /> Портфолио
     </h2>
     {items.length > 0 ? (
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {items.map((item) => (
+        {items.slice(0, 6).map((item) => (
           <ContentCard key={item.id} item={item} />
         ))}
       </div>
     ) : (
-      <EmptyModule
-        text="Автор пока не добавил примеры работ"
-        actionLabel={onRequestDeal ? "Предложить сделку" : undefined}
-        onAction={onRequestDeal}
-      />
+      <CompactEmpty text="Автор пока не добавил примеры работ" />
     )}
   </section>
 );
 
 /* ─── Audience Card ─── */
-export const AudienceCard = () => (
+export const AudienceCard = ({ connected = false }: { connected?: boolean }) => (
   <section className="space-y-3">
     <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
       <BarChart3 className="h-4 w-4 text-muted-foreground" /> Аудитория
     </h2>
-    <EmptyModule text="Аналитика аудитории не подключена" />
+    {connected ? (
+      <div className="rounded-xl border border-border bg-card p-5">
+        <p className="text-xs text-muted-foreground">Данные об аудитории будут здесь</p>
+      </div>
+    ) : (
+      <div className="flex items-center gap-2 rounded-lg border border-border/50 bg-muted/20 px-4 py-3">
+        <AlertCircle className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+        <span className="text-[12px] text-muted-foreground">Аналитика не подключена</span>
+      </div>
+    )}
   </section>
 );
 
@@ -108,7 +181,14 @@ export const WorkingTermsCard = () => (
     <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
       <FileText className="h-4 w-4 text-muted-foreground" /> Условия работы
     </h2>
-    <EmptyModule text="Условия сотрудничества не указаны" actionLabel="Запросить медиакит" />
+    <div className="rounded-xl border border-border bg-card p-4">
+      <ul className="space-y-1.5 text-[13px] text-muted-foreground list-disc list-inside">
+        <li>Оплата и коммуникация — только через платформу</li>
+        <li>Маркировка рекламы (ОРД) — по умолчанию платформа</li>
+        <li>Приёмка: утверждение рекламодателем перед публикацией</li>
+        <li>Темы-исключения и ограничения — обсуждаются в сделке</li>
+      </ul>
+    </div>
   </section>
 );
 
@@ -138,15 +218,10 @@ export const AchievementsSection = ({ achievements, onViewAll }: { achievements:
   );
 };
 
-/* ─── Empty Module ─── */
-const EmptyModule = ({ text, actionLabel, onAction }: { text: string; actionLabel?: string; onAction?: () => void }) => (
-  <div className="rounded-xl border border-border bg-card p-5 text-center space-y-2">
-    <p className="text-xs text-muted-foreground">{text}</p>
-    {actionLabel && (
-      <Button variant="outline" size="sm" className="text-xs" onClick={onAction}>
-        <Handshake className="h-3.5 w-3.5 mr-1" />
-        {actionLabel}
-      </Button>
-    )}
+/* ─── Compact Empty ─── */
+const CompactEmpty = ({ text }: { text: string }) => (
+  <div className="flex items-center gap-2 rounded-lg border border-border/50 bg-muted/20 px-4 py-3">
+    <AlertCircle className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+    <span className="text-[12px] text-muted-foreground">{text}</span>
   </div>
 );
