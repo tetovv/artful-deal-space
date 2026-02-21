@@ -96,18 +96,25 @@ export function ManualCampaignWizard({ isVerified, ordConnected, onBack, onCompl
 
   // Track creative data URL for draft persistence
   const [creativeDataUrl, setCreativeDataUrl] = useState<string | null>(initialDraft?.creativeDataUrl ?? null);
+  // Flag: true while base64 conversion is in progress — prevents auto-save from overwriting with null
+  const [convertingFile, setConvertingFile] = useState(false);
 
   // Convert file to data URL when creative changes
   useEffect(() => {
     if (creativeFile && !creativeDataUrl) {
+      setConvertingFile(true);
       fileToDataUrl(creativeFile)
         .then((url) => { if (url) setCreativeDataUrl(url); })
-        .catch(() => { /* file too large or unreadable — skip persisting */ });
+        .catch(() => { /* file too large or unreadable — skip persisting */ })
+        .finally(() => setConvertingFile(false));
     }
   }, [creativeFile]);
 
   // ── Auto-save draft ──
   useEffect(() => {
+    // Don't save while file is being converted — would overwrite data with null
+    if (convertingFile) return;
+
     const draft: CampaignDraft = {
       id: draftIdRef.current,
       updatedAt: new Date().toISOString(),
@@ -130,14 +137,13 @@ export function ManualCampaignWizard({ isVerified, ordConnected, onBack, onCompl
     try {
       saveDraft(draft);
     } catch {
-      // localStorage quota exceeded — try saving without the file data
       try {
         saveDraft({ ...draft, creativeDataUrl: null });
       } catch {
         // localStorage completely full — silently skip
       }
     }
-  }, [step, placement, destinationUrl, utmParams, creativeTitle, creativeText, totalBudget, startDateVal, endDateVal, noEndDate, dailyCap, creativeFile, creativeType, creativeDataUrl]);
+  }, [step, placement, destinationUrl, utmParams, creativeTitle, creativeText, totalBudget, startDateVal, endDateVal, noEndDate, dailyCap, creativeFile, creativeType, creativeDataUrl, convertingFile]);
 
   const addAudit = (action: string) => {
     setAuditLog((prev) => [...prev, { timestamp: new Date().toISOString(), action, user: "Вы" }]);
