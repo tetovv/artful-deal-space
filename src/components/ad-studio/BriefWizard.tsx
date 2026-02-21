@@ -6,6 +6,7 @@ import { Slider } from "@/components/ui/slider";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { DatePickerField } from "@/components/ui/date-picker-field";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
@@ -26,7 +27,7 @@ export interface BriefData {
   placementType: string;
   budgetMin: number;
   budgetMax: number;
-  deadline: string;
+  deadline: Date | undefined;
   turnaroundDays: number;
   niches: string[];
   audienceMin: number;
@@ -39,7 +40,7 @@ const defaultBrief: BriefData = {
   placementType: "",
   budgetMin: 0,
   budgetMax: 200000,
-  deadline: "",
+  deadline: undefined,
   turnaroundDays: 14,
   niches: [],
   audienceMin: 0,
@@ -182,11 +183,11 @@ export function BriefWizard({ open, onClose, onSubmit }: BriefWizardProps) {
                 </div>
 
                 <SectionLabel>Дедлайн / окно публикации</SectionLabel>
-                <Input
-                  type="date"
+                <DatePickerField
                   value={brief.deadline}
-                  onChange={(e) => update("deadline", e.target.value)}
-                  className="bg-background h-10 max-w-[220px]"
+                  onChange={(d) => update("deadline", d)}
+                  placeholder="Выберите дату"
+                  minDate={new Date()}
                 />
 
                 <SectionLabel>Максимальный срок выполнения</SectionLabel>
