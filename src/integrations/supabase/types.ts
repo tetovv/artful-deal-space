@@ -608,6 +608,8 @@ export type Database = {
           active_started_at: string | null
           amount: number
           created_at: string
+          creator_publication_due_at: string | null
+          creator_response_due_at: string | null
           deal_id: string
           escrow_state: string
           id: string
@@ -618,6 +620,8 @@ export type Database = {
           platform_fee: number | null
           proof_screenshot_path: string | null
           publication_url: string | null
+          refund_reason: string | null
+          refunded_at: string | null
           released_at: string | null
           released_by: string | null
           reserved_at: string | null
@@ -629,6 +633,8 @@ export type Database = {
           active_started_at?: string | null
           amount?: number
           created_at?: string
+          creator_publication_due_at?: string | null
+          creator_response_due_at?: string | null
           deal_id: string
           escrow_state?: string
           id?: string
@@ -639,6 +645,8 @@ export type Database = {
           platform_fee?: number | null
           proof_screenshot_path?: string | null
           publication_url?: string | null
+          refund_reason?: string | null
+          refunded_at?: string | null
           released_at?: string | null
           released_by?: string | null
           reserved_at?: string | null
@@ -650,6 +658,8 @@ export type Database = {
           active_started_at?: string | null
           amount?: number
           created_at?: string
+          creator_publication_due_at?: string | null
+          creator_response_due_at?: string | null
           deal_id?: string
           escrow_state?: string
           id?: string
@@ -660,6 +670,8 @@ export type Database = {
           platform_fee?: number | null
           proof_screenshot_path?: string | null
           publication_url?: string | null
+          refund_reason?: string | null
+          refunded_at?: string | null
           released_at?: string | null
           released_by?: string | null
           reserved_at?: string | null

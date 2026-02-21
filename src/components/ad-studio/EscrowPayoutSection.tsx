@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 import { EscrowStepIndicator } from "./EscrowStepIndicator";
 import {
   type EscrowState, getEscrowStateLabel,
-  useSubmitProof, useConfirmPublication, useLockEscrowDispute, useExecutePayout,
+  useSubmitProof, useConfirmPublication, useLockEscrowDispute, useExecutePayout, useRefundEscrow,
 } from "@/hooks/useEscrowPayout";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -33,15 +33,31 @@ export function EscrowPayoutSection({ escrowItem, deal, isCreator, isAdvertiser 
   const confirmPub = useConfirmPublication();
   const lockDispute = useLockEscrowDispute();
   const executePayout = useExecutePayout();
+  const refundEscrow = useRefundEscrow();
 
   const [showProofModal, setShowProofModal] = useState(false);
   const [proofUrl, setProofUrl] = useState("");
   const [showDisputeModal, setShowDisputeModal] = useState(false);
   const [disputeReason, setDisputeReason] = useState("");
+  const [showRefundModal, setShowRefundModal] = useState(false);
 
   const placementDays = deal.placement_duration_days;
   const activeEndsAt = escrowItem.active_ends_at;
   const activeStartedAt = escrowItem.active_started_at;
+
+  // SLA timers
+  const responseDueAt = escrowItem.creator_response_due_at;
+  const publicationDueAt = escrowItem.creator_publication_due_at;
+  const isResponseSlaExpired = responseDueAt && new Date(responseDueAt).getTime() <= Date.now();
+  const isPublicationSlaExpired = publicationDueAt && new Date(publicationDueAt).getTime() <= Date.now();
+  const isSlaExpired = isResponseSlaExpired || isPublicationSlaExpired;
+
+  // Refund eligibility: only when SLA expired and still FUNDS_RESERVED
+  const canRefund = isAdvertiser && escrowState === "FUNDS_RESERVED" && isSlaExpired;
+
+  const slaExpiredDays = isSlaExpired
+    ? Math.ceil((Date.now() - new Date(responseDueAt || publicationDueAt).getTime()) / 86400000)
+    : 0;
 
   // Check if active period expired → auto-eligible for payout
   const isExpired = activeEndsAt && new Date(activeEndsAt).getTime() <= Date.now();
@@ -128,6 +144,31 @@ export function EscrowPayoutSection({ escrowItem, deal, isCreator, isAdvertiser 
               <Upload className="h-4 w-4 mr-1.5" />
               Подтвердить публикацию
             </Button>
+          )}
+
+          {/* Advertiser: Refund lock hint or refund button */}
+          {isAdvertiser && escrowState === "FUNDS_RESERVED" && !canRefund && (
+            <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
+              <Shield className="h-3.5 w-3.5 shrink-0" />
+              <span>Средства зарезервированы и временно недоступны для возврата до выполнения условий.</span>
+            </div>
+          )}
+
+          {/* Advertiser: Refund available (SLA expired) */}
+          {canRefund && (
+            <Button size="sm" variant="outline" className="text-[14px] h-9 border-destructive/30 text-destructive hover:bg-destructive/10"
+              onClick={() => setShowRefundModal(true)}>
+              <AlertTriangle className="h-4 w-4 mr-1.5" />
+              Отменить резерв
+            </Button>
+          )}
+
+          {/* SLA info */}
+          {isAdvertiser && escrowState === "FUNDS_RESERVED" && responseDueAt && !isSlaExpired && (
+            <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
+              <Clock className="h-3 w-3" />
+              <span>Срок ответа автора: {new Date(responseDueAt).toLocaleDateString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
+            </div>
           )}
 
           {/* Advertiser: Confirm publication (optional) */}
@@ -228,6 +269,39 @@ export function EscrowPayoutSection({ escrowItem, deal, isCreator, isAdvertiser 
                   setDisputeReason("");
                 }}>
                 Приостановить выплату
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Refund confirmation modal ── */}
+      <Dialog open={showRefundModal} onOpenChange={setShowRefundModal}>
+        <DialogContent className="sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" /> Отменить резерв
+            </DialogTitle>
+            <DialogDescription>Средства будут возвращены на ваш баланс</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="rounded-lg bg-muted/50 px-3 py-2 text-[13px] text-muted-foreground">
+              <p className="font-medium text-foreground mb-1">Причина отмены:</p>
+              <p>Нет действий автора {slaExpiredDays} дн. (срок истёк {new Date(responseDueAt || publicationDueAt).toLocaleDateString("ru-RU", { day: "numeric", month: "short" })})</p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setShowRefundModal(false)}>Отмена</Button>
+              <Button size="sm" variant="destructive" disabled={refundEscrow.isPending}
+                onClick={() => {
+                  refundEscrow.mutate({
+                    escrowId: escrowItem.id,
+                    dealId: deal.id,
+                    reason: `Нет действий автора ${slaExpiredDays} дн.`,
+                  });
+                  setShowRefundModal(false);
+                }}>
+                {refundEscrow.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+                Отменить резерв
               </Button>
             </div>
           </div>
