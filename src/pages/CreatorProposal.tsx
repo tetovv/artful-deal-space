@@ -1457,151 +1457,151 @@ function MoreTabContent({ deal, auditLog, advertiserDisplayName, allTermsSorted,
   const prevFields = prevVersion ? ((prevVersion as any).fields as Record<string, string>) : null;
 
   return (
-    <div className="p-5 space-y-6 max-w-[820px] mx-auto">
-      {/* ── Version history (read-only) ── */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-[15px] font-semibold text-foreground flex items-center gap-2">
-            <History className="h-4 w-4 text-muted-foreground" /> Версии условий
-            {allTermsSorted.length > 0 && <span className="text-[12px] text-muted-foreground font-normal">({allTermsSorted.length})</span>}
-          </h3>
-          {isAccepted && (
-            <Badge variant="outline" className="text-[11px] bg-muted text-muted-foreground border-muted-foreground/20">Только чтение</Badge>
-          )}
-        </div>
-
-        {isAccepted && (
-          <div className="rounded-lg border border-green-500/20 bg-green-500/5 px-3.5 py-2.5 flex items-center gap-2">
-            <ShieldCheck className="h-4 w-4 text-green-500 shrink-0" />
-            <p className="text-[13px] text-foreground/80">Предложение принято, история доступна только для просмотра</p>
-          </div>
-        )}
-
-        {allTermsSorted.length === 0 ? (
-          <div className="text-center py-8">
-            <History className="h-7 w-7 mx-auto text-muted-foreground/30 mb-2" />
-            <p className="text-[14px] text-muted-foreground">Версий условий пока нет</p>
-          </div>
-        ) : (
-          <>
-            <div className="flex flex-wrap gap-2">
-              {allTermsSorted.map((t: any, idx: number) => {
-                const isSelected = idx === effectiveIdx;
-                const createdByCreator = t.created_by === deal.creator_id;
-                const isCurrent = idx === allTermsSorted.length - 1;
-                return (
-                  <button
-                    key={t.id}
-                    onClick={() => setSelectedVersionIdx(idx)}
-                    className={cn(
-                      "px-3 py-2 rounded-lg text-[13px] font-medium border transition-colors flex flex-col items-start gap-0.5",
-                      isSelected
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : t.status === "accepted"
-                          ? "bg-green-500/10 text-green-600 border-green-500/30 hover:bg-green-500/20"
-                          : "bg-muted/50 text-muted-foreground border-border hover:bg-muted"
-                    )}
-                  >
-                    <span className="flex items-center gap-1.5">
-                      v{t.version}
-                      {isCurrent && <Badge variant="outline" className="text-[9px] h-4 px-1 border-primary/30 bg-primary/10 text-primary">Текущая</Badge>}
-                      {t.status === "accepted" && <Badge variant="outline" className="text-[9px] h-4 px-1 border-green-500/30 bg-green-500/10 text-green-500">Принято</Badge>}
-                    </span>
-                    <span className={cn("text-[10px]", isSelected ? "text-primary-foreground/70" : "text-muted-foreground")}>
-                      {createdByCreator ? "Вы" : "Рекламодатель"} · {fmtDateTime(t.created_at)}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-
-            {selectedVersion && (
-              <div className="rounded-xl border border-border bg-card p-4 space-y-3">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[14px] font-semibold text-foreground">v{(selectedVersion as any).version}</span>
-                  <Badge variant="outline" className={cn("text-[10px] h-5",
-                    (selectedVersion as any).status === "accepted" ? "bg-green-500/10 text-green-500 border-green-500/30" :
-                    effectiveIdx === allTermsSorted.length - 1 ? "bg-primary/10 text-primary border-primary/30" :
-                    "bg-muted text-muted-foreground border-muted-foreground/20"
-                  )}>
-                    {(selectedVersion as any).status === "accepted" ? "Принято" : effectiveIdx === allTermsSorted.length - 1 ? "Текущая" : "Заменена"}
-                  </Badge>
-                  <span className="text-[11px] text-muted-foreground">{fmtDateTime((selectedVersion as any).created_at)}</span>
-                  <span className="text-[11px] text-muted-foreground">· {(selectedVersion as any).created_by === deal.creator_id ? "Вы" : advertiserDisplayName}</span>
-                </div>
-
-                {selectedFields && (
-                  <div className="space-y-2">
-                    {selectedFields.budget && <KVRow label="Бюджет" value={fmtBudget(selectedFields.budget)} bold />}
-                    {selectedFields.deadline && <KVRow label="Дедлайн" value={fmtDate(selectedFields.deadline)} />}
-                    {selectedFields.revisions && !isBriefEmpty(selectedFields.revisions) && <KVRow label="Правки" value={selectedFields.revisions} />}
-                    {selectedFields.acceptanceCriteria && !isBriefEmpty(selectedFields.acceptanceCriteria) && <KVRow label="Приёмка" value={selectedFields.acceptanceCriteria} />}
-                  </div>
-                )}
-
-                {selectedFields?.counterMessage && (
-                  <p className="text-[13px] text-foreground/70 italic border-l-2 border-muted-foreground/20 pl-3 safe-text">«{selectedFields.counterMessage}»</p>
-                )}
-
-                {prevFields && selectedFields && (() => {
-                  const diffs = getDiffFields(selectedFields, prevFields);
-                  if (diffs.length === 0) return null;
-                  return (
-                    <div className="rounded-lg bg-muted/30 border border-border px-3 py-2 space-y-1.5">
-                      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Изменения</p>
-                      {diffs.map((d) => (
-                        <div key={d.key} className="flex items-center gap-2 text-[12px]">
-                          <span className="text-muted-foreground w-[90px] shrink-0">{d.label}:</span>
-                          <span className="line-through text-muted-foreground/50">{d.from}</span>
-                          <span className="text-foreground">→</span>
-                          <span className="font-semibold text-primary">{d.to}</span>
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })()}
-              </div>
+    <div className="p-4 lg:p-5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* ── Left: Version history (read-only) ── */}
+        <div className="rounded-xl border border-border bg-card p-4 lg:p-5 space-y-3 min-w-0">
+          <div className="flex items-center justify-between">
+            <h3 className="text-[17px] font-semibold text-foreground flex items-center gap-2">
+              <History className="h-4 w-4 text-muted-foreground" /> Версии условий
+              {allTermsSorted.length > 0 && <span className="text-[12px] text-muted-foreground font-normal">({allTermsSorted.length})</span>}
+            </h3>
+            {isAccepted && (
+              <Badge variant="outline" className="text-[11px] bg-muted text-muted-foreground border-muted-foreground/20">Только чтение</Badge>
             )}
-          </>
-        )}
-      </div>
+          </div>
 
-      <Separator />
+          {isAccepted && (
+            <div className="rounded-lg border border-green-500/20 bg-green-500/5 px-3.5 py-2.5 flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-green-500 shrink-0" />
+              <p className="text-[13px] text-foreground/80 safe-text">Предложение принято, история доступна только для просмотра</p>
+            </div>
+          )}
 
-      {/* ── Audit log ── */}
-      <div className="space-y-4">
-        <h3 className="text-[15px] font-semibold text-foreground flex items-center gap-2">
-          <ScrollText className="h-4 w-4 text-muted-foreground" /> Журнал событий
-        </h3>
+          {allTermsSorted.length === 0 ? (
+            <div className="text-center py-8">
+              <History className="h-7 w-7 mx-auto text-muted-foreground/30 mb-2" />
+              <p className="text-[14px] text-muted-foreground">Версий условий пока нет</p>
+            </div>
+          ) : (
+            <>
+              <div className="flex flex-wrap gap-2">
+                {allTermsSorted.map((t: any, idx: number) => {
+                  const isSelected = idx === effectiveIdx;
+                  const createdByCreator = t.created_by === deal.creator_id;
+                  const isCurrent = idx === allTermsSorted.length - 1;
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => setSelectedVersionIdx(idx)}
+                      className={cn(
+                        "px-3 py-2 rounded-lg text-[13px] font-medium border transition-colors flex flex-col items-start gap-0.5",
+                        isSelected
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : t.status === "accepted"
+                            ? "bg-green-500/10 text-green-600 border-green-500/30 hover:bg-green-500/20"
+                            : "bg-muted/50 text-muted-foreground border-border hover:bg-muted"
+                      )}
+                    >
+                      <span className="flex items-center gap-1.5">
+                        v{t.version}
+                        {isCurrent && <Badge variant="outline" className="text-[9px] h-4 px-1 border-primary/30 bg-primary/10 text-primary">Текущая</Badge>}
+                        {t.status === "accepted" && <Badge variant="outline" className="text-[9px] h-4 px-1 border-green-500/30 bg-green-500/10 text-green-500">Принято</Badge>}
+                      </span>
+                      <span className={cn("text-[10px]", isSelected ? "text-primary-foreground/70" : "text-muted-foreground")}>
+                        {createdByCreator ? "Вы" : "Рекламодатель"} · {fmtDateTime(t.created_at)}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
 
-        <div className="relative pl-6 space-y-0">
-          <div className="absolute left-0 top-0 bottom-0 w-px bg-border" />
+              {selectedVersion && (
+                <div className="rounded-xl border border-border bg-muted/20 p-4 space-y-3">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[14px] font-semibold text-foreground">v{(selectedVersion as any).version}</span>
+                    <Badge variant="outline" className={cn("text-[10px] h-5",
+                      (selectedVersion as any).status === "accepted" ? "bg-green-500/10 text-green-500 border-green-500/30" :
+                      effectiveIdx === allTermsSorted.length - 1 ? "bg-primary/10 text-primary border-primary/30" :
+                      "bg-muted text-muted-foreground border-muted-foreground/20"
+                    )}>
+                      {(selectedVersion as any).status === "accepted" ? "Принято" : effectiveIdx === allTermsSorted.length - 1 ? "Текущая" : "Заменена"}
+                    </Badge>
+                    <span className="text-[11px] text-muted-foreground">{fmtDateTime((selectedVersion as any).created_at)}</span>
+                    <span className="text-[11px] text-muted-foreground safe-text">· {(selectedVersion as any).created_by === deal.creator_id ? "Вы" : advertiserDisplayName}</span>
+                  </div>
 
-          <AuditEntry icon={<FileText className="h-3.5 w-3.5" />} text={`Предложение создано рекламодателем ${advertiserDisplayName}`} date={deal.created_at} accent />
+                  {selectedFields && (
+                    <div className="space-y-2">
+                      {selectedFields.budget && <KVRow label="Бюджет" value={fmtBudget(selectedFields.budget)} bold />}
+                      {selectedFields.deadline && <KVRow label="Дедлайн" value={fmtDate(selectedFields.deadline)} />}
+                      {selectedFields.revisions && !isBriefEmpty(selectedFields.revisions) && <KVRow label="Правки" value={selectedFields.revisions} />}
+                      {selectedFields.acceptanceCriteria && !isBriefEmpty(selectedFields.acceptanceCriteria) && <KVRow label="Приёмка" value={selectedFields.acceptanceCriteria} />}
+                    </div>
+                  )}
 
-          {display.map((entry: any) => (
-            <AuditEntry
-              key={entry.id}
-              icon={
-                entry.category === "terms" ? <ArrowLeftRight className="h-3.5 w-3.5" /> :
-                entry.category === "files" ? <Paperclip className="h-3.5 w-3.5" /> :
-                entry.category === "payments" ? <CheckCircle2 className="h-3.5 w-3.5" /> :
-                <ScrollText className="h-3.5 w-3.5" />
-              }
-              text={entry.action}
-              date={entry.created_at}
-              category={entry.category !== "general" ? entry.category : undefined}
-            />
-          ))}
+                  {selectedFields?.counterMessage && (
+                    <p className="text-[13px] text-foreground/70 italic border-l-2 border-muted-foreground/20 pl-3 safe-text">«{selectedFields.counterMessage}»</p>
+                  )}
 
-          {auditLog.length === 0 && (
-            <AuditEntry icon={<Clock className="h-3.5 w-3.5" />} text="Ожидание действий" date={deal.created_at} />
+                  {prevFields && selectedFields && (() => {
+                    const diffs = getDiffFields(selectedFields, prevFields);
+                    if (diffs.length === 0) return null;
+                    return (
+                      <div className="rounded-lg bg-muted/30 border border-border px-3 py-2 space-y-1.5">
+                        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Изменения</p>
+                        {diffs.map((d) => (
+                          <div key={d.key} className="flex items-center gap-2 text-[12px] safe-text">
+                            <span className="text-muted-foreground w-[90px] shrink-0">{d.label}:</span>
+                            <span className="line-through text-muted-foreground/50">{d.from}</span>
+                            <span className="text-foreground">→</span>
+                            <span className="font-semibold text-primary">{d.to}</span>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+            </>
           )}
         </div>
 
-        {auditLog.length > 10 && !showAll && (
-          <button onClick={() => setShowAll(true)} className="text-[13px] text-primary hover:underline">Показать все ({auditLog.length})</button>
-        )}
+        {/* ── Right: Audit log ── */}
+        <div className="rounded-xl border border-border bg-card p-4 lg:p-5 space-y-3 min-w-0">
+          <h3 className="text-[17px] font-semibold text-foreground flex items-center gap-2">
+            <ScrollText className="h-4 w-4 text-muted-foreground" /> Журнал событий
+          </h3>
+
+          <div className="relative pl-6 space-y-0">
+            <div className="absolute left-0 top-0 bottom-0 w-px bg-border" />
+
+            <AuditEntry icon={<FileText className="h-3.5 w-3.5" />} text={`Предложение создано рекламодателем ${advertiserDisplayName}`} date={deal.created_at} accent />
+
+            {display.map((entry: any) => (
+              <AuditEntry
+                key={entry.id}
+                icon={
+                  entry.category === "terms" ? <ArrowLeftRight className="h-3.5 w-3.5" /> :
+                  entry.category === "files" ? <Paperclip className="h-3.5 w-3.5" /> :
+                  entry.category === "payments" ? <CheckCircle2 className="h-3.5 w-3.5" /> :
+                  <ScrollText className="h-3.5 w-3.5" />
+                }
+                text={entry.action}
+                date={entry.created_at}
+                category={entry.category !== "general" ? entry.category : undefined}
+              />
+            ))}
+
+            {auditLog.length === 0 && (
+              <AuditEntry icon={<Clock className="h-3.5 w-3.5" />} text="Ожидание действий" date={deal.created_at} />
+            )}
+          </div>
+
+          {auditLog.length > 10 && !showAll && (
+            <button onClick={() => setShowAll(true)} className="text-[13px] text-primary hover:underline">Показать все ({auditLog.length})</button>
+          )}
+        </div>
       </div>
     </div>
   );
