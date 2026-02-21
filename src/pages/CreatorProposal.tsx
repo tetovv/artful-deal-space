@@ -486,27 +486,43 @@ export default function CreatorProposal() {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            {/* Primary CTA */}
+            {/* Single primary CTA: decision dropdown */}
             {canRespond && (
-              <Button size="sm" className="h-9 gap-1.5 text-[13px]" disabled={accepting} onClick={handleAccept}>
-                {accepting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                Принять предложение
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="sm" className="h-9 gap-1.5 text-[13px]">
+                    <CheckCircle2 className="h-4 w-4" /> Принять решение
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-[220px]">
+                  <DropdownMenuItem
+                    disabled={accepting}
+                    onClick={handleAccept}
+                    className="gap-2 font-medium"
+                  >
+                    {accepting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4 text-green-500" />}
+                    Принять предложение
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setShowCounterModal(true)}
+                    className="gap-2"
+                  >
+                    <ArrowLeftRight className="h-4 w-4" /> Встречное предложение
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="gap-2 text-destructive focus:text-destructive"
+                    onClick={() => setShowRejectDialog(true)}
+                  >
+                    <XCircle className="h-4 w-4" /> Отклонить
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
 
-            {/* Secondary CTA: Counter-offer */}
-            {canRespond && (
-              <Button
-                variant="outline" size="sm" className="h-9 gap-1.5 text-[13px]"
-                onClick={() => setShowCounterModal(true)}
-              >
-                <ArrowLeftRight className="h-4 w-4" /> Встречное
-              </Button>
-            )}
-
-            {/* Accepted → Open deal */}
+            {/* Accepted → Open deal workspace */}
             {isAccepted && (
-              <Button size="sm" className="h-9 gap-1.5 text-[13px]" onClick={() => setActiveTab("negotiation")}>
+              <Button size="sm" className="h-9 gap-1.5 text-[13px]" onClick={() => navigate(`/creator/deals/${deal.id}`)}>
                 <ExternalLink className="h-4 w-4" /> Открыть сделку
               </Button>
             )}
@@ -526,15 +542,6 @@ export default function CreatorProposal() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                {canRespond && (
-                  <DropdownMenuItem
-                    className="text-destructive focus:text-destructive"
-                    onClick={() => setShowRejectDialog(true)}
-                  >
-                    <XCircle className="h-4 w-4 mr-2" /> Отклонить
-                  </DropdownMenuItem>
-                )}
-                {canRespond && <DropdownMenuSeparator />}
                 <DropdownMenuItem onClick={handleArchive}>
                   <Archive className="h-4 w-4 mr-2" /> Архивировать
                 </DropdownMenuItem>
@@ -599,21 +606,6 @@ export default function CreatorProposal() {
                   </div>
                   <p className="text-[14px] text-foreground font-medium">{nextStep.label}</p>
                   <p className="text-[12px] text-muted-foreground">{nextStep.description}</p>
-                  {nextStep.action === "chat" && (
-                    <Button size="sm" variant="outline" className="mt-1 h-8 text-[12px] gap-1.5" onClick={() => setActiveTab("negotiation")}>
-                      <MessageSquare className="h-3.5 w-3.5" /> Задать вопрос
-                    </Button>
-                  )}
-                  {nextStep.action === "counter" && (
-                    <Button size="sm" variant="outline" className="mt-1 h-8 text-[12px] gap-1.5" onClick={() => setShowCounterModal(true)}>
-                      <ArrowLeftRight className="h-3.5 w-3.5" /> Ответить
-                    </Button>
-                  )}
-                  {nextStep.action === "accept" && (
-                    <Button size="sm" className="mt-1 h-8 text-[12px] gap-1.5" onClick={handleAccept} disabled={accepting}>
-                      <CheckCircle2 className="h-3.5 w-3.5" /> Принять
-                    </Button>
-                  )}
                 </div>
               )}
 
