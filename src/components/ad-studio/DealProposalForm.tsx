@@ -9,6 +9,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { CurrencyInput } from "@/components/ui/currency-input";
+import { DatePickerField } from "@/components/ui/date-picker-field";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -412,16 +414,12 @@ export function DealProposalForm({ open, onClose, creator, resumeDraft }: DealPr
 
                   {budgetMode === "fixed" ? (
                     <div className="space-y-1">
-                      <div className="relative">
-                        <Input
-                          type="number"
-                          value={budgetFixed}
-                          onChange={(e) => { setBudgetFixed(e.target.value); setBudgetAutoFilled(false); }}
-                          placeholder={selectedOffer ? `напр. ${selectedOffer.price.toLocaleString("ru-RU")}` : "напр. 50 000"}
-                          className="h-10 pr-8"
-                        />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[13px] text-muted-foreground">₽</span>
-                      </div>
+                      <CurrencyInput
+                        value={budgetFixed}
+                        onChange={(v) => { setBudgetFixed(v); setBudgetAutoFilled(false); }}
+                        placeholder={selectedOffer ? `напр. ${selectedOffer.price.toLocaleString("ru-RU")}` : "напр. 50 000"}
+                        min={100}
+                      />
                       {budgetAutoFilled && selectedOffer && (
                         <p className="text-[11px] text-primary flex items-center gap-1">
                           <Info className="h-3 w-3" />На основе оффера автора
@@ -433,26 +431,18 @@ export function DealProposalForm({ open, onClose, creator, resumeDraft }: DealPr
                     </div>
                   ) : (
                     <div className="grid grid-cols-2 gap-2">
-                      <div className="relative">
-                        <Input
-                          type="number"
-                          value={budgetMin}
-                          onChange={(e) => setBudgetMin(e.target.value)}
-                          placeholder="От (напр. 30 000)"
-                          className="h-10 pr-8"
-                        />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[13px] text-muted-foreground">₽</span>
-                      </div>
-                      <div className="relative">
-                        <Input
-                          type="number"
-                          value={budgetMax}
-                          onChange={(e) => setBudgetMax(e.target.value)}
-                          placeholder="До (напр. 80 000)"
-                          className="h-10 pr-8"
-                        />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[13px] text-muted-foreground">₽</span>
-                      </div>
+                      <CurrencyInput
+                        value={budgetMin}
+                        onChange={setBudgetMin}
+                        placeholder="От (напр. 30 000)"
+                        min={0}
+                      />
+                      <CurrencyInput
+                        value={budgetMax}
+                        onChange={setBudgetMax}
+                        placeholder="До (напр. 80 000)"
+                        min={0}
+                      />
                     </div>
                   )}
                 </div>
@@ -613,33 +603,3 @@ function FieldLabel({ children, required }: { children: React.ReactNode; require
   );
 }
 
-function DatePickerField({ value, onChange, placeholder, minDate }: {
-  value: Date | undefined;
-  onChange: (d: Date | undefined) => void;
-  placeholder: string;
-  minDate: Date;
-}) {
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          className={cn("w-full justify-start h-10 text-left font-normal", !value && "text-muted-foreground")}
-        >
-          <CalendarIcon className="mr-2 h-4 w-4" />
-          {value ? format(value, "dd MMM yyyy", { locale: ru }) : placeholder}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-auto p-0" align="start">
-        <Calendar
-          mode="single"
-          selected={value}
-          onSelect={onChange}
-          disabled={(date) => date < minDate}
-          initialFocus
-          className="p-3 pointer-events-auto"
-        />
-      </PopoverContent>
-    </Popover>
-  );
-}

@@ -8,6 +8,8 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Progress } from "@/components/ui/progress";
+import { CurrencyInput } from "@/components/ui/currency-input";
+import { DatePickerField } from "@/components/ui/date-picker-field";
 import {
   ArrowLeft, ArrowRight, CheckCircle2, Image, Video, Link2, Type,
   CalendarDays, Wallet, ShieldCheck, AlertTriangle, Loader2, Lock,
@@ -69,8 +71,8 @@ export function ManualCampaignWizard({ isVerified, ordConnected, onBack, onCompl
 
   // Step 3 - Budget & schedule
   const [totalBudget, setTotalBudget] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  const [startDateVal, setStartDateVal] = useState<Date | undefined>();
+  const [endDateVal, setEndDateVal] = useState<Date | undefined>();
   const [noEndDate, setNoEndDate] = useState(false);
   const [dailyCap, setDailyCap] = useState("");
 
@@ -93,12 +95,12 @@ export function ManualCampaignWizard({ isVerified, ordConnected, onBack, onCompl
     switch (step) {
       case 1: return placement !== null;
       case 2: return creativeFile !== null && destinationUrl.trim().length > 0;
-      case 3: return totalBudget.trim().length > 0 && Number(totalBudget) > 0 && startDate.length > 0;
+      case 3: return totalBudget.trim().length > 0 && Number(totalBudget) > 0 && startDateVal !== undefined;
       case 4: return true; // Can view step 5 even without ERID, launch is blocked
       case 5: return false;
       default: return false;
     }
-  }, [step, placement, creativeFile, destinationUrl, totalBudget, startDate]);
+  }, [step, placement, creativeFile, destinationUrl, totalBudget, startDateVal]);
 
   const goNext = () => {
     if (step < 5) setStep((step + 1) as WizardStep);
@@ -157,8 +159,8 @@ export function ManualCampaignWizard({ isVerified, ordConnected, onBack, onCompl
         ctr: 0,
         budget: Number(totalBudget),
         spent: 0,
-        startDate,
-        endDate: noEndDate ? "" : endDate,
+        startDate: startDateVal ? startDateVal.toISOString().split("T")[0] : "",
+        endDate: noEndDate ? "" : (endDateVal ? endDateVal.toISOString().split("T")[0] : ""),
         erid: eridValue,
         ordProvider: "MediaOS ОРД",
         ordStatus: "connected",
@@ -319,25 +321,23 @@ export function ManualCampaignWizard({ isVerified, ordConnected, onBack, onCompl
 
       <div className="space-y-1.5">
         <Label className="text-[13px]">Общий бюджет (₽) *</Label>
-        <div className="relative">
-          <Wallet className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-          <Input
-            inputMode="numeric"
-            placeholder="15000"
-            value={totalBudget}
-            onChange={(e) => {
-              const v = e.target.value.replace(/[^0-9]/g, "");
-              setTotalBudget(v);
-            }}
-            className="pl-9 text-[14px]"
-          />
-        </div>
+        <CurrencyInput
+          value={totalBudget}
+          onChange={setTotalBudget}
+          placeholder="15 000"
+          min={100}
+        />
       </div>
 
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <Label className="text-[13px]">Дата старта *</Label>
-          <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="text-[14px]" />
+          <DatePickerField
+            value={startDateVal}
+            onChange={setStartDateVal}
+            placeholder="Выберите дату"
+            minDate={new Date()}
+          />
         </div>
         <div className="space-y-1.5">
           <Label className="text-[13px] flex items-center gap-2">
@@ -347,21 +347,23 @@ export function ManualCampaignWizard({ isVerified, ordConnected, onBack, onCompl
               <span className="text-[11px] text-muted-foreground">Без даты</span>
             </div>
           </Label>
-          <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="text-[14px]" disabled={noEndDate} />
+          <DatePickerField
+            value={endDateVal}
+            onChange={setEndDateVal}
+            placeholder="Выберите дату"
+            minDate={startDateVal || new Date()}
+            disabled={noEndDate}
+          />
         </div>
       </div>
 
       <div className="space-y-1.5">
         <Label className="text-[13px]">Дневной лимит (₽) <span className="text-muted-foreground">(опционально)</span></Label>
-        <Input
-          inputMode="numeric"
-          placeholder="1000"
+        <CurrencyInput
           value={dailyCap}
-          onChange={(e) => {
-            const v = e.target.value.replace(/[^0-9]/g, "");
-            setDailyCap(v);
-          }}
-          className="text-[14px]"
+          onChange={setDailyCap}
+          placeholder="1 000"
+          min={0}
         />
         <p className="text-[11px] text-muted-foreground">Если указан — расходы в день не превысят эту сумму</p>
       </div>
@@ -483,9 +485,9 @@ export function ManualCampaignWizard({ isVerified, ordConnected, onBack, onCompl
             <span className="text-muted-foreground">Общий бюджет</span>
             <span className="text-foreground font-medium">{Number(totalBudget).toLocaleString("ru-RU")} ₽</span>
             <span className="text-muted-foreground">Старт</span>
-            <span className="text-foreground font-medium">{startDate}</span>
+            <span className="text-foreground font-medium">{startDateVal ? startDateVal.toLocaleDateString("ru-RU") : "—"}</span>
             <span className="text-muted-foreground">Окончание</span>
-            <span className="text-foreground font-medium">{noEndDate ? "Без ограничения" : endDate || "—"}</span>
+            <span className="text-foreground font-medium">{noEndDate ? "Без ограничения" : (endDateVal ? endDateVal.toLocaleDateString("ru-RU") : "—")}</span>
             {dailyCap && <>
               <span className="text-muted-foreground">Дневной лимит</span>
               <span className="text-foreground font-medium">{Number(dailyCap).toLocaleString("ru-RU")} ₽</span>
