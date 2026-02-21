@@ -696,76 +696,57 @@ export default function CreatorProposal() {
 
         {/* ═══ TERMS TAB ═══ */}
         {activeTab === "terms" && (
-          <div className="max-w-[800px] space-y-6">
-            {/* Placement */}
-            <Section title="Размещение">
-              <TermsGrid>
-                {placement && <TermsRow label="Тип" value={<span className="flex items-center gap-1.5"><PlacementIcon className="h-3.5 w-3.5 text-primary" />{placement}</span>} />}
-                {termsFields?.deliverables && <TermsRow label="Результат" value={termsFields.deliverables} />}
-                {deal.deadline && <TermsRow label="Окно публикации" value={fmtDate(deal.deadline)} />}
-                {termsFields?.publishStart && <TermsRow label="Начало публикации" value={fmtDate(termsFields.publishStart)} />}
-                {termsFields?.publishEnd && <TermsRow label="Конец публикации" value={fmtDate(termsFields.publishEnd)} />}
-              </TermsGrid>
-            </Section>
-
-            <Separator />
-
-            {/* Budget */}
-            <Section title="Бюджет">
-              <TermsGrid>
-                {deal.budget ? <TermsRow label="Сумма" value={<span className="font-bold">{fmtBudget(deal.budget)}</span>} /> : null}
-                {termsFields?.budgetMin && <TermsRow label="Мин. бюджет" value={fmtBudget(termsFields.budgetMin)} />}
-                {termsFields?.budgetMax && <TermsRow label="Макс. бюджет" value={fmtBudget(termsFields.budgetMax)} />}
-                {termsFields?.paymentMilestones && <TermsRow label="Этапы оплаты" value={termsFields.paymentMilestones} />}
-              </TermsGrid>
-            </Section>
-
-            {/* Revisions */}
-            {termsFields?.revisions && !isBriefEmpty(termsFields.revisions) && (
-              <>
-                <Separator />
-                <Section title="Правки">
-                  <TermsGrid>
-                    <TermsRow label="Количество правок" value={termsFields.revisions} />
-                  </TermsGrid>
-                </Section>
-              </>
-            )}
-
-            {/* Acceptance */}
-            {termsFields?.acceptanceCriteria && !isBriefEmpty(termsFields.acceptanceCriteria) && (
-              <>
-                <Separator />
-                <Section title="Приёмка">
-                  <TermsGrid>
-                    <TermsRow label="Критерии приёмки" value={termsFields.acceptanceCriteria} />
-                    {termsFields?.reviewWindow && <TermsRow label="Окно проверки" value={termsFields.reviewWindow} />}
-                  </TermsGrid>
-                </Section>
-              </>
-            )}
-
-            <Separator />
-
-            {/* Marking (ORD) */}
-            <div className="flex items-center gap-2">
-              <Shield className="h-4 w-4 text-primary shrink-0" />
-              <span className="text-[13px] text-foreground/80">Маркировка обеспечивается платформой</span>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="text-muted-foreground cursor-help text-[11px] underline underline-offset-2 decoration-dotted">?</span>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-[220px]">
-                  <p className="text-xs">Платформа автоматически регистрирует креативы в ОРД и добавляет маркировку «Реклама» с ERID.</p>
-                </TooltipContent>
-              </Tooltip>
+          <div className="space-y-4 max-w-[720px]">
+            {/* Размещение */}
+            <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+              <h3 className="text-[14px] font-semibold text-foreground">Размещение</h3>
+              <TermsKV label="Тип" value={placement ? <span className="flex items-center gap-1.5"><PlacementIcon className="h-3.5 w-3.5 text-primary" />{placement}</span> : null} />
+              {termsFields?.deliverables && <TermsKV label="Результат" value={termsFields.deliverables} />}
+              <TermsKV label="Окно публикации" value={deal.deadline ? fmtDate(deal.deadline) : null} />
+              {termsFields?.publishStart && <TermsKV label="Начало" value={fmtDate(termsFields.publishStart)} />}
+              {termsFields?.publishEnd && <TermsKV label="Конец" value={fmtDate(termsFields.publishEnd)} />}
             </div>
 
-            {/* Print/download */}
-            <Separator />
-            <Button variant="ghost" size="sm" className="text-[12px] gap-1.5 text-muted-foreground" onClick={() => window.print()}>
-              <Printer className="h-3.5 w-3.5" /> Скачать / распечатать условия
-            </Button>
+            {/* Бюджет */}
+            <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+              <h3 className="text-[14px] font-semibold text-foreground">Бюджет</h3>
+              <TermsKV label="Сумма" value={deal.budget ? <span className="font-bold">{fmtBudget(deal.budget)}</span> : null} />
+              {termsFields?.budgetMin && <TermsKV label="Мин. бюджет" value={fmtBudget(termsFields.budgetMin)} />}
+              {termsFields?.budgetMax && <TermsKV label="Макс. бюджет" value={fmtBudget(termsFields.budgetMax)} />}
+              {termsFields?.paymentMilestones && <TermsKV label="Этапы оплаты" value={termsFields.paymentMilestones} />}
+            </div>
+
+            {/* Правки */}
+            <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+              <h3 className="text-[14px] font-semibold text-foreground">Правки</h3>
+              <TermsKV label="Количество правок" value={termsFields?.revisions && !isBriefEmpty(termsFields.revisions) ? termsFields.revisions : null} />
+            </div>
+
+            {/* Приёмка */}
+            <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+              <h3 className="text-[14px] font-semibold text-foreground">Приёмка</h3>
+              <TermsKV label="Критерии приёмки" value={termsFields?.acceptanceCriteria && !isBriefEmpty(termsFields.acceptanceCriteria) ? termsFields.acceptanceCriteria : null} />
+              {termsFields?.reviewWindow && <TermsKV label="Окно проверки" value={termsFields.reviewWindow} />}
+            </div>
+
+            {/* Marking + print */}
+            <div className="flex items-center justify-between pt-1">
+              <div className="flex items-center gap-2">
+                <Shield className="h-4 w-4 text-primary shrink-0" />
+                <span className="text-[13px] text-foreground/80">Маркировка обеспечивается платформой</span>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="text-muted-foreground cursor-help text-[11px] underline underline-offset-2 decoration-dotted">?</span>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-[220px]">
+                    <p className="text-xs">Платформа автоматически регистрирует креативы в ОРД и добавляет маркировку «Реклама» с ERID.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              <button onClick={() => window.print()} className="text-[12px] text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors">
+                <Printer className="h-3.5 w-3.5" /> Распечатать
+              </button>
+            </div>
           </div>
         )}
 
@@ -1312,6 +1293,17 @@ function TermsRow({ label, value }: { label: string; value: React.ReactNode }) {
     <div className="flex flex-col gap-0.5">
       <span className="text-[12px] text-muted-foreground">{label}</span>
       <span className="text-[14px] font-medium text-foreground">{value}</span>
+    </div>
+  );
+}
+
+function TermsKV({ label, value }: { label: string; value: React.ReactNode | null }) {
+  return (
+    <div className="flex items-baseline justify-between gap-4">
+      <span className="text-[14px] text-muted-foreground shrink-0">{label}</span>
+      <span className="text-[15px] text-foreground text-right safe-text">
+        {value ?? <span className="text-muted-foreground/60 italic text-[13px]">Не указано</span>}
+      </span>
     </div>
   );
 }
