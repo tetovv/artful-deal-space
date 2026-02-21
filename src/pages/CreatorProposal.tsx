@@ -54,7 +54,7 @@ const statusConfig: Record<string, { label: string; cls: string }> = {
   invoice_needed: { label: "Ожидает счёта", cls: "bg-warning/15 text-warning border-warning/30" },
   waiting_payment: { label: "Ожидает оплаты", cls: "bg-warning/15 text-warning border-warning/30" },
   in_progress: { label: "В работе", cls: "bg-primary/15 text-primary border-primary/30" },
-  review: { label: "На проверке", cls: "bg-accent/15 text-accent-foreground border-accent/30" },
+  /* review status removed — deliverable confirmation is inline, not a global status */
   needs_changes: { label: "Ожидает ответа", cls: "bg-accent/15 text-accent-foreground border-accent/30" },
   completed: { label: "Завершено", cls: "bg-green-500/10 text-green-500 border-green-500/30" },
   disputed: { label: "Отклонено", cls: "bg-muted text-muted-foreground border-muted-foreground/20" },
@@ -70,7 +70,7 @@ const placementIcons: Record<string, any> = {
 };
 
 const fileTypeLabels: Record<string, string> = {
-  brief: "Бриф", draft: "Черновик", final: "Финальный", legal: "Юридический",
+  brief: "Бриф", draft: "Материал", final: "Финальный", legal: "Юридический", result: "Результат",
 };
 
 const paymentStatusLabels: Record<string, string> = {
@@ -225,7 +225,7 @@ export default function CreatorProposal() {
   const isNeedsChanges = deal?.status === "needs_changes";
   const isInvoiceNeeded = deal?.status === "invoice_needed";
   const isWaitingPayment = deal?.status === "waiting_payment";
-  const isAccepted = deal?.status === "briefing" || deal?.status === "in_progress" || deal?.status === "completed" || deal?.status === "review" || isInvoiceNeeded || isWaitingPayment;
+  const isAccepted = deal?.status === "briefing" || deal?.status === "in_progress" || deal?.status === "completed" || isInvoiceNeeded || isWaitingPayment;
   const isRejected = deal?.status === "rejected" || deal?.status === "disputed";
   const isPaid = escrowItems.some((e: any) => e.status === "reserved" || e.status === "released");
   const latestCreatedBy = latestTerms ? (latestTerms as any).created_by : null;
@@ -334,18 +334,7 @@ export default function CreatorProposal() {
     }
   };
 
-  /* Deal-phase actions — "Start work" removed; acceptance triggers invoice flow */
-
-  const handleSubmitDraft = async () => {
-    if (!user || !deal) return;
-    await supabase.from("deals").update({ status: "review" }).eq("id", deal.id);
-    logEvent.mutate({ dealId: deal.id, action: "Автор отправил черновик на проверку", category: "files" });
-    if (deal.advertiser_id) {
-      await supabase.from("notifications").insert({ user_id: deal.advertiser_id, title: "Черновик отправлен", message: `Автор отправил черновик для проверки «${deal.title}»`, type: "deal", link: "/ad-studio" });
-    }
-    toast.success("Черновик отправлен на проверку");
-    qc.invalidateQueries({ queryKey: ["proposal-deal", proposalId] });
-  };
+  /* handleSubmitDraft removed — files are uploaded via the Files tab with category picker */
 
   /* Request details actions */
   const handleRequestClarification = async () => {
@@ -445,8 +434,7 @@ export default function CreatorProposal() {
     if (creatorCountered) return "Ожидание ответа рекламодателя на ваше встречное предложение";
     if (isInvoiceNeeded) return "Выставите счёт рекламодателю для начала работы";
     if (isWaitingPayment) return "Ожидание оплаты рекламодателем";
-    if (isInProgress) return "Загрузите черновик и отправьте на проверку";
-    if (deal.status === "review") return "Черновик на проверке у рекламодателя";
+    if (isInProgress) return "Загрузите файлы во вкладке «Файлы»";
     return null;
   })();
 
@@ -515,19 +503,7 @@ export default function CreatorProposal() {
                   </Badge>
                 )}
 
-                {/* In progress: Submit draft */}
-                {isInProgress && (
-                  <Button size="sm" className="text-[14px] h-9" onClick={handleSubmitDraft}>
-                    <Upload className="h-4 w-4 mr-1.5" /> Отправить черновик
-                  </Button>
-                )}
-
-                {/* Review badge */}
-                {deal.status === "review" && (
-                  <Badge variant="outline" className="text-[13px] py-1 px-2.5 border-warning/30 text-warning">
-                    <Clock className="h-3.5 w-3.5 mr-1" /> На проверке
-                  </Badge>
-                )}
+                {/* "Submit draft" and "Review" badge removed — deliverable sent via Files tab */}
 
                 {/* Waiting badge */}
                 {creatorCountered && (
@@ -644,6 +620,7 @@ export default function CreatorProposal() {
               sendingChat={sendingChat}
               onSend={handleSendChat}
               chatEndRef={chatEndRef}
+              hasResultAwaitingConfirmation={files.some((f: any) => f.category === "result")}
               /* Brief card shown at top of chat for proposals */
               briefCard={hasBrief ? (
                 <div className="max-w-[820px] mx-auto px-4 pt-4">
@@ -703,7 +680,7 @@ export default function CreatorProposal() {
 
           {/* ═══ FILES TAB ═══ */}
           {activeTab === "files" && (
-            <FilesTabContent dealId={deal.id} />
+            <FilesTabContent dealId={deal.id} deal={deal} />
           )}
 
           {/* ═══ PAYMENTS TAB ═══ */}
@@ -716,6 +693,7 @@ export default function CreatorProposal() {
                 isWaitingPayment={isWaitingPayment}
                 isPaid={isPaid}
                 budget={deal.budget}
+                hasResultAwaitingConfirmation={files.some((f: any) => f.category === "result")}
                 onSendInvoice={() => {
                   setInvoiceAmount(String(deal.budget || ""));
                   setShowInvoiceModal(true);
@@ -877,12 +855,13 @@ export default function CreatorProposal() {
    ═══════════════════════════════════════════════════ */
 
 /* ─── CHAT TAB ─── */
-function ChatTabContent({ dealId, messages, userId, chatInput, setChatInput, sendingChat, onSend, chatEndRef, briefCard }: {
+function ChatTabContent({ dealId, messages, userId, chatInput, setChatInput, sendingChat, onSend, chatEndRef, briefCard, hasResultAwaitingConfirmation }: {
   dealId: string; messages: any[]; userId?: string;
   chatInput: string; setChatInput: (v: string) => void;
   sendingChat: boolean; onSend: () => void;
   chatEndRef: React.RefObject<HTMLDivElement>;
   briefCard?: React.ReactNode;
+  hasResultAwaitingConfirmation?: boolean;
 }) {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -891,6 +870,14 @@ function ChatTabContent({ dealId, messages, userId, chatInput, setChatInput, sen
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto py-3">
+        {hasResultAwaitingConfirmation && (
+          <div className="max-w-[820px] mx-auto px-4 mb-2">
+            <div className="rounded-lg border border-warning/30 bg-warning/5 px-3.5 py-2.5 flex items-center gap-2">
+              <Clock className="h-4 w-4 text-warning shrink-0" />
+              <p className="text-[13px] text-foreground/80">Результат отправлен — ожидается подтверждение рекламодателя</p>
+            </div>
+          </div>
+        )}
         {briefCard}
         <div className="max-w-[820px] mx-auto px-4 space-y-1">
           {messages.length === 0 && !briefCard && (
@@ -1132,15 +1119,22 @@ function TermsTabContent({ deal, latestTerms, allTermsSorted, termsFields, place
 }
 
 /* ─── FILES TAB ─── */
-function FilesTabContent({ dealId }: { dealId: string }) {
+function FilesTabContent({ dealId, deal }: { dealId: string; deal: any }) {
+  const { user, profile } = useAuth();
+  const qc = useQueryClient();
+  const logEvent = useLogDealEvent();
   const { data: dbFiles = [], isLoading } = useDealFiles(dealId);
   const uploadFile = useUploadDealFile();
   const downloadFile = useDownloadDealFile();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [uploadCategory, setUploadCategory] = useState("draft");
+  const [uploadCategory, setUploadCategory] = useState<"material" | "result">("material");
+  const [showUploadChoice, setShowUploadChoice] = useState(false);
+
+  const categoryMap: Record<string, string> = { material: "draft", result: "result" };
+  const fileCategoryLabels: Record<string, string> = { draft: "Материал", result: "Результат (для подтверждения)", brief: "Бриф", final: "Финальный", legal: "Юридический" };
 
   const sections = useMemo(() => {
-    const groups: Record<string, any[]> = { brief: [], draft: [], final: [], legal: [] };
+    const groups: Record<string, any[]> = {};
     dbFiles.forEach((f) => {
       const cat = f.category || "draft";
       if (!groups[cat]) groups[cat] = [];
@@ -1149,10 +1143,44 @@ function FilesTabContent({ dealId }: { dealId: string }) {
     return Object.entries(groups).filter(([, files]) => files.length > 0);
   }, [dbFiles]);
 
-  const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleUploadClick = () => {
+    setShowUploadChoice(true);
+  };
+
+  const handleCategoryChosen = (cat: "material" | "result") => {
+    setUploadCategory(cat);
+    setShowUploadChoice(false);
+    fileInputRef.current?.click();
+  };
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    uploadFile.mutate({ dealId, file, category: uploadCategory });
+    const dbCategory = categoryMap[uploadCategory] || "draft";
+    uploadFile.mutate({ dealId, file, category: dbCategory }, {
+      onSuccess: async () => {
+        if (uploadCategory === "result" && user && deal) {
+          // Post system chat message
+          await supabase.from("messages").insert({
+            deal_id: dealId, sender_id: user.id,
+            sender_name: profile?.display_name || "Автор",
+            content: `📎 Результат отправлен: ${file.name}`,
+          });
+          // Audit log
+          logEvent.mutate({ dealId, action: `Результат загружен: ${file.name}`, category: "files" });
+          // Notify advertiser
+          if (deal.advertiser_id) {
+            await supabase.from("notifications").insert({
+              user_id: deal.advertiser_id, title: "Результат отправлен",
+              message: `Автор загрузил результат для подтверждения: ${file.name}`,
+              type: "deal", link: "/ad-studio",
+            });
+          }
+          qc.invalidateQueries({ queryKey: ["deal-chat", dealId] });
+          qc.invalidateQueries({ queryKey: ["deal_files", dealId] });
+        }
+      },
+    });
     e.target.value = "";
   };
 
@@ -1160,22 +1188,33 @@ function FilesTabContent({ dealId }: { dealId: string }) {
     <div className="p-5 space-y-4 max-w-[820px] mx-auto">
       <div className="flex items-center justify-between">
         <h3 className="text-[15px] font-semibold text-foreground">Файлы</h3>
-        <div className="flex items-center gap-2">
-          <Select value={uploadCategory} onValueChange={setUploadCategory}>
-            <SelectTrigger className="h-8 w-28 text-[13px]"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="brief">Бриф</SelectItem>
-              <SelectItem value="draft">Черновик</SelectItem>
-              <SelectItem value="final">Финальный</SelectItem>
-              <SelectItem value="legal">Юридический</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button variant="outline" size="sm" className="text-[14px] h-9" onClick={() => fileInputRef.current?.click()} disabled={uploadFile.isPending}>
-            <Upload className="h-4 w-4 mr-1.5" /> {uploadFile.isPending ? "Загрузка…" : "Загрузить"}
-          </Button>
+        <div className="flex items-center gap-2 relative">
+          {showUploadChoice ? (
+            <div className="flex items-center gap-1.5 bg-card border border-border rounded-lg p-1.5 shadow-sm">
+              <Button variant="outline" size="sm" className="text-[13px] h-8" onClick={() => handleCategoryChosen("material")}>
+                <Paperclip className="h-3.5 w-3.5 mr-1" /> Материал
+              </Button>
+              <Button variant="outline" size="sm" className="text-[13px] h-8 border-primary/30 text-primary hover:bg-primary/10" onClick={() => handleCategoryChosen("result")}>
+                <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Результат
+              </Button>
+              <Button variant="ghost" size="sm" className="text-[12px] h-8 text-muted-foreground" onClick={() => setShowUploadChoice(false)}>✕</Button>
+            </div>
+          ) : (
+            <Button variant="outline" size="sm" className="text-[14px] h-9" onClick={handleUploadClick} disabled={uploadFile.isPending}>
+              <Upload className="h-4 w-4 mr-1.5" /> {uploadFile.isPending ? "Загрузка…" : "Загрузить"}
+            </Button>
+          )}
           <input ref={fileInputRef} type="file" className="hidden" onChange={handleUpload} />
         </div>
       </div>
+
+      {/* Result awaiting confirmation banner */}
+      {dbFiles.some((f: any) => f.category === "result") && (
+        <div className="rounded-lg border border-warning/30 bg-warning/5 px-3.5 py-2.5 flex items-center gap-2">
+          <Clock className="h-4 w-4 text-warning shrink-0" />
+          <p className="text-[13px] text-foreground/80">Результат отправлен — ожидается подтверждение рекламодателя</p>
+        </div>
+      )}
 
       {isLoading ? (
         <div className="text-center py-8 text-muted-foreground text-[14px]">Загрузка…</div>
@@ -1183,19 +1222,20 @@ function FilesTabContent({ dealId }: { dealId: string }) {
         <div className="text-center py-12 space-y-2">
           <Files className="h-8 w-8 mx-auto text-muted-foreground/40" />
           <p className="text-[14px] text-muted-foreground">Нет файлов</p>
-          <p className="text-[13px] text-muted-foreground/60">Загрузите черновик или финальные материалы</p>
+          <p className="text-[13px] text-muted-foreground/60">Загрузите материалы или результат для подтверждения</p>
         </div>
       ) : (
         <div className="space-y-5">
           {sections.map(([cat, files]) => (
             <div key={cat}>
               <p className="text-[13px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                {fileTypeLabels[cat] || cat}
+                {fileCategoryLabels[cat] || fileTypeLabels[cat] || cat}
               </p>
               <div className="space-y-1">
                 {files.map((f: any) => (
                   <div key={f.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-muted/30 transition-colors">
                     {f.pinned && <Pin className="h-3.5 w-3.5 text-primary shrink-0" />}
+                    {f.category === "result" && <CheckCircle2 className="h-3.5 w-3.5 text-warning shrink-0" />}
                     <div className="flex-1 min-w-0">
                       <button onClick={() => downloadFile.mutate(f.storage_path)} className="text-[15px] font-medium text-foreground hover:underline truncate block text-left safe-text">
                         {f.file_name}
@@ -1219,8 +1259,9 @@ function FilesTabContent({ dealId }: { dealId: string }) {
 }
 
 /* ─── PAYMENTS TAB ─── */
-function PaymentsTabContent({ escrowItems, invoices, isInvoiceNeeded, isWaitingPayment, isPaid, budget, onSendInvoice }: {
+function PaymentsTabContent({ escrowItems, invoices, isInvoiceNeeded, isWaitingPayment, isPaid, budget, onSendInvoice, hasResultAwaitingConfirmation }: {
   escrowItems: any[]; invoices: any[]; isInvoiceNeeded: boolean; isWaitingPayment: boolean; isPaid: boolean; budget: number; onSendInvoice: () => void;
+  hasResultAwaitingConfirmation?: boolean;
 }) {
   const total = escrowItems.reduce((s: number, m: any) => s + m.amount, 0);
   const released = escrowItems.filter((m: any) => m.status === "released").reduce((s: number, m: any) => s + m.amount, 0);
@@ -1230,6 +1271,12 @@ function PaymentsTabContent({ escrowItems, invoices, isInvoiceNeeded, isWaitingP
 
   return (
     <div className="p-5 space-y-4 max-w-[820px] mx-auto">
+      {hasResultAwaitingConfirmation && (
+        <div className="rounded-lg border border-warning/30 bg-warning/5 px-3.5 py-2.5 flex items-center gap-2">
+          <Clock className="h-4 w-4 text-warning shrink-0" />
+          <p className="text-[13px] text-foreground/80">Результат отправлен — ожидается подтверждение рекламодателя</p>
+        </div>
+      )}
       {/* Invoice needed — empty state with CTA */}
       {isInvoiceNeeded && !latestInvoice && (
         <div className="text-center py-12 space-y-3">
