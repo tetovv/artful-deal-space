@@ -22,8 +22,12 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
+  Collapsible, CollapsibleContent, CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
   CheckCircle2, MoreVertical, Download, FileText, Shield, CalendarDays,
   Video, FileEdit, Mic, Loader2, Send, ArrowLeftRight, XCircle, Paperclip,
+  History, ChevronDown, Clock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -83,16 +87,25 @@ export function IncomingProposalDetail({ open, onClose, deal, advertiserProfile,
   const [counterMessage, setCounterMessage] = useState("");
   const [submittingCounter, setSubmittingCounter] = useState(false);
 
+  // All terms versions for timeline
+  const allTermsSorted = useMemo(() => {
+    if (!terms.length) return [];
+    return [...terms].sort((a: any, b: any) => a.version - b.version);
+  }, [terms]);
+
   // Latest terms
   const latestTerms = useMemo(() => {
-    if (!terms.length) return null;
-    return terms[terms.length - 1];
-  }, [terms]);
+    if (!allTermsSorted.length) return null;
+    return allTermsSorted[allTermsSorted.length - 1];
+  }, [allTermsSorted]);
 
   const termsFields = useMemo(() => {
     if (!latestTerms) return null;
     return latestTerms.fields as Record<string, string>;
   }, [latestTerms]);
+
+  // Version history collapsed state
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   // Placement type from title or terms
   const placement = termsFields?.placementType || (() => {
@@ -259,6 +272,7 @@ export function IncomingProposalDetail({ open, onClose, deal, advertiserProfile,
   // Determine if this is a counter from advertiser (creator needs to respond)
   const latestCreatedBy = latestTerms ? (latestTerms as any).created_by : null;
   const advertiserCountered = isNeedsChanges && latestCreatedBy === deal.advertiser_id;
+  const creatorCountered = isNeedsChanges && latestCreatedBy === user?.id;
   const canRespond = isPending || advertiserCountered;
 
   return (
@@ -284,6 +298,19 @@ export function IncomingProposalDetail({ open, onClose, deal, advertiserProfile,
                   {termsFields?.counterMessage && (
                     <p className="text-[13px] text-foreground/80 bg-background/50 rounded-md px-3 py-2">«{termsFields.counterMessage}»</p>
                   )}
+                </div>
+              )}
+
+              {/* ── Waiting for advertiser response ── */}
+              {creatorCountered && (
+                <div className="bg-muted/50 border border-border rounded-lg p-4 flex items-center gap-3">
+                  <Clock className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <div>
+                    <span className="text-[14px] font-medium text-foreground">Ожидаем ответа рекламодателя</span>
+                    <p className="text-[12px] text-muted-foreground">
+                      Вы отправили встречное предложение (v{(latestTerms as any)?.version || "?"}). Редактирование заблокировано до ответа.
+                    </p>
+                  </div>
                 </div>
               )}
 
@@ -435,7 +462,88 @@ export function IncomingProposalDetail({ open, onClose, deal, advertiserProfile,
                 </Tooltip>
               </div>
 
-              {/* ── 5. Attachments ── */}
+              {/* ── 5. Version history timeline (collapsed) ── */}
+              {allTermsSorted.length > 1 && (
+                <>
+                  <Separator />
+                  <Collapsible open={historyOpen} onOpenChange={setHistoryOpen}>
+                    <CollapsibleTrigger className="flex items-center gap-2 w-full group">
+                      <History className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-[14px] font-semibold text-foreground">История версий ({allTermsSorted.length})</span>
+                      <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform ml-auto", historyOpen && "rotate-180")} />
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="mt-3">
+                      <div className="relative pl-4 space-y-0">
+                        {allTermsSorted.map((t: any, idx: number) => {
+                          const isLatest = idx === allTermsSorted.length - 1;
+                          const tFields = t.fields as Record<string, string>;
+                          const createdByCreator = t.created_by === deal.creator_id;
+                          const vDate = new Date(t.created_at).toLocaleDateString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+                          const prevT = idx > 0 ? allTermsSorted[idx - 1] : null;
+                          const prevFields = prevT ? (prevT.fields as Record<string, string>) : null;
+
+                          // Detect changes from previous version
+                          const changes: string[] = [];
+                          if (prevFields) {
+                            if (tFields.budget && tFields.budget !== prevFields.budget)
+                              changes.push(`Бюджет: ${Number(prevFields.budget || 0).toLocaleString()} → ${Number(tFields.budget).toLocaleString()} ₽`);
+                            if (tFields.deadline && tFields.deadline !== prevFields.deadline)
+                              changes.push(`Дедлайн: ${prevFields.deadline || "—"} → ${tFields.deadline}`);
+                          }
+
+                          return (
+                            <div key={t.id} className="relative pb-4 last:pb-0">
+                              {/* Timeline line */}
+                              {idx < allTermsSorted.length - 1 && (
+                                <div className="absolute left-0 top-3 bottom-0 w-px bg-border" />
+                              )}
+                              {/* Timeline dot */}
+                              <div className={cn(
+                                "absolute left-0 top-1.5 w-2 h-2 rounded-full -translate-x-[3.5px] border-2",
+                                isLatest
+                                  ? "bg-primary border-primary"
+                                  : t.status === "accepted"
+                                    ? "bg-success border-success"
+                                    : "bg-muted-foreground/40 border-muted-foreground/40"
+                              )} />
+                              <div className={cn("ml-4 rounded-lg p-2.5", isLatest ? "bg-primary/5 border border-primary/20" : "")}>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className={cn("text-[13px] font-semibold", isLatest ? "text-primary" : "text-foreground")}>
+                                    v{t.version}
+                                  </span>
+                                  <Badge variant="outline" className={cn("text-[10px] h-5", 
+                                    t.status === "accepted" ? "bg-success/10 text-success border-success/30" :
+                                    isLatest ? "bg-primary/10 text-primary border-primary/30" :
+                                    "bg-muted text-muted-foreground border-muted-foreground/20"
+                                  )}>
+                                    {t.status === "accepted" ? "Принято" : isLatest ? "Текущая" : "Заменена"}
+                                  </Badge>
+                                  <span className="text-[11px] text-muted-foreground">{vDate}</span>
+                                  <span className="text-[11px] text-muted-foreground">
+                                    · {createdByCreator ? "Вы" : (advertiserProfile?.display_name || deal.advertiser_name)}
+                                  </span>
+                                </div>
+                                {tFields.counterMessage && (
+                                  <p className="text-[12px] text-foreground/70 mt-1 italic">«{tFields.counterMessage}»</p>
+                                )}
+                                {changes.length > 0 && (
+                                  <div className="flex flex-wrap gap-2 mt-1">
+                                    {changes.map((c, ci) => (
+                                      <span key={ci} className="text-[11px] text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded">{c}</span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+                </>
+              )}
+
+              {/* ── 6. Attachments ── */}
               {files.length > 0 && (
                 <>
                   <Separator />
