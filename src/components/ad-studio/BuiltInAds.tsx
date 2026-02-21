@@ -246,9 +246,10 @@ export function BuiltInAds({ isVerified, onGoToSettings }: BuiltInAdsProps) {
   const [managingCampaign, setManagingCampaign] = useState<Campaign | null>(null);
   const [showContractWizard, setShowContractWizard] = useState(false);
   const [showManualWizard, setShowManualWizard] = useState(false);
+  const [campaigns, setCampaigns] = useState<Campaign[]>(mockCampaigns);
 
   const filtered = useMemo(() => {
-    let result = [...mockCampaigns];
+    let result = [...campaigns];
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       result = result.filter((c) => c.name.toLowerCase().includes(q));
@@ -269,11 +270,11 @@ export function BuiltInAds({ isVerified, onGoToSettings }: BuiltInAdsProps) {
       }
     });
     return result;
-  }, [searchQuery, statusFilter, placementFilter, sortBy]);
+  }, [campaigns, searchQuery, statusFilter, placementFilter, sortBy]);
 
   // Totals for KPIs
   const totals = useMemo(() => {
-    const active = mockCampaigns.filter((c) => c.status !== "draft");
+    const active = campaigns.filter((c) => c.status !== "draft");
     return {
       impressions: active.reduce((s, c) => s + c.impressions, 0),
       clicks: active.reduce((s, c) => s + c.clicks, 0),
@@ -282,7 +283,7 @@ export function BuiltInAds({ isVerified, onGoToSettings }: BuiltInAdsProps) {
         : "0",
       spent: active.reduce((s, c) => s + c.spent, 0),
     };
-  }, []);
+  }, [campaigns]);
 
   if (showManualWizard) {
     return (
@@ -291,8 +292,8 @@ export function BuiltInAds({ isVerified, onGoToSettings }: BuiltInAdsProps) {
         ordConnected={isVerified}
         onBack={() => setShowManualWizard(false)}
         onComplete={(campaign) => {
+          setCampaigns(prev => [campaign, ...prev]);
           setShowManualWizard(false);
-          setManagingCampaign(campaign);
         }}
         onGoToSettings={onGoToSettings}
       />
@@ -321,7 +322,7 @@ export function BuiltInAds({ isVerified, onGoToSettings }: BuiltInAdsProps) {
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <h2 className="text-lg font-bold text-foreground tracking-tight">Встроенная реклама</h2>
-            <p className="text-sm text-muted-foreground mt-0.5">Размещайте рекламу на платформе без участия авторов · Кампаний: {mockCampaigns.length}</p>
+            <p className="text-sm text-muted-foreground mt-0.5">Размещайте рекламу на платформе без участия авторов · Кампаний: {campaigns.length}</p>
           </div>
           <div className="flex items-center gap-2">
             {/* Date range */}
@@ -461,7 +462,7 @@ export function BuiltInAds({ isVerified, onGoToSettings }: BuiltInAdsProps) {
           ))}
           {filtered.length === 0 && (
             <div className="text-center py-16 text-sm text-muted-foreground rounded-xl border border-border bg-card">
-              {mockCampaigns.length === 0
+              {campaigns.length === 0
                 ? "Создайте первую рекламную кампанию"
                 : "Кампании не найдены. Попробуйте изменить фильтры."}
             </div>
