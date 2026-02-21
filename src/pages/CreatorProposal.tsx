@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useDealTerms, useDealFiles, useDownloadDealFile } from "@/hooks/useDealData";
+import { useDealTerms, useDealFiles, useDownloadDealFile, useDealAuditLog } from "@/hooks/useDealData";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -21,7 +21,7 @@ import {
   ArrowLeft, CheckCircle2, MoreVertical, Download, FileText, Shield,
   CalendarDays, Video, FileEdit, Mic, Loader2, Send, ArrowLeftRight,
   XCircle, Paperclip, History, Clock, AlertTriangle, MessageSquare,
-  ExternalLink,
+  ExternalLink, ScrollText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -45,7 +45,7 @@ const placementIcons: Record<string, any> = {
   "Подкаст": Mic, podcast: Mic,
 };
 
-type ProposalTab = "overview" | "terms" | "negotiation" | "files";
+type ProposalTab = "overview" | "terms" | "negotiation" | "files" | "audit";
 
 /* ─── Helper: is brief empty ─── */
 function isBriefEmpty(v: string | null | undefined): boolean {
@@ -111,6 +111,7 @@ export default function CreatorProposal() {
 
   const { data: terms = [] } = useDealTerms(deal?.id || "");
   const { data: files = [] } = useDealFiles(deal?.id || "");
+  const { data: auditLog = [] } = useDealAuditLog(deal?.id || "");
   const downloadFile = useDownloadDealFile();
 
   // Fetch proposal messages (clarification thread)
@@ -208,7 +209,7 @@ export default function CreatorProposal() {
       toast.success("Сделка создана. Переход в рабочее пространство…");
       qc.invalidateQueries({ queryKey: ["creator-incoming-deals"] });
       qc.invalidateQueries({ queryKey: ["my_deals"] });
-      navigate("/ad-studio", { state: { openDealId: deal.id } });
+      navigate("/ad-studio", { state: { openDealId: deal.id }, replace: true });
     } catch (err) {
       console.error(err);
       toast.error("Не удалось принять предложение");
@@ -229,7 +230,7 @@ export default function CreatorProposal() {
       toast.success("Предложение отклонено");
       qc.invalidateQueries({ queryKey: ["creator-incoming-deals"] });
       setShowRejectDialog(false);
-      navigate("/marketplace");
+      navigate("/ad-studio");
     } catch {
       toast.error("Ошибка при отклонении");
     } finally {
@@ -304,8 +305,8 @@ export default function CreatorProposal() {
       <div className="min-h-[60vh] flex flex-col items-center justify-center gap-3">
         <AlertTriangle className="h-8 w-8 text-warning" />
         <p className="text-[15px] text-muted-foreground">Предложение не найдено</p>
-        <Button variant="outline" size="sm" onClick={() => navigate("/marketplace")}>
-          <ArrowLeft className="h-4 w-4 mr-1.5" /> Назад к предложениям
+        <Button variant="outline" size="sm" onClick={() => navigate("/ad-studio")}>
+          <ArrowLeft className="h-4 w-4 mr-1.5" /> Назад к сделкам
         </Button>
       </div>
     );
@@ -317,7 +318,7 @@ export default function CreatorProposal() {
         <Shield className="h-8 w-8 text-destructive" />
         <p className="text-[15px] text-foreground font-medium">Доступ запрещён</p>
         <p className="text-[13px] text-muted-foreground">Это предложение адресовано другому автору.</p>
-        <Button variant="outline" size="sm" onClick={() => navigate("/marketplace")}>
+        <Button variant="outline" size="sm" onClick={() => navigate("/ad-studio")}>
           <ArrowLeft className="h-4 w-4 mr-1.5" /> Назад
         </Button>
       </div>
@@ -329,6 +330,7 @@ export default function CreatorProposal() {
     { key: "terms", label: "Условия" },
     { key: "negotiation", label: "Переговоры", count: allTermsSorted.length || undefined },
     { key: "files", label: "Файлы", count: files.length || undefined },
+    { key: "audit", label: "Журнал", count: auditLog.length || undefined },
   ];
 
   return (
@@ -336,10 +338,10 @@ export default function CreatorProposal() {
       <div className="max-w-[1100px] mx-auto px-4 lg:px-8 py-6 space-y-0">
         {/* ── Back link ── */}
         <button
-          onClick={() => navigate("/marketplace")}
+          onClick={() => navigate("/ad-studio")}
           className="flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground transition-colors mb-4"
         >
-          <ArrowLeft className="h-3.5 w-3.5" /> Назад к предложениям
+          <ArrowLeft className="h-3.5 w-3.5" /> Назад к сделкам
         </button>
 
         {/* ── Banners ── */}
@@ -913,6 +915,45 @@ export default function CreatorProposal() {
                 <Paperclip className="h-8 w-8 mx-auto mb-2 opacity-30" />
                 <p className="text-[14px]">Нет прикреплённых файлов</p>
                 <p className="text-[12px] text-muted-foreground mt-1">Файлы брифа и материалы переговоров будут отображаться здесь</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ═══ AUDIT TAB ═══ */}
+        {activeTab === "audit" && (
+          <div className="max-w-[800px] space-y-4">
+            <h2 className="text-[15px] font-semibold text-foreground flex items-center gap-2">
+              <ScrollText className="h-4 w-4 text-muted-foreground" />
+              Журнал событий ({auditLog.length})
+            </h2>
+            {auditLog.length > 0 ? (
+              <div className="space-y-0">
+                {auditLog.map((entry: any, idx: number) => (
+                  <div key={entry.id} className={cn(
+                    "flex items-start gap-3 px-4 py-3 border-b border-border last:border-0",
+                    idx % 2 === 0 ? "bg-muted/10" : ""
+                  )}>
+                    <div className="h-2 w-2 rounded-full bg-muted-foreground/40 mt-1.5 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] text-foreground">{entry.action}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-[11px] text-muted-foreground">
+                          {new Date(entry.created_at).toLocaleDateString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                        {entry.category && entry.category !== "general" && (
+                          <span className="text-[10px] text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded">{entry.category}</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12 text-muted-foreground">
+                <ScrollText className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                <p className="text-[14px]">Нет записей в журнале</p>
+                <p className="text-[12px] text-muted-foreground mt-1">События (создание, изменения, принятие) будут отображаться здесь</p>
               </div>
             )}
           </div>
