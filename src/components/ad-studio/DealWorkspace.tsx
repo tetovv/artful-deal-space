@@ -52,6 +52,11 @@ const statusColors: Record<DealStatus, string> = {
   review: "bg-accent/15 text-accent border-accent/30",
   completed: "bg-success/15 text-success border-success/30",
   disputed: "bg-destructive/15 text-destructive border-destructive/30",
+  rejected: "bg-destructive/15 text-destructive border-destructive/30",
+  needs_changes: "bg-warning/15 text-warning border-warning/30",
+  accepted: "bg-success/15 text-success border-success/30",
+  invoice_needed: "bg-warning/15 text-warning border-warning/30",
+  waiting_payment: "bg-warning/15 text-warning border-warning/30",
 };
 
 const statusLabels: Record<string, string> = {
@@ -65,14 +70,15 @@ const statusLabels: Record<string, string> = {
   disputed: "Спор",
   needs_changes: "Встречное от автора",
   accepted: "Принято",
-  rejected: "Отклонено",
+  rejected: "Отказ автора",
 };
 
 const filterStatusMap: Record<string, string[]> = {
-  all: ["pending", "briefing", "in_progress", "review", "completed", "disputed", "needs_changes", "accepted", "rejected", "invoice_needed", "waiting_payment"],
+  all: ["pending", "briefing", "in_progress", "review", "completed", "disputed", "needs_changes", "accepted", "invoice_needed", "waiting_payment"],
   action: ["pending", "needs_changes", "review", "accepted", "invoice_needed", "waiting_payment"],
   active: ["in_progress", "briefing"],
   completed: ["completed"],
+  rejected: ["rejected"],
 };
 
 /* ─── Placement type label for sidebar ─── */
@@ -227,6 +233,10 @@ function DealSidebar({
     allDeals.filter((d) => ["pending", "needs_changes", "review", "accepted"].includes(d.status)).length
   , [allDeals]);
 
+  const rejectedCount = useMemo(() =>
+    allDeals.filter((d) => d.status === "rejected").length
+  , [allDeals]);
+
   // Mock unread indicators (new messages / new files per deal)
   const unreadMap = useMemo(() => {
     const map: Record<string, { messages: number; files: number }> = {};
@@ -259,6 +269,7 @@ function DealSidebar({
             { key: "action", label: "Действие", count: actionCount },
             { key: "active", label: "В работе" },
             { key: "completed", label: "Готово" },
+            { key: "rejected", label: "Отказы", count: rejectedCount },
           ].map((f) => (
             <button
               key={f.key}
@@ -1363,6 +1374,8 @@ export function DealWorkspace() {
       createdAt: d.created_at,
       deadline: d.deadline || "",
       milestones: [],
+      rejection_reason: d.rejection_reason || null,
+      rejected_at: d.rejected_at || null,
     }));
     const dbIds = new Set(dbMapped.map((d) => d.id));
     const mock = mockDeals.filter((d) => !dbIds.has(d.id));
@@ -1684,6 +1697,28 @@ export function DealWorkspace() {
               <span className="text-[14px] font-semibold text-foreground">
                 Автор принял предложение. Ожидаем счёт на оплату.
               </span>
+            </div>
+          </div>
+        )}
+
+        {/* ── Rejected banner (author declined) ── */}
+        {dealStatus === "rejected" && (
+          <div className="border-b border-destructive/20 bg-destructive/5">
+            <div className="max-w-[1100px] mx-auto px-6 py-3 flex items-center gap-3">
+              <AlertTriangle className="h-5 w-5 text-destructive shrink-0" />
+              <div>
+                <span className="text-[14px] font-semibold text-foreground">
+                  Автор отклонил предложение
+                </span>
+                {activeDeal.rejection_reason && (
+                  <p className="text-[13px] text-muted-foreground mt-0.5">Причина: {activeDeal.rejection_reason}</p>
+                )}
+                {activeDeal.rejected_at && (
+                  <p className="text-[12px] text-muted-foreground mt-0.5">
+                    {new Date(activeDeal.rejected_at).toLocaleDateString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                  </p>
+                )}
+              </div>
             </div>
           </div>
         )}

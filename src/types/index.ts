@@ -61,7 +61,7 @@ export interface Subscription {
   endDate: string;
 }
 
-export type DealStatus = "pending" | "briefing" | "in_progress" | "review" | "completed" | "disputed";
+export type DealStatus = "pending" | "briefing" | "in_progress" | "review" | "completed" | "disputed" | "rejected" | "needs_changes" | "accepted" | "invoice_needed" | "waiting_payment";
 
 export interface Deal {
   id: string;
@@ -76,6 +76,8 @@ export interface Deal {
   milestones: Milestone[];
   createdAt: string;
   deadline: string;
+  rejection_reason?: string | null;
+  rejected_at?: string | null;
 }
 
 export interface Milestone {
