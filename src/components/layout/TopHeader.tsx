@@ -1,4 +1,4 @@
-import { Home, Compass, Palette, Megaphone, Store, Shield, Brain, Settings, Bell, Sun, Moon, LogOut, Menu, X, User, ShoppingBag, Check, CheckCheck, Rss, Library, Wallet, Plus, Minus } from "lucide-react";
+import { Home, Compass, Palette, Megaphone, Store, Shield, Brain, Settings, Bell, Sun, Moon, LogOut, Menu, X, User, ShoppingBag, Check, CheckCheck, Rss, Library, Wallet, Plus, Minus, ArrowUpRight, ArrowDownLeft, RotateCcw, Receipt, ExternalLink } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,14 +25,53 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+const TX_TYPE_META: Record<string, { label: string; icon: React.ElementType; color: string; sign: "+" | "-" }> = {
+  topup:   { label: "Пополнение", icon: ArrowDownLeft, color: "text-success", sign: "+" },
+  charge:  { label: "Списание",   icon: ArrowUpRight,  color: "text-destructive", sign: "-" },
+  refund:  { label: "Возврат",    icon: RotateCcw,     color: "text-success", sign: "+" },
+  payout:  { label: "Вывод",      icon: ArrowUpRight,  color: "text-destructive", sign: "-" },
+  fee:     { label: "Комиссия",   icon: Receipt,       color: "text-warning", sign: "-" },
+};
+
+const TX_FILTERS = [
+  { value: "all", label: "Все" },
+  { value: "topup", label: "Пополнения" },
+  { value: "charge", label: "Списания" },
+  { value: "refund", label: "Возвраты" },
+];
 
 /* ─── Balance Indicator ─── */
 function BalanceIndicator() {
   const { user } = useAuth();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { data: balance } = useUserBalance();
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState("");
   const [loading, setLoading] = useState(false);
+  const [tab, setTab] = useState("balance");
+  const [txFilter, setTxFilter] = useState("all");
+  const [selectedTx, setSelectedTx] = useState<any>(null);
+
+  const { data: transactions = [] } = useQuery({
+    queryKey: ["transactions", user?.id, txFilter],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      let q = supabase
+        .from("transactions")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(100);
+      if (txFilter !== "all") q = q.eq("type", txFilter);
+      const { data } = await q;
+      return data || [];
+    },
+    enabled: !!user?.id && open,
+  });
 
   if (!user) return null;
 
@@ -46,11 +86,27 @@ function BalanceIndicator() {
         .update({ available: current + val })
         .eq("user_id", user.id);
       if (error) throw error;
+
+      // Record transaction
+      await supabase.from("transactions").insert({
+        user_id: user.id,
+        type: "topup",
+        amount: val,
+        status: "completed",
+        description: `Пополнение баланса на ${val.toLocaleString()} ₽`,
+      });
+
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
       toast.success(`Баланс пополнен на ${val.toLocaleString()} ₽`);
       setAmount("");
-      setOpen(false);
     } catch { toast.error("Ошибка пополнения"); }
     finally { setLoading(false); }
+  };
+
+  const fmtDate = (d: string) => {
+    const date = new Date(d);
+    return date.toLocaleDateString("ru", { day: "2-digit", month: "2-digit", year: "2-digit" }) +
+      " " + date.toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" });
   };
 
   return (
@@ -63,56 +119,193 @@ function BalanceIndicator() {
         {(balance?.available || 0).toLocaleString()} ₽
       </button>
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
+      <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setSelectedTx(null); }}>
+        <DialogContent className="max-w-md p-0 gap-0 overflow-hidden">
+          <DialogHeader className="p-5 pb-0">
             <DialogTitle className="text-lg">Баланс</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div className="bg-muted/50 rounded-lg p-3">
-                <p className="text-muted-foreground text-xs">Доступно</p>
-                <p className="text-lg font-bold text-foreground">{(balance?.available || 0).toLocaleString()} ₽</p>
+
+          <Tabs value={tab} onValueChange={setTab} className="w-full">
+            <TabsList className="mx-5 mt-3 mb-0 w-auto">
+              <TabsTrigger value="balance" className="text-xs">Баланс</TabsTrigger>
+              <TabsTrigger value="history" className="text-xs">
+                История
+                {transactions.length > 0 && (
+                  <Badge variant="secondary" className="ml-1.5 text-[10px] h-4 px-1">{transactions.length}</Badge>
+                )}
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="balance" className="p-5 pt-4 space-y-4 mt-0">
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="bg-muted/50 rounded-lg p-3">
+                  <p className="text-muted-foreground text-xs">Доступно</p>
+                  <p className="text-lg font-bold text-foreground">{(balance?.available || 0).toLocaleString()} ₽</p>
+                </div>
+                <div className="bg-muted/50 rounded-lg p-3">
+                  <p className="text-muted-foreground text-xs">В резерве</p>
+                  <p className="text-lg font-bold text-foreground">{(balance?.reserved || 0).toLocaleString()} ₽</p>
+                </div>
               </div>
-              <div className="bg-muted/50 rounded-lg p-3">
-                <p className="text-muted-foreground text-xs">В резерве</p>
-                <p className="text-lg font-bold text-foreground">{(balance?.reserved || 0).toLocaleString()} ₽</p>
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-foreground">Пополнить баланс</p>
+                <div className="flex gap-2">
+                  <Input
+                    type="number"
+                    placeholder="Сумма, ₽"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    className="flex-1"
+                  />
+                  <Button onClick={handleTopUp} disabled={loading} size="sm" className="h-10 px-4">
+                    <Plus className="h-4 w-4 mr-1" />
+                    {loading ? "…" : "Пополнить"}
+                  </Button>
+                </div>
+                <div className="flex gap-1.5">
+                  {[1000, 5000, 10000, 50000].map((v) => (
+                    <button
+                      key={v}
+                      onClick={() => setAmount(String(v))}
+                      className="text-xs px-2 py-1 rounded-md bg-muted hover:bg-muted/80 text-muted-foreground transition-colors"
+                    >
+                      {v.toLocaleString()} ₽
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-foreground">Пополнить баланс</p>
-              <div className="flex gap-2">
-                <Input
-                  type="number"
-                  placeholder="Сумма, ₽"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  className="flex-1"
-                />
-                <Button onClick={handleTopUp} disabled={loading} size="sm" className="h-10 px-4">
-                  <Plus className="h-4 w-4 mr-1" />
-                  {loading ? "…" : "Пополнить"}
-                </Button>
-              </div>
-              <div className="flex gap-1.5">
-                {[1000, 5000, 10000, 50000].map((v) => (
+            </TabsContent>
+
+            <TabsContent value="history" className="mt-0">
+              {/* Filters */}
+              <div className="flex gap-1 px-5 pt-3 pb-2">
+                {TX_FILTERS.map((f) => (
                   <button
-                    key={v}
-                    onClick={() => setAmount(String(v))}
-                    className="text-xs px-2 py-1 rounded-md bg-muted hover:bg-muted/80 text-muted-foreground transition-colors"
+                    key={f.value}
+                    onClick={() => setTxFilter(f.value)}
+                    className={cn(
+                      "text-[11px] px-2 py-1 rounded-md transition-colors",
+                      txFilter === f.value
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground hover:bg-muted/80"
+                    )}
                   >
-                    {v.toLocaleString()} ₽
+                    {f.label}
                   </button>
                 ))}
               </div>
-            </div>
-          </div>
+
+              <ScrollArea className="h-[320px]">
+                {selectedTx ? (
+                  /* ── Detail view ── */
+                  <div className="p-5 space-y-3">
+                    <button
+                      onClick={() => setSelectedTx(null)}
+                      className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      ← Назад к списку
+                    </button>
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        {(() => {
+                          const meta = TX_TYPE_META[selectedTx.type] || TX_TYPE_META.charge;
+                          const Icon = meta.icon;
+                          return <Icon className={cn("h-5 w-5", meta.color)} />;
+                        })()}
+                        <span className="text-sm font-semibold text-foreground">
+                          {TX_TYPE_META[selectedTx.type]?.label || selectedTx.type}
+                        </span>
+                      </div>
+                      <p className={cn("text-2xl font-bold", (TX_TYPE_META[selectedTx.type]?.sign === "+") ? "text-success" : "text-destructive")}>
+                        {TX_TYPE_META[selectedTx.type]?.sign}{selectedTx.amount.toLocaleString()} ₽
+                      </p>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Статус</span>
+                          <Badge variant={selectedTx.status === "completed" ? "default" : "secondary"} className="text-[10px]">
+                            {selectedTx.status === "completed" ? "Выполнено" : selectedTx.status === "pending" ? "В обработке" : selectedTx.status}
+                          </Badge>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Дата</span>
+                          <span className="text-foreground">{fmtDate(selectedTx.created_at)}</span>
+                        </div>
+                        {selectedTx.description && (
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Описание</span>
+                            <span className="text-foreground text-right max-w-[200px]">{selectedTx.description}</span>
+                          </div>
+                        )}
+                        {selectedTx.reference_id && (
+                          <div className="flex justify-between items-center">
+                            <span className="text-muted-foreground">Ссылка</span>
+                            <button
+                              onClick={() => {
+                                setOpen(false);
+                                navigate(selectedTx.reference_type === "deal" ? `/ad-studio` : `/ad-studio`);
+                              }}
+                              className="flex items-center gap-1 text-primary hover:underline text-xs"
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                              {selectedTx.reference_type === "deal" ? "Сделка" : "Кампания"}
+                            </button>
+                          </div>
+                        )}
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">ID</span>
+                          <span className="text-muted-foreground text-[10px] font-mono">{selectedTx.id.slice(0, 8)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : transactions.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                    <Receipt className="h-8 w-8 mb-2 opacity-40" />
+                    <p className="text-sm">Транзакций пока нет</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-border">
+                    {transactions.map((tx: any) => {
+                      const meta = TX_TYPE_META[tx.type] || TX_TYPE_META.charge;
+                      const Icon = meta.icon;
+                      return (
+                        <button
+                          key={tx.id}
+                          onClick={() => setSelectedTx(tx)}
+                          className="w-full flex items-center gap-3 px-5 py-2.5 hover:bg-muted/40 transition-colors text-left"
+                        >
+                          <div className={cn("h-7 w-7 rounded-full flex items-center justify-center shrink-0",
+                            meta.sign === "+" ? "bg-success/10" : "bg-destructive/10"
+                          )}>
+                            <Icon className={cn("h-3.5 w-3.5", meta.color)} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium text-foreground truncate">{tx.description || meta.label}</p>
+                            <p className="text-[10px] text-muted-foreground">{fmtDate(tx.created_at)}</p>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className={cn("text-sm font-semibold tabular-nums", meta.sign === "+" ? "text-success" : "text-destructive")}>
+                              {meta.sign}{tx.amount.toLocaleString()} ₽
+                            </p>
+                            {tx.status !== "completed" && (
+                              <Badge variant="secondary" className="text-[9px]">
+                                {tx.status === "pending" ? "В обработке" : tx.status}
+                              </Badge>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </ScrollArea>
+            </TabsContent>
+          </Tabs>
         </DialogContent>
       </Dialog>
     </>
   );
 }
-
 interface NavItem {
   title: string;
   url: string;
