@@ -65,10 +65,8 @@ const statusLabels: Record<string, string> = {
 
 const filterStatusMap: Record<string, string[]> = {
   all: ["pending", "briefing", "in_progress", "review", "completed", "disputed", "needs_changes", "accepted", "rejected"],
-  active: ["in_progress", "briefing", "accepted"],
-  proposals: ["pending", "needs_changes", "accepted", "rejected"],
-  pending: ["pending", "review", "needs_changes"],
-  disputed: ["disputed"],
+  action: ["pending", "needs_changes", "review", "accepted"],
+  active: ["in_progress", "briefing"],
   completed: ["completed"],
 };
 
@@ -106,6 +104,22 @@ function getNextStepHint(status: string): string | null {
     case "completed": return null;
     case "disputed": return "Ожидаем решения: спор на рассмотрении";
     case "rejected": return "Автор отклонил предложение";
+    default: return null;
+  }
+}
+
+/* ─── Short next-step hint for sidebar deal items ─── */
+function getNextStepShort(status: string): string | null {
+  switch (status) {
+    case "pending": return "Ожидание автора";
+    case "needs_changes": return "Проверить правки";
+    case "accepted": return "Зарезервировать";
+    case "briefing": return "Отправить черновик";
+    case "in_progress": return "Загрузить черновик";
+    case "review": return "Принять черновик";
+    case "disputed": return "Спор на рассмотрении";
+    case "rejected": return "Отклонено";
+    case "completed": return null;
     default: return null;
   }
 }
@@ -182,8 +196,6 @@ function DealSidebar({
   setStatusFilter: (v: string) => void;
   allDeals: Deal[];
 }) {
-  const { scores } = useAdvertiserScores();
-
   const filtered = useMemo(() => {
     let list = [...allDeals];
     const statuses = filterStatusMap[statusFilter] || filterStatusMap.all;
@@ -200,36 +212,48 @@ function DealSidebar({
     return list;
   }, [allDeals, searchQuery, statusFilter]);
 
-  const proposalCount = useMemo(() =>
-    allDeals.filter((d) => ["pending", "needs_changes", "accepted", "rejected"].includes(d.status)).length
+  const actionCount = useMemo(() =>
+    allDeals.filter((d) => ["pending", "needs_changes", "review", "accepted"].includes(d.status)).length
   , [allDeals]);
 
+  // Mock unread indicators (new messages / new files per deal)
+  const unreadMap = useMemo(() => {
+    const map: Record<string, { messages: number; files: number }> = {};
+    allDeals.forEach((d) => {
+      // Simulate: deals in certain statuses might have unread
+      const hasUnread = ["needs_changes", "review", "in_progress"].includes(d.status);
+      map[d.id] = {
+        messages: hasUnread ? Math.floor(Math.random() * 3) : 0,
+        files: d.status === "review" ? 1 : 0,
+      };
+    });
+    return map;
+  }, [allDeals]);
+
   return (
-    <div className="w-[320px] border-r border-border bg-card flex flex-col shrink-0 h-full">
-      <div className="p-2.5 space-y-2 border-b border-border">
+    <div className="w-[340px] border-r border-border bg-card flex flex-col shrink-0 h-full">
+      <div className="p-3 space-y-2.5 border-b border-border">
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Поиск сделок..."
-            className="pl-8 h-8 text-[13px] bg-background"
+            className="pl-8 h-9 text-[14px] bg-background"
           />
         </div>
-        <div className="flex gap-1 flex-wrap">
+        <div className="flex gap-1.5">
           {[
             { key: "all", label: "Все" },
-            { key: "proposals", label: "Исходящие", count: proposalCount },
+            { key: "action", label: "Действие", count: actionCount },
             { key: "active", label: "В работе" },
-            { key: "pending", label: "Ожидание" },
-            { key: "disputed", label: "Спор" },
             { key: "completed", label: "Готово" },
           ].map((f) => (
             <button
               key={f.key}
               onClick={() => setStatusFilter(f.key)}
               className={cn(
-                "px-2 py-0.5 rounded text-[12px] font-medium transition-colors flex items-center gap-1",
+                "px-2.5 py-1 rounded-md text-[13px] font-medium transition-colors flex items-center gap-1",
                 statusFilter === f.key
                   ? "bg-primary/15 text-primary"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
@@ -237,7 +261,7 @@ function DealSidebar({
             >
               {f.label}
               {f.count !== undefined && f.count > 0 && (
-                <span className="bg-primary/20 text-primary text-[10px] font-bold px-1 rounded-full">{f.count}</span>
+                <span className="bg-primary/20 text-primary text-[10px] font-bold px-1.5 rounded-full leading-4">{f.count}</span>
               )}
             </button>
           ))}
@@ -246,59 +270,80 @@ function DealSidebar({
 
       <div className="flex-1 overflow-y-auto">
         {filtered.map((deal) => {
-          const completedMs = deal.milestones.filter((m) => m.completed).length;
-          const totalMs = deal.milestones.length;
           const isSelected = selectedId === deal.id;
           const placement = placementTypeFromTitle(deal.title);
-          const isProposal = ["pending", "needs_changes", "accepted", "rejected"].includes(deal.status);
           const statusColor = statusColors[deal.status as DealStatus] || "bg-muted text-muted-foreground border-muted-foreground/20";
+          const nextStep = getNextStepShort(deal.status);
+          const unread = unreadMap[deal.id] || { messages: 0, files: 0 };
+          const hasUnread = unread.messages > 0 || unread.files > 0;
 
           return (
             <button
               key={deal.id}
               onClick={() => onSelect(deal)}
               className={cn(
-                "w-full text-left px-3 py-2.5 border-b border-border/50 transition-colors",
-                isSelected ? "bg-primary/10 border-l-2 border-l-primary" : "hover:bg-muted/30"
+                "w-full text-left px-3.5 py-3 border-b border-border/40 transition-colors",
+                isSelected ? "bg-primary/8 border-l-2 border-l-primary" : "hover:bg-muted/30"
               )}
             >
+              {/* Row 1: Creator name + status */}
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[14px] font-semibold text-card-foreground truncate flex-1">{deal.creatorName}</span>
+                <span className="text-[15px] font-semibold text-card-foreground truncate flex-1">{deal.creatorName}</span>
                 <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded border shrink-0", statusColor)}>
                   {statusLabels[deal.status] || deal.status}
                 </span>
               </div>
+
+              {/* Row 2: Placement type */}
               <div className="flex items-center gap-1.5 mt-0.5">
                 {placement && (
-                  <span className="text-[11px] font-medium text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded">{placement}</span>
+                  <span className="text-[12px] font-medium text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded">{placement}</span>
                 )}
-                <span className="text-[12px] text-muted-foreground truncate">{deal.title}</span>
+                <span className="text-[13px] text-muted-foreground truncate">{deal.title}</span>
               </div>
-              <div className="flex items-center justify-between mt-1">
-                <span className="text-[13px] font-medium text-card-foreground">{deal.budget.toLocaleString()} ₽</span>
-                <span className="text-[11px] text-muted-foreground">
+
+              {/* Row 3: Amount + last activity */}
+              <div className="flex items-center justify-between mt-1.5">
+                <span className="text-[14px] font-semibold text-card-foreground">{deal.budget.toLocaleString()} ₽</span>
+                <span className="text-[12px] text-muted-foreground">
                   {new Date(deal.createdAt).toLocaleDateString("ru-RU", { day: "numeric", month: "short" })}
                 </span>
               </div>
-              {!isProposal && totalMs > 0 && (
-                <div className="flex items-center gap-1.5 mt-1">
-                  <div className="h-[3px] flex-1 bg-muted rounded-full overflow-hidden">
-                    <div className="h-full bg-primary/60 rounded-full transition-all" style={{ width: `${(completedMs / totalMs) * 100}%` }} />
+
+              {/* Row 4: Next step hint + unread indicators */}
+              <div className="flex items-center justify-between mt-1">
+                {nextStep ? (
+                  <span className="text-[12px] text-primary/80 font-medium truncate">→ {nextStep}</span>
+                ) : (
+                  <span />
+                )}
+                {hasUnread && (
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {unread.messages > 0 && (
+                      <span className="flex items-center gap-0.5 text-[11px] text-primary font-medium">
+                        <MessageCircle className="h-3 w-3" />
+                        {unread.messages}
+                      </span>
+                    )}
+                    {unread.files > 0 && (
+                      <span className="flex items-center gap-0.5 text-[11px] text-primary font-medium">
+                        <Files className="h-3 w-3" />
+                        {unread.files}
+                      </span>
+                    )}
                   </div>
-                  <span className="text-[10px] text-muted-foreground">{completedMs}/{totalMs}</span>
-                </div>
-              )}
+                )}
+              </div>
             </button>
           );
         })}
         {filtered.length === 0 && (
-          <div className="text-center py-10 text-[13px] text-muted-foreground">Сделки не найдены</div>
+          <div className="text-center py-10 text-[14px] text-muted-foreground">Сделки не найдены</div>
         )}
       </div>
     </div>
   );
 }
-
 /* ═══════════════════════════════════════════════════════
    CHAT TAB — no summary strip, clean centered chat
    ═══════════════════════════════════════════════════════ */
@@ -1318,12 +1363,12 @@ export function DealWorkspace() {
       ) : (
       /* Active deal workspace */
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* ── Header Row 1: Title + status + primary CTA + kebab ── */}
-        <div className="px-5 py-2.5 border-b border-border bg-card">
-          <div className="max-w-[1100px]">
+        {/* ── Header: centered container, single source of truth ── */}
+        <div className="border-b border-border bg-card">
+          <div className="max-w-[1100px] mx-auto px-6 py-3">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2.5 min-w-0">
-                <h1 className="text-[20px] font-bold text-card-foreground truncate">{activeDeal.title}</h1>
+                <h1 className="text-[18px] font-bold text-card-foreground truncate">{activeDeal.title}</h1>
                 <span className={cn("text-[11px] font-medium px-2 py-0.5 rounded border shrink-0", statusColors[activeDeal.status as DealStatus] || "bg-muted text-muted-foreground border-muted-foreground/20")}>
                   {statusLabels[activeDeal.status] || activeDeal.status}
                 </span>
@@ -1339,7 +1384,7 @@ export function DealWorkspace() {
                     {primaryAction.label}
                   </Button>
                 ) : isProposal ? (
-                  <Badge variant="outline" className="text-[12px] py-1 px-2.5 border-warning/30 text-warning">
+                  <Badge variant="outline" className="text-[13px] py-1 px-2.5 border-warning/30 text-warning">
                     <Clock className="h-3.5 w-3.5 mr-1" />
                     {(activeDeal.status as string) === "rejected" ? "Отклонено" : "Ожидание автора"}
                   </Badge>
@@ -1363,20 +1408,20 @@ export function DealWorkspace() {
               </div>
             </div>
 
-            {/* Row 2: Collapsible "Deal details ▾" */}
+            {/* Collapsed metadata line — single source of truth */}
             <Collapsible open={detailsOpen} onOpenChange={setDetailsOpen}>
               <CollapsibleTrigger className="flex items-center gap-1.5 mt-1 text-[13px] text-muted-foreground hover:text-foreground transition-colors">
                 {detailsOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-                <span>Детали сделки</span>
+                <span>Детали</span>
                 {!detailsOpen && (
                   <span className="text-muted-foreground/60 ml-1">
-                    — {activeDeal.budget.toLocaleString()} ₽
+                    — {activeDeal.creatorName} · {activeDeal.budget.toLocaleString()} ₽
                     {activeDeal.deadline && ` · до ${new Date(activeDeal.deadline).toLocaleDateString("ru-RU")}`}
                   </span>
                 )}
               </CollapsibleTrigger>
               <CollapsibleContent>
-                <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1.5 text-[14px] pb-1">
+                <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1.5 text-[15px] pb-1">
                   <div className="flex items-center gap-2">
                     <span className="text-muted-foreground">Сумма:</span>
                     <span className="font-semibold text-card-foreground">{activeDeal.budget.toLocaleString()} ₽</span>
@@ -1417,46 +1462,48 @@ export function DealWorkspace() {
           </div>
         </div>
 
-        {/* ── Sub-tabs ── */}
-        <div className="border-b border-border bg-card px-5">
-          <div className="flex items-center gap-0">
-            {coreTabs.map((tab) => (
+        {/* ── Tabs — centered under header ── */}
+        <div className="border-b border-border bg-card">
+          <div className="max-w-[1100px] mx-auto px-6">
+            <div className="flex items-center gap-0">
+              {coreTabs.map((tab) => (
+                <button
+                  key={tab.value}
+                  onClick={() => setActiveSubTab(tab.value)}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3.5 h-10 text-[15px] font-medium border-b-2 transition-colors",
+                    activeSubTab === tab.value
+                      ? "border-primary text-foreground"
+                      : "border-transparent text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <tab.icon className="h-4 w-4" />
+                  {tab.label}
+                </button>
+              ))}
+
               <button
-                key={tab.value}
-                onClick={() => setActiveSubTab(tab.value)}
+                onClick={() => setActiveSubTab("more")}
                 className={cn(
-                  "flex items-center gap-1.5 px-3 h-10 text-[15px] font-medium border-b-2 transition-colors",
-                  activeSubTab === tab.value
+                  "flex items-center gap-1 px-3.5 h-10 text-[15px] font-medium border-b-2 transition-colors",
+                  isMoreTab
                     ? "border-primary text-foreground"
                     : "border-transparent text-muted-foreground hover:text-foreground"
                 )}
               >
-                <tab.icon className="h-4 w-4" />
-                {tab.label}
+                Ещё
               </button>
-            ))}
-
-            <button
-              onClick={() => setActiveSubTab("more")}
-              className={cn(
-                "flex items-center gap-1 px-3 h-10 text-[15px] font-medium border-b-2 transition-colors",
-                isMoreTab
-                  ? "border-primary text-foreground"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              )}
-            >
-              Ещё
-            </button>
-          </div>
-
-          {/* Next step hint — single compact line */}
-          {nextStepHint && (
-            <div className="pb-2 -mt-0.5">
-              <p className="text-[13px] text-muted-foreground">
-                <span className="text-primary font-medium">→</span> {nextStepHint}
-              </p>
             </div>
-          )}
+
+            {/* Next step hint — single non-interactive line */}
+            {nextStepHint && (
+              <div className="pb-2 -mt-0.5">
+                <p className="text-[13px] text-muted-foreground">
+                  <span className="text-primary font-medium">→</span> {nextStepHint}
+                </p>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* ── Tab content ── */}
