@@ -446,11 +446,11 @@ export default function CreatorProposal() {
     );
   }
 
-  const tabs: { value: WorkspaceTab; label: string; icon: any }[] = [
+  const tabs: { value: WorkspaceTab; label: string; icon: any; disabled?: boolean }[] = [
     { value: "chat", label: "Чат", icon: MessageCircle },
     { value: "terms", label: "Условия", icon: ScrollText },
     { value: "files", label: "Файлы", icon: Files },
-    { value: "payments", label: "Оплата", icon: CreditCard },
+    { value: "payments", label: "Оплата", icon: CreditCard, disabled: !isAccepted },
     { value: "more", label: "Ещё", icon: MoreVertical },
   ];
 
@@ -647,13 +647,16 @@ export default function CreatorProposal() {
               {tabs.map((tab) => (
                 <button
                   key={tab.value}
-                  onClick={() => setActiveTab(tab.value)}
+                  onClick={() => !tab.disabled && setActiveTab(tab.value)}
                   className={cn(
                     "flex items-center gap-1.5 px-3.5 h-10 text-[15px] font-medium border-b-2 transition-colors",
-                    activeTab === tab.value
-                      ? "border-primary text-foreground"
-                      : "border-transparent text-muted-foreground hover:text-foreground"
+                    tab.disabled
+                      ? "border-transparent text-muted-foreground/40 cursor-not-allowed"
+                      : activeTab === tab.value
+                        ? "border-primary text-foreground"
+                        : "border-transparent text-muted-foreground hover:text-foreground"
                   )}
+                  disabled={tab.disabled}
                 >
                   <tab.icon className="h-4 w-4" />
                   {tab.label}
@@ -730,17 +733,9 @@ export default function CreatorProposal() {
           {activeTab === "terms" && (
             <TermsTabContent
               deal={deal}
-              allTermsSorted={allTermsSorted}
               latestTerms={latestTerms}
               termsFields={termsFields}
               placement={placement}
-              advertiserDisplayName={advertiserDisplayName}
-              isAccepted={isAccepted}
-              isRejected={isRejected}
-              canRespond={canRespond}
-              userId={user?.id}
-              onCounterOffer={() => setShowCounterModal(true)}
-              getDiffFields={getDiffFields}
             />
           )}
 
@@ -751,7 +746,17 @@ export default function CreatorProposal() {
 
           {/* ═══ PAYMENTS TAB ═══ */}
           {activeTab === "payments" && (
-            <PaymentsTabContent escrowItems={escrowItems} />
+            isAccepted ? (
+              <PaymentsTabContent escrowItems={escrowItems} />
+            ) : (
+              <div className="p-5 max-w-[820px] mx-auto">
+                <div className="text-center py-16 space-y-3">
+                  <CreditCard className="h-10 w-10 mx-auto text-muted-foreground/30" />
+                  <p className="text-[15px] font-medium text-muted-foreground">Оплата доступна после принятия предложения и резерва средств</p>
+                  <p className="text-[13px] text-muted-foreground/60">Примите предложение, чтобы активировать этот раздел</p>
+                </div>
+              </div>
+            )
           )}
 
           {/* ═══ MORE TAB ═══ */}
@@ -760,6 +765,12 @@ export default function CreatorProposal() {
               deal={deal}
               auditLog={auditLog}
               advertiserDisplayName={advertiserDisplayName}
+              allTermsSorted={allTermsSorted}
+              isAccepted={isAccepted}
+              isRejected={isRejected}
+              canRespond={canRespond}
+              userId={user?.id}
+              getDiffFields={getDiffFields}
             />
           )}
         </div>
@@ -937,19 +948,10 @@ function ChatTabContent({ dealId, messages, userId, chatInput, setChatInput, sen
 }
 
 /* ─── TERMS TAB ─── */
-function TermsTabContent({ deal, allTermsSorted, latestTerms, termsFields, placement, advertiserDisplayName, isAccepted, isRejected, canRespond, userId, onCounterOffer, getDiffFields }: {
-  deal: any; allTermsSorted: any[]; latestTerms: any; termsFields: Record<string, string> | null;
-  placement: string | null; advertiserDisplayName: string;
-  isAccepted: boolean; isRejected: boolean; canRespond: boolean; userId?: string;
-  onCounterOffer: () => void;
-  getDiffFields: (cur: Record<string, string> | null, prev: Record<string, string> | null) => { key: string; label: string; from: string; to: string }[];
+function TermsTabContent({ deal, latestTerms, termsFields, placement }: {
+  deal: any; latestTerms: any; termsFields: Record<string, string> | null;
+  placement: string | null;
 }) {
-  const [selectedVersionIdx, setSelectedVersionIdx] = useState<number | null>(null);
-  const effectiveIdx = selectedVersionIdx ?? (allTermsSorted.length > 0 ? allTermsSorted.length - 1 : null);
-  const selectedVersion = effectiveIdx !== null ? allTermsSorted[effectiveIdx] : null;
-  const selectedFields = selectedVersion ? ((selectedVersion as any).fields as Record<string, string>) : null;
-  const prevVersion = effectiveIdx !== null && effectiveIdx > 0 ? allTermsSorted[effectiveIdx - 1] : null;
-  const prevFields = prevVersion ? ((prevVersion as any).fields as Record<string, string>) : null;
   const PlacementIcon = placement ? placementIcons[placement] || placementIcons[placement?.toLowerCase()] || FileText : FileText;
   const isLatestAccepted = latestTerms && (latestTerms as any).status === "accepted";
 
@@ -1000,104 +1002,6 @@ function TermsTabContent({ deal, allTermsSorted, latestTerms, termsFields, place
         </div>
       </div>
 
-      {/* Version history (negotiation) */}
-      {allTermsSorted.length > 1 && (
-        <>
-          <Separator />
-          <div className="space-y-3">
-            <h3 className="text-[15px] font-semibold text-foreground flex items-center gap-2">
-              <History className="h-4 w-4 text-muted-foreground" /> История переговоров ({allTermsSorted.length})
-            </h3>
-            <div className="flex flex-wrap gap-2">
-              {allTermsSorted.map((t: any, idx: number) => {
-                const isSelected = idx === effectiveIdx;
-                const createdByCreator = t.created_by === deal.creator_id;
-                const isCurrent = idx === allTermsSorted.length - 1;
-                return (
-                  <button
-                    key={t.id}
-                    onClick={() => setSelectedVersionIdx(idx)}
-                    className={cn(
-                      "px-3 py-2 rounded-lg text-[13px] font-medium border transition-colors flex flex-col items-start gap-0.5",
-                      isSelected
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : t.status === "accepted"
-                          ? "bg-green-500/10 text-green-600 border-green-500/30 hover:bg-green-500/20"
-                          : "bg-muted/50 text-muted-foreground border-border hover:bg-muted"
-                    )}
-                  >
-                    <span className="flex items-center gap-1.5">
-                      v{t.version}
-                      {isCurrent && <Badge variant="outline" className="text-[9px] h-4 px-1 border-primary/30 bg-primary/10 text-primary">Текущая</Badge>}
-                      {t.status === "accepted" && <Badge variant="outline" className="text-[9px] h-4 px-1 border-green-500/30 bg-green-500/10 text-green-500">Принято</Badge>}
-                    </span>
-                    <span className={cn("text-[10px]", isSelected ? "text-primary-foreground/70" : "text-muted-foreground")}>
-                      {createdByCreator ? "Вы" : "Рекламодатель"} · {fmtDateTime(t.created_at)}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Selected version diff */}
-            {selectedVersion && (
-              <div className="rounded-xl border border-border bg-card p-4 space-y-3">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[14px] font-semibold text-foreground">v{(selectedVersion as any).version}</span>
-                  <Badge variant="outline" className={cn("text-[10px] h-5",
-                    (selectedVersion as any).status === "accepted" ? "bg-green-500/10 text-green-500 border-green-500/30" :
-                    effectiveIdx === allTermsSorted.length - 1 ? "bg-primary/10 text-primary border-primary/30" :
-                    "bg-muted text-muted-foreground border-muted-foreground/20"
-                  )}>
-                    {(selectedVersion as any).status === "accepted" ? "Принято" : effectiveIdx === allTermsSorted.length - 1 ? "Текущая" : "Заменена"}
-                  </Badge>
-                  <span className="text-[11px] text-muted-foreground">{fmtDateTime((selectedVersion as any).created_at)}</span>
-                  <span className="text-[11px] text-muted-foreground">· {(selectedVersion as any).created_by === deal.creator_id ? "Вы" : advertiserDisplayName}</span>
-                </div>
-
-                {selectedFields && (
-                  <div className="space-y-2">
-                    {selectedFields.budget && <KVRow label="Бюджет" value={fmtBudget(selectedFields.budget)} bold />}
-                    {selectedFields.deadline && <KVRow label="Дедлайн" value={fmtDate(selectedFields.deadline)} />}
-                    {selectedFields.revisions && !isBriefEmpty(selectedFields.revisions) && <KVRow label="Правки" value={selectedFields.revisions} />}
-                    {selectedFields.acceptanceCriteria && !isBriefEmpty(selectedFields.acceptanceCriteria) && <KVRow label="Приёмка" value={selectedFields.acceptanceCriteria} />}
-                  </div>
-                )}
-
-                {selectedFields?.counterMessage && (
-                  <p className="text-[13px] text-foreground/70 italic border-l-2 border-muted-foreground/20 pl-3 safe-text">«{selectedFields.counterMessage}»</p>
-                )}
-
-                {prevFields && selectedFields && (() => {
-                  const diffs = getDiffFields(selectedFields, prevFields);
-                  if (diffs.length === 0) return null;
-                  return (
-                    <div className="border-t border-border pt-3 space-y-1.5">
-                      <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Изменения vs v{(prevVersion as any).version}</span>
-                      {diffs.map((d) => (
-                        <div key={d.key} className="flex items-center gap-2 text-[12px]">
-                          <span className="text-muted-foreground">{d.label}:</span>
-                          <span className="line-through text-muted-foreground/60">{d.from}</span>
-                          <span className="text-foreground">→</span>
-                          <span className="font-medium text-foreground">{d.to}</span>
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })()}
-              </div>
-            )}
-          </div>
-        </>
-      )}
-
-      {/* Read-only notice when accepted */}
-      {isAccepted && (
-        <div className="bg-green-500/5 border border-green-500/20 rounded-lg p-3 flex items-center gap-2">
-          <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
-          <span className="text-[13px] text-foreground">Условия согласованы. Переговоры завершены.</span>
-        </div>
-      )}
     </div>
   );
 }
@@ -1238,45 +1142,162 @@ function PaymentsTabContent({ escrowItems }: { escrowItems: any[] }) {
   );
 }
 
-/* ─── MORE TAB (Audit) ─── */
-function MoreTabContent({ deal, auditLog, advertiserDisplayName }: { deal: any; auditLog: any[]; advertiserDisplayName: string }) {
+/* ─── MORE TAB (Negotiations + Audit) ─── */
+function MoreTabContent({ deal, auditLog, advertiserDisplayName, allTermsSorted, isAccepted, isRejected, canRespond, userId, getDiffFields }: {
+  deal: any; auditLog: any[]; advertiserDisplayName: string;
+  allTermsSorted: any[]; isAccepted: boolean; isRejected: boolean; canRespond: boolean; userId?: string;
+  getDiffFields: (cur: Record<string, string> | null, prev: Record<string, string> | null) => { key: string; label: string; from: string; to: string }[];
+}) {
   const [showAll, setShowAll] = useState(false);
   const display = showAll ? auditLog : auditLog.slice(0, 10);
 
+  const [selectedVersionIdx, setSelectedVersionIdx] = useState<number | null>(null);
+  const effectiveIdx = selectedVersionIdx ?? (allTermsSorted.length > 0 ? allTermsSorted.length - 1 : null);
+  const selectedVersion = effectiveIdx !== null ? allTermsSorted[effectiveIdx] : null;
+  const selectedFields = selectedVersion ? ((selectedVersion as any).fields as Record<string, string>) : null;
+  const prevVersion = effectiveIdx !== null && effectiveIdx > 0 ? allTermsSorted[effectiveIdx - 1] : null;
+  const prevFields = prevVersion ? ((prevVersion as any).fields as Record<string, string>) : null;
+
   return (
-    <div className="p-5 space-y-4 max-w-[820px] mx-auto">
-      <h3 className="text-[15px] font-semibold text-foreground flex items-center gap-2">
-        <ScrollText className="h-4 w-4 text-muted-foreground" /> Журнал событий
-      </h3>
+    <div className="p-5 space-y-6 max-w-[820px] mx-auto">
+      {/* ── Negotiations / Version history ── */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-[15px] font-semibold text-foreground flex items-center gap-2">
+            <History className="h-4 w-4 text-muted-foreground" /> Версии условий / Переговоры
+            {allTermsSorted.length > 0 && <span className="text-[12px] text-muted-foreground font-normal">({allTermsSorted.length})</span>}
+          </h3>
+          {isAccepted && (
+            <Badge variant="outline" className="text-[11px] bg-muted text-muted-foreground border-muted-foreground/20">Только чтение</Badge>
+          )}
+        </div>
 
-      <div className="relative pl-6 space-y-0">
-        <div className="absolute left-0 top-0 bottom-0 w-px bg-border" />
+        {allTermsSorted.length === 0 ? (
+          <div className="text-center py-8">
+            <History className="h-7 w-7 mx-auto text-muted-foreground/30 mb-2" />
+            <p className="text-[14px] text-muted-foreground">Версий условий пока нет</p>
+          </div>
+        ) : (
+          <>
+            <div className="flex flex-wrap gap-2">
+              {allTermsSorted.map((t: any, idx: number) => {
+                const isSelected = idx === effectiveIdx;
+                const createdByCreator = t.created_by === deal.creator_id;
+                const isCurrent = idx === allTermsSorted.length - 1;
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => setSelectedVersionIdx(idx)}
+                    className={cn(
+                      "px-3 py-2 rounded-lg text-[13px] font-medium border transition-colors flex flex-col items-start gap-0.5",
+                      isSelected
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : t.status === "accepted"
+                          ? "bg-green-500/10 text-green-600 border-green-500/30 hover:bg-green-500/20"
+                          : "bg-muted/50 text-muted-foreground border-border hover:bg-muted"
+                    )}
+                  >
+                    <span className="flex items-center gap-1.5">
+                      v{t.version}
+                      {isCurrent && <Badge variant="outline" className="text-[9px] h-4 px-1 border-primary/30 bg-primary/10 text-primary">Текущая</Badge>}
+                      {t.status === "accepted" && <Badge variant="outline" className="text-[9px] h-4 px-1 border-green-500/30 bg-green-500/10 text-green-500">Принято</Badge>}
+                    </span>
+                    <span className={cn("text-[10px]", isSelected ? "text-primary-foreground/70" : "text-muted-foreground")}>
+                      {createdByCreator ? "Вы" : "Рекламодатель"} · {fmtDateTime(t.created_at)}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
 
-        <AuditEntry icon={<FileText className="h-3.5 w-3.5" />} text={`Предложение создано рекламодателем ${advertiserDisplayName}`} date={deal.created_at} accent />
+            {selectedVersion && (
+              <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[14px] font-semibold text-foreground">v{(selectedVersion as any).version}</span>
+                  <Badge variant="outline" className={cn("text-[10px] h-5",
+                    (selectedVersion as any).status === "accepted" ? "bg-green-500/10 text-green-500 border-green-500/30" :
+                    effectiveIdx === allTermsSorted.length - 1 ? "bg-primary/10 text-primary border-primary/30" :
+                    "bg-muted text-muted-foreground border-muted-foreground/20"
+                  )}>
+                    {(selectedVersion as any).status === "accepted" ? "Принято" : effectiveIdx === allTermsSorted.length - 1 ? "Текущая" : "Заменена"}
+                  </Badge>
+                  <span className="text-[11px] text-muted-foreground">{fmtDateTime((selectedVersion as any).created_at)}</span>
+                  <span className="text-[11px] text-muted-foreground">· {(selectedVersion as any).created_by === deal.creator_id ? "Вы" : advertiserDisplayName}</span>
+                </div>
 
-        {display.map((entry: any) => (
-          <AuditEntry
-            key={entry.id}
-            icon={
-              entry.category === "terms" ? <ArrowLeftRight className="h-3.5 w-3.5" /> :
-              entry.category === "files" ? <Paperclip className="h-3.5 w-3.5" /> :
-              entry.category === "payments" ? <CheckCircle2 className="h-3.5 w-3.5" /> :
-              <ScrollText className="h-3.5 w-3.5" />
-            }
-            text={entry.action}
-            date={entry.created_at}
-            category={entry.category !== "general" ? entry.category : undefined}
-          />
-        ))}
+                {selectedFields && (
+                  <div className="space-y-2">
+                    {selectedFields.budget && <KVRow label="Бюджет" value={fmtBudget(selectedFields.budget)} bold />}
+                    {selectedFields.deadline && <KVRow label="Дедлайн" value={fmtDate(selectedFields.deadline)} />}
+                    {selectedFields.revisions && !isBriefEmpty(selectedFields.revisions) && <KVRow label="Правки" value={selectedFields.revisions} />}
+                    {selectedFields.acceptanceCriteria && !isBriefEmpty(selectedFields.acceptanceCriteria) && <KVRow label="Приёмка" value={selectedFields.acceptanceCriteria} />}
+                  </div>
+                )}
 
-        {auditLog.length === 0 && (
-          <AuditEntry icon={<Clock className="h-3.5 w-3.5" />} text="Ожидание действий" date={deal.created_at} />
+                {selectedFields?.counterMessage && (
+                  <p className="text-[13px] text-foreground/70 italic border-l-2 border-muted-foreground/20 pl-3 safe-text">«{selectedFields.counterMessage}»</p>
+                )}
+
+                {prevFields && selectedFields && (() => {
+                  const diffs = getDiffFields(selectedFields, prevFields);
+                  if (diffs.length === 0) return null;
+                  return (
+                    <div className="rounded-lg bg-muted/30 border border-border px-3 py-2 space-y-1.5">
+                      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Изменения</p>
+                      {diffs.map((d) => (
+                        <div key={d.key} className="flex items-center gap-2 text-[12px]">
+                          <span className="text-muted-foreground w-[90px] shrink-0">{d.label}:</span>
+                          <span className="line-through text-muted-foreground/50">{d.from}</span>
+                          <span className="text-foreground">→</span>
+                          <span className="font-semibold text-primary">{d.to}</span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+          </>
         )}
       </div>
 
-      {auditLog.length > 10 && !showAll && (
-        <button onClick={() => setShowAll(true)} className="text-[13px] text-primary hover:underline">Показать все ({auditLog.length})</button>
-      )}
+      <Separator />
+
+      {/* ── Audit log ── */}
+      <div className="space-y-4">
+        <h3 className="text-[15px] font-semibold text-foreground flex items-center gap-2">
+          <ScrollText className="h-4 w-4 text-muted-foreground" /> Журнал событий
+        </h3>
+
+        <div className="relative pl-6 space-y-0">
+          <div className="absolute left-0 top-0 bottom-0 w-px bg-border" />
+
+          <AuditEntry icon={<FileText className="h-3.5 w-3.5" />} text={`Предложение создано рекламодателем ${advertiserDisplayName}`} date={deal.created_at} accent />
+
+          {display.map((entry: any) => (
+            <AuditEntry
+              key={entry.id}
+              icon={
+                entry.category === "terms" ? <ArrowLeftRight className="h-3.5 w-3.5" /> :
+                entry.category === "files" ? <Paperclip className="h-3.5 w-3.5" /> :
+                entry.category === "payments" ? <CheckCircle2 className="h-3.5 w-3.5" /> :
+                <ScrollText className="h-3.5 w-3.5" />
+              }
+              text={entry.action}
+              date={entry.created_at}
+              category={entry.category !== "general" ? entry.category : undefined}
+            />
+          ))}
+
+          {auditLog.length === 0 && (
+            <AuditEntry icon={<Clock className="h-3.5 w-3.5" />} text="Ожидание действий" date={deal.created_at} />
+          )}
+        </div>
+
+        {auditLog.length > 10 && !showAll && (
+          <button onClick={() => setShowAll(true)} className="text-[13px] text-primary hover:underline">Показать все ({auditLog.length})</button>
+        )}
+      </div>
     </div>
   );
 }
