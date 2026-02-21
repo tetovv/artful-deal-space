@@ -12,6 +12,7 @@ import { ProfileHero } from "@/components/creator-profile/ProfileHero";
 import { ProfileActionCard } from "@/components/creator-profile/ProfileActionCard";
 import {
   BrandCard,
+  OffersSection,
   PortfolioSection,
   AudienceCard,
   WorkingTermsCard,
@@ -28,6 +29,8 @@ const CreatorProfile = () => {
   const isOwnProfile = id === user?.id || id === "me";
   const profileUserId = isOwnProfile ? user?.id : id;
   const mockCreator = creators.find((c) => c.userId === id);
+
+  /* ── Data queries ── */
 
   const { data: dbProfile, isLoading } = useQuery({
     queryKey: ["creator-profile", id],
@@ -49,6 +52,16 @@ const CreatorProfile = () => {
     enabled: !mockCreator && !!profileUserId,
   });
 
+  const { data: creatorOffers = [] } = useQuery({
+    queryKey: ["creator-offers", profileUserId],
+    queryFn: async () => {
+      if (!profileUserId) return [];
+      const { data } = await supabase.from("creator_offers").select("*").eq("creator_id", profileUserId).eq("is_active", true);
+      return data || [];
+    },
+    enabled: !!profileUserId,
+  });
+
   const { data: isFollowing } = useQuery({
     queryKey: ["is-following", user?.id, profileUserId],
     queryFn: async () => {
@@ -65,6 +78,16 @@ const CreatorProfile = () => {
       if (!user?.id || !profileUserId || isOwnProfile) return false;
       const { data } = await supabase.from("paid_subscriptions").select("id").eq("user_id", user.id).eq("creator_id", profileUserId).eq("status", "active").maybeSingle();
       return !!data;
+    },
+    enabled: !!user?.id && !!profileUserId && !isOwnProfile,
+  });
+
+  const { data: hasActiveDeal } = useQuery({
+    queryKey: ["has-active-deal", user?.id, profileUserId],
+    queryFn: async () => {
+      if (!user?.id || !profileUserId || isOwnProfile) return false;
+      const { data } = await supabase.from("deals").select("id").or(`and(advertiser_id.eq.${user.id},creator_id.eq.${profileUserId}),and(advertiser_id.eq.${profileUserId},creator_id.eq.${user.id})`).in("status", ["in_progress", "review"]).limit(1);
+      return data && data.length > 0;
     },
     enabled: !!user?.id && !!profileUserId && !isOwnProfile,
   });
@@ -99,6 +122,8 @@ const CreatorProfile = () => {
     enabled: !!profileUserId,
   });
 
+  /* ── Mutations ── */
+
   const followMutation = useMutation({
     mutationFn: async () => {
       if (!user?.id || !profileUserId) throw new Error("Not authenticated");
@@ -130,14 +155,28 @@ const CreatorProfile = () => {
     },
   });
 
+  /* ── Derived ── */
+
   if (isLoading) {
     return <div className="p-8 text-muted-foreground animate-pulse">Загрузка профиля...</div>;
   }
 
   const profileData = mockCreator
-    ? { avatar: mockCreator.avatar, name: mockCreator.displayName, verified: mockCreator.verified, geo: mockCreator.geo, bio: mockCreator.bio, niche: mockCreator.niche, followers: mockCreator.followers, reach: mockCreator.reach, contentCount: mockCreator.contentCount, rating: mockCreator.rating }
+    ? {
+        avatar: mockCreator.avatar, name: mockCreator.displayName,
+        verified: mockCreator.verified, bio: mockCreator.bio,
+        niche: mockCreator.niche, responseHours: 24,
+        dealsCount: 0, safeDeal: false,
+      }
     : dbProfile
-    ? { avatar: dbProfile.avatar_url || "", name: dbProfile.display_name, verified: dbProfile.verified || false, geo: dbProfile.geo || "", bio: dbProfile.bio || "", niche: dbProfile.niche || [], followers: dbProfile.followers || 0, reach: dbProfile.reach || 0, contentCount: dbProfile.content_count || 0, rating: Number(dbProfile.rating) || 0 }
+    ? {
+        avatar: dbProfile.avatar_url || "", name: dbProfile.display_name,
+        verified: dbProfile.verified || false, bio: dbProfile.bio || "",
+        niche: dbProfile.niche || [],
+        responseHours: dbProfile.response_hours,
+        dealsCount: dbProfile.deals_count || 0,
+        safeDeal: dbProfile.safe_deal || false,
+      }
     : null;
 
   if (!profileData) {
@@ -155,33 +194,39 @@ const CreatorProfile = () => {
         createdAt: item.created_at, tags: item.tags || [],
       }));
 
+  // Derive typical turnaround from offers
+  const turnaroundDays = creatorOffers.length > 0
+    ? Math.max(...creatorOffers.map((o) => o.turnaround_days))
+    : null;
+
   return (
     <PageTransition>
-      <div className="p-4 lg:p-8 max-w-6xl mx-auto space-y-6">
+      <div className="p-4 lg:p-8 max-w-[1200px] mx-auto space-y-6">
         <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors">
           <ArrowLeft className="h-3.5 w-3.5" /> Назад
         </button>
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6 items-start">
+          {/* Left column */}
           <div className="space-y-6 min-w-0">
             <ProfileHero
               avatar={profileData.avatar}
               name={profileData.name}
               verified={profileData.verified}
-              geo={profileData.geo}
               bio={profileData.bio}
               niche={profileData.niche}
-              rating={profileData.rating}
             />
 
             {brandData && isAdvertiser && <BrandCard data={brandData} />}
 
-            <PortfolioSection
-              items={contentToShow}
-              onRequestDeal={!isOwnProfile ? () => setDealSent(true) : undefined}
+            <OffersSection
+              offers={creatorOffers}
+              onDeal={!isOwnProfile ? () => setDealSent(true) : undefined}
             />
 
-            <AudienceCard />
+            <PortfolioSection items={contentToShow} />
+
+            <AudienceCard connected={false} />
 
             <WorkingTermsCard />
 
@@ -191,6 +236,7 @@ const CreatorProfile = () => {
             />
           </div>
 
+          {/* Right column — sticky action card */}
           <ProfileActionCard
             isOwnProfile={isOwnProfile}
             isFollowing={!!isFollowing}
@@ -202,9 +248,11 @@ const CreatorProfile = () => {
             onPaidSub={() => paidSubMutation.mutate()}
             onDeal={() => setDealSent(true)}
             onEditProfile={() => navigate("/settings")}
-            followers={profileData.followers}
-            reach={profileData.reach}
-            contentCount={profileData.contentCount}
+            responseHours={profileData.responseHours}
+            dealsCount={profileData.dealsCount}
+            turnaroundDays={turnaroundDays}
+            safeDeal={profileData.safeDeal}
+            hasActiveDeal={!!hasActiveDeal}
           />
         </div>
       </div>
