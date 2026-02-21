@@ -321,7 +321,7 @@ export function BuiltInAds({ isVerified, onGoToSettings }: BuiltInAdsProps) {
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <h2 className="text-lg font-bold text-foreground tracking-tight">Встроенная реклама</h2>
-            <p className="text-sm text-muted-foreground mt-0.5">Размещайте рекламу на платформе без участия авторов</p>
+            <p className="text-sm text-muted-foreground mt-0.5">Размещайте рекламу на платформе без участия авторов · Кампаний: {mockCampaigns.length}</p>
           </div>
           <div className="flex items-center gap-2">
             {/* Date range */}
@@ -447,9 +447,11 @@ export function BuiltInAds({ isVerified, onGoToSettings }: BuiltInAdsProps) {
               </SelectContent>
             </Select>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Кампаний: <span className="font-medium text-card-foreground">{filtered.length}</span>
-          </p>
+          {(searchQuery.trim() || statusFilter !== "all" || placementFilter !== "all") && (
+            <p className="text-xs text-muted-foreground">
+              Показано кампаний: <span className="font-medium text-card-foreground">{filtered.length}</span>
+            </p>
+          )}
         </div>
 
         {/* Campaign list */}
