@@ -69,8 +69,8 @@ const statusLabels: Record<string, string> = {
 };
 
 const filterStatusMap: Record<string, string[]> = {
-  all: ["pending", "briefing", "in_progress", "review", "completed", "disputed", "needs_changes", "accepted", "rejected"],
-  action: ["pending", "needs_changes", "review", "accepted"],
+  all: ["pending", "briefing", "in_progress", "review", "completed", "disputed", "needs_changes", "accepted", "rejected", "invoice_needed", "waiting_payment"],
+  action: ["pending", "needs_changes", "review", "accepted", "invoice_needed", "waiting_payment"],
   active: ["in_progress", "briefing"],
   completed: ["completed"],
 };
@@ -1657,6 +1657,18 @@ export function DealWorkspace() {
                   </Button>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Invoice needed banner (advertiser waiting for creator invoice) ── */}
+        {dealStatus === "invoice_needed" && (
+          <div className="border-b border-primary/20 bg-primary/5">
+            <div className="max-w-[1100px] mx-auto px-6 py-3 flex items-center gap-2">
+              <FileText className="h-5 w-5 text-primary shrink-0" />
+              <span className="text-[14px] font-semibold text-foreground">
+                Автор принял предложение. Ожидаем счёт на оплату.
+              </span>
             </div>
           </div>
         )}
