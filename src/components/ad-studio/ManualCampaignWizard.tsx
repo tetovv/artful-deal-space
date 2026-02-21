@@ -482,14 +482,6 @@ export function ManualCampaignWizard({ isVerified, ordConnected, onBack, onCompl
                 >
                   <Eye className="h-3 w-3 mr-1" />Открыть
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 text-[11px] px-2"
-                  onClick={() => setStep(2)}
-                >
-                  Заменить
-                </Button>
               </div>
             </div>
           )}
