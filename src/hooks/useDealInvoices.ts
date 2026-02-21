@@ -136,14 +136,15 @@ export function usePayInvoice() {
         })
         .eq("user_id", user.id);
 
-      // Create escrow record
+      // Create escrow record with escrow_state
       await supabase.from("deal_escrow").insert({
         deal_id: params.dealId,
         label: `Оплата по счёту ${(invoice as any).invoice_number}`,
         amount,
         status: "reserved",
+        escrow_state: "FUNDS_RESERVED",
         reserved_at: new Date().toISOString(),
-      });
+      } as any);
 
       // Update invoice status
       await supabase

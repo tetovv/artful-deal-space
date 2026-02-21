@@ -16,6 +16,7 @@ import {
 } from "@/hooks/useDealData";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useDealInvoices, usePayInvoice, useRealtimeInvoices } from "@/hooks/useDealInvoices";
+import { EscrowPayoutSection } from "@/components/ad-studio/EscrowPayoutSection";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -1090,14 +1091,31 @@ function FilesTab({ dealId }: { dealId: string }) {
 }
 
 /* ═══════════════════════════════════════════════════════
-   PAYMENT TAB — dispute hidden in collapsible
+   PAYMENT TAB — with escrow payout flow
    ═══════════════════════════════════════════════════════ */
 function PaymentTab({ dealId }: { dealId: string }) {
+  const { user } = useAuth();
   const { data: escrowItems = [] } = useDealEscrow(dealId);
   const releaseEscrow = useReleaseEscrow();
   const { data: invoices = [] } = useDealInvoices(dealId);
   const payInvoice = usePayInvoice();
   const latestInvoice = invoices.length > 0 ? invoices[0] : null;
+
+  // Fetch deal for role check and placement fields
+  const { data: deal } = useQuery({
+    queryKey: ["deal_detail_payment", dealId],
+    queryFn: async () => {
+      const { data } = await supabase.from("deals").select("*").eq("id", dealId).single();
+      return data;
+    },
+    enabled: !!dealId,
+  });
+
+  const isAdvertiser = deal?.advertiser_id === user?.id;
+  const isCreator = deal?.creator_id === user?.id;
+
+  // Find escrow items with escrow_state (new payout flow)
+  const payoutEscrow = escrowItems.find((e: any) => e.escrow_state && e.escrow_state !== "WAITING_INVOICE");
 
   const milestones = escrowItems.length > 0
     ? escrowItems.map((e: any) => ({ id: e.id, label: e.label, amount: e.amount, status: e.status as string }))
@@ -1111,6 +1129,16 @@ function PaymentTab({ dealId }: { dealId: string }) {
 
   return (
     <div className="p-5 space-y-4 max-w-[820px] mx-auto">
+      {/* Escrow payout section — new flow */}
+      {payoutEscrow && deal && (
+        <EscrowPayoutSection
+          escrowItem={payoutEscrow}
+          deal={deal}
+          isCreator={isCreator}
+          isAdvertiser={isAdvertiser}
+        />
+      )}
+
       {/* Invoice card — shown when invoice exists */}
       {latestInvoice && (
         <Card className={latestInvoice.status === "pending" ? "border-warning/30" : ""}>
@@ -1163,7 +1191,7 @@ function PaymentTab({ dealId }: { dealId: string }) {
       )}
 
       {/* Escrow summary */}
-      {total > 0 && (
+      {total > 0 && !payoutEscrow && (
         <>
           <div className="flex items-center gap-3 flex-wrap text-[15px]">
             <span className="text-muted-foreground">Итого: <span className="font-semibold text-card-foreground">{total.toLocaleString()} ₽</span></span>
@@ -1212,23 +1240,6 @@ function PaymentTab({ dealId }: { dealId: string }) {
           <p className="text-[13px] text-muted-foreground/60">После принятия предложения автор выставит счёт</p>
         </div>
       )}
-
-      {/* Dispute — collapsed by default, no visible red button */}
-      <Collapsible>
-        <CollapsibleTrigger className="flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground transition-colors">
-          {<ChevronRight className="h-3.5 w-3.5" />}
-          Проблема
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <div className="pl-5 pt-2 space-y-2">
-            <p className="text-[14px] text-muted-foreground">Если результат не соответствует условиям, вы можете открыть спор.</p>
-            <Button size="sm" variant="outline" className="text-[13px] h-8 text-destructive border-destructive/30 hover:bg-destructive/10">
-              <AlertTriangle className="h-3.5 w-3.5 mr-1.5" />
-              Открыть спор
-            </Button>
-          </div>
-        </CollapsibleContent>
-      </Collapsible>
     </div>
   );
 }
