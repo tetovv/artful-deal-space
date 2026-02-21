@@ -10,7 +10,7 @@ import {
   Search, MapPin, Users, Star, CheckCircle, Clock, Briefcase, ShieldAlert,
   Check, X, SlidersHorizontal, Shield, AlertTriangle, Eye, EyeOff,
   ChevronDown, ChevronUp, ChevronRight, Send, RefreshCw, FileText, MessageSquare, Handshake, Filter,
-  CalendarDays, ShieldCheck,
+  CalendarDays, ShieldCheck, Paperclip,
 } from "lucide-react";
 import { IncomingProposalDetail } from "@/components/ad-studio/IncomingProposalDetail";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerFooter, DrawerTrigger } from "@/components/ui/drawer";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { format } from "date-fns";
+import { ru } from "date-fns/locale";
+import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Slider } from "@/components/ui/slider";
 import { motion } from "framer-motion";
@@ -336,9 +343,15 @@ function CreatorOffers() {
   const rating = useRatingData();
 
   const [filter, setFilter] = useState<"all" | "new" | "active" | "archived">("all");
-  const [showFilters, setShowFilters] = useState(false);
-  const [minBudget, setMinBudget] = useState(0);
-  const [minPartnerScore, setMinPartnerScore] = useState(0);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  /* ── Drawer filter state ── */
+  const [filterPlacement, setFilterPlacement] = useState<string[]>([]);
+  const [filterBudgetRange, setFilterBudgetRange] = useState<[number, number]>([0, 0]);
+  const [filterDeadlineFrom, setFilterDeadlineFrom] = useState<Date | undefined>();
+  const [filterDeadlineTo, setFilterDeadlineTo] = useState<Date | undefined>();
+  const [filterHasAttachments, setFilterHasAttachments] = useState(false);
+
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [selectedDeal, setSelectedDeal] = useState<typeof deals[0] | null>(null);
 
@@ -349,6 +362,12 @@ function CreatorOffers() {
   });
 
   const maxBudget = useMemo(() => Math.max(...deals.map((d) => d.budget || 0), 100000), [deals]);
+
+  // Initialise budget range once deals load
+  useMemo(() => {
+    if (filterBudgetRange[1] === 0 && maxBudget > 0) setFilterBudgetRange([0, maxBudget]);
+  }, [maxBudget]);
+
   const advertiserIds = useMemo(() => [...new Set(deals.map((d) => d.advertiser_id).filter(Boolean))], [deals]);
   const { data: offerProfiles = [] } = useQuery({
     queryKey: ["advertiser-profiles-offers", advertiserIds],
@@ -357,7 +376,6 @@ function CreatorOffers() {
   });
   const offerProfileMap = useMemo(() => { const m = new Map<string, { display_name: string; avatar_url: string | null }>(); for (const p of offerProfiles) m.set(p.user_id, p); return m; }, [offerProfiles]);
 
-  /* Fetch brand info for advertisers */
   const { data: brandData = [] } = useQuery({
     queryKey: ["advertiser-brands-offers", advertiserIds],
     queryFn: async () => {
@@ -377,20 +395,35 @@ function CreatorOffers() {
     return m;
   }, [brandData]);
 
+  const hasDrawerFilters = filterPlacement.length > 0 || filterBudgetRange[0] > 0 || (filterBudgetRange[1] > 0 && filterBudgetRange[1] < maxBudget) || !!filterDeadlineFrom || !!filterDeadlineTo || filterHasAttachments;
+
   const filteredDeals = useMemo(() => {
     let result = deals;
     if (filter === "new") result = deals.filter((d) => getProposalStatus(d.status) === "new");
     if (filter === "active") result = deals.filter((d) => getProposalStatus(d.status) === "active");
     if (filter === "archived") result = deals.filter((d) => getProposalStatus(d.status) === "archived");
-    if (minBudget > 0) result = result.filter((d) => (d.budget || 0) >= minBudget);
-    if (minPartnerScore > 0) result = result.filter((d) => { const score = advScoresMap.get(d.advertiser_id || ""); if (!score || score.partnerScore === 0) return true; return score.partnerScore >= minPartnerScore; });
+
+    // Drawer filters
+    if (filterPlacement.length > 0) {
+      result = result.filter((d) => {
+        const p = placementFromTitle(d.title);
+        return p && filterPlacement.includes(p);
+      });
+    }
+    if (filterBudgetRange[0] > 0) result = result.filter((d) => (d.budget || 0) >= filterBudgetRange[0]);
+    if (filterBudgetRange[1] > 0 && filterBudgetRange[1] < maxBudget) result = result.filter((d) => (d.budget || 0) <= filterBudgetRange[1]);
+    if (filterDeadlineFrom) result = result.filter((d) => d.deadline && new Date(d.deadline) >= filterDeadlineFrom);
+    if (filterDeadlineTo) result = result.filter((d) => d.deadline && new Date(d.deadline) <= filterDeadlineTo);
+    // Has attachments: deals with description containing "attach" or file references (simple heuristic)
+    if (filterHasAttachments) result = result.filter((d) => d.description && d.description.length > 0);
+
     return [...result].sort((a, b) => {
       const aLow = advScoresMap.get(a.advertiser_id || "")?.isLowScore ? 1 : 0;
       const bLow = advScoresMap.get(b.advertiser_id || "")?.isLowScore ? 1 : 0;
       if (aLow !== bLow) return aLow - bLow;
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
-  }, [deals, filter, advScoresMap, minBudget, minPartnerScore]);
+  }, [deals, filter, advScoresMap, filterPlacement, filterBudgetRange, filterDeadlineFrom, filterDeadlineTo, filterHasAttachments, maxBudget]);
 
   const sendNotification = async (deal: typeof deals[0], accepted: boolean) => {
     if (!deal.advertiser_id || !user) return;
@@ -424,258 +457,345 @@ function CreatorOffers() {
 
   const newCount = deals.filter((d) => d.status === "pending").length;
   const activeCount = deals.filter((d) => getProposalStatus(d.status) === "active").length;
+  const archivedCount = deals.filter((d) => getProposalStatus(d.status) === "archived").length;
+
+  const resetDrawerFilters = () => {
+    setFilterPlacement([]);
+    setFilterBudgetRange([0, maxBudget]);
+    setFilterDeadlineFrom(undefined);
+    setFilterDeadlineTo(undefined);
+    setFilterHasAttachments(false);
+  };
+
+  const togglePlacement = (p: string) => {
+    setFilterPlacement((prev) => prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]);
+  };
 
   return (
     <PageTransition>
-      <div className="p-6 lg:p-8 space-y-6 max-w-5xl mx-auto">
+      <div className="p-6 lg:p-8 space-y-5 max-w-5xl mx-auto">
         <div>
           <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
             <Briefcase className="h-6 w-6 text-primary" />
             Предложения
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">Входящие предложения и рейтинг партнёров</p>
+          <p className="text-sm text-muted-foreground mt-1">Входящие предложения от рекламодателей</p>
         </div>
 
-        <Tabs defaultValue="offers" className="space-y-4">
-          <TabsList className="w-full sm:w-auto">
-            <TabsTrigger value="offers" className="gap-1.5">
-              <Briefcase className="h-3.5 w-3.5" />
-              Предложения
-              {newCount > 0 && <Badge variant="destructive" className="ml-1 text-[10px] h-4 px-1">{newCount}</Badge>}
-            </TabsTrigger>
-            <TabsTrigger value="rating" className="gap-1.5">
-              <Shield className="h-3.5 w-3.5" /> Индекс партнёра
-            </TabsTrigger>
-            {(rating.isModerator || rating.isCreator) && (
-              <TabsTrigger value="internal" className="gap-1.5">
-                <EyeOff className="h-3.5 w-3.5" /> Аналитика
-              </TabsTrigger>
-            )}
-            {rating.isCreator && (
-              <TabsTrigger value="rate" className="gap-1.5">
-                <Star className="h-3.5 w-3.5" /> Оценить
-              </TabsTrigger>
-            )}
-          </TabsList>
+        {/* ── Status chips + Filters button ── */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {([
+            { key: "all" as const, label: "Все", count: deals.length },
+            { key: "new" as const, label: "Новые", count: newCount },
+            { key: "active" as const, label: "Активные", count: activeCount },
+            { key: "archived" as const, label: "Архив", count: archivedCount },
+          ]).map((f) => (
+            <button
+              key={f.key}
+              onClick={() => setFilter(f.key)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${filter === f.key ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground hover:bg-accent"}`}
+            >
+              {f.label}
+              {f.count > 0 && <span className="ml-1 opacity-70">({f.count})</span>}
+            </button>
+          ))}
 
-          {/* ── Offers tab ── */}
-          <TabsContent value="offers" className="space-y-4">
-            <div className="flex items-center gap-2 flex-wrap">
-              {([
-                { key: "all" as const, label: "Все", count: deals.length },
-                { key: "new" as const, label: "Новые", count: newCount },
-                { key: "active" as const, label: "Активные", count: activeCount },
-                { key: "archived" as const, label: "Архив", count: deals.filter((d) => getProposalStatus(d.status) === "archived").length },
-              ]).map((f) => (
-                <button key={f.key} onClick={() => setFilter(f.key)} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${filter === f.key ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground hover:bg-accent"}`}>
-                  {f.label}
-                  {f.count > 0 && <span className="ml-1 opacity-70">({f.count})</span>}
-                </button>
-              ))}
-              <button onClick={() => setShowFilters(!showFilters)} className={`ml-auto px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors ${showFilters ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground hover:bg-accent"}`}>
-                <SlidersHorizontal className="h-3.5 w-3.5" /> Фильтры
+          <Drawer open={drawerOpen} onOpenChange={setDrawerOpen}>
+            <DrawerTrigger asChild>
+              <button className={`ml-auto px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors ${hasDrawerFilters ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground hover:bg-accent"}`}>
+                <Filter className="h-3.5 w-3.5" />
+                Фильтры
+                {hasDrawerFilters && <span className="h-1.5 w-1.5 rounded-full bg-primary-foreground" />}
               </button>
-            </div>
+            </DrawerTrigger>
+            <DrawerContent className="max-h-[85vh]">
+              <DrawerHeader>
+                <DrawerTitle className="text-base">Фильтры предложений</DrawerTitle>
+              </DrawerHeader>
+              <div className="px-4 pb-2 space-y-5 overflow-y-auto">
+                {/* Placement type */}
+                <div className="space-y-2.5">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Тип размещения</p>
+                  {["Видео", "Пост", "Подкаст"].map((p) => (
+                    <label key={p} className="flex items-center gap-2 cursor-pointer py-0.5">
+                      <Checkbox checked={filterPlacement.includes(p)} onCheckedChange={() => togglePlacement(p)} />
+                      <span className="text-sm text-foreground">{p}</span>
+                    </label>
+                  ))}
+                </div>
 
-            {showFilters && (
-              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="rounded-xl border border-border bg-card p-4 space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between"><label className="text-xs font-medium text-muted-foreground">Мин. бюджет</label><span className="text-xs font-semibold text-card-foreground">{minBudget > 0 ? `от ${minBudget.toLocaleString()} ₽` : "Любой"}</span></div>
-                    <Slider value={[minBudget]} onValueChange={([v]) => setMinBudget(v)} max={maxBudget} step={5000} />
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between"><label className="text-xs font-medium text-muted-foreground">Мин. Partner Score</label><span className="text-xs font-semibold text-card-foreground">{minPartnerScore > 0 ? `от ${minPartnerScore.toFixed(1)}` : "Любой"}</span></div>
-                    <Slider value={[minPartnerScore]} onValueChange={([v]) => setMinPartnerScore(v)} max={5} step={0.5} />
+                {/* Budget range */}
+                <div className="space-y-2.5">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Бюджет</p>
+                  <Slider
+                    min={0}
+                    max={maxBudget}
+                    step={5000}
+                    value={filterBudgetRange}
+                    onValueChange={(v) => setFilterBudgetRange(v as [number, number])}
+                  />
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>{filterBudgetRange[0].toLocaleString()} ₽</span>
+                    <span>{filterBudgetRange[1] >= maxBudget ? `${maxBudget.toLocaleString()} ₽+` : `${filterBudgetRange[1].toLocaleString()} ₽`}</span>
                   </div>
                 </div>
-                {(minBudget > 0 || minPartnerScore > 0) && <Button variant="ghost" size="sm" onClick={() => { setMinBudget(0); setMinPartnerScore(0); }} className="text-xs">Сбросить фильтры</Button>}
-              </motion.div>
-            )}
 
-            {isLoading ? (
-              <div className="text-center py-12 text-muted-foreground animate-pulse">Загрузка...</div>
-            ) : filteredDeals.length === 0 ? (
-              <Card>
-                <CardContent className="py-12 text-center space-y-3">
-                  <Briefcase className="h-10 w-10 mx-auto text-muted-foreground/30" />
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">Пока нет предложений</p>
-                    <p className="text-xs text-muted-foreground mt-1">Когда рекламодатели захотят сотрудничать, их предложения появятся здесь.</p>
+                {/* Deadline range */}
+                <div className="space-y-2.5">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Дедлайн</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[11px] text-muted-foreground">От</label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" size="sm" className={cn("w-full justify-start text-left text-xs font-normal h-9", !filterDeadlineFrom && "text-muted-foreground")}>
+                            <CalendarDays className="h-3 w-3 mr-1.5" />
+                            {filterDeadlineFrom ? format(filterDeadlineFrom, "dd.MM.yyyy") : "Любая"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar mode="single" selected={filterDeadlineFrom} onSelect={setFilterDeadlineFrom} locale={ru} className="p-3 pointer-events-auto" />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] text-muted-foreground">До</label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" size="sm" className={cn("w-full justify-start text-left text-xs font-normal h-9", !filterDeadlineTo && "text-muted-foreground")}>
+                            <CalendarDays className="h-3 w-3 mr-1.5" />
+                            {filterDeadlineTo ? format(filterDeadlineTo, "dd.MM.yyyy") : "Любая"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar mode="single" selected={filterDeadlineTo} onSelect={setFilterDeadlineTo} locale={ru} className="p-3 pointer-events-auto" />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
                   </div>
-                  <div className="rounded-lg bg-muted/50 border border-border px-4 py-3 max-w-sm mx-auto">
-                    <p className="text-xs text-muted-foreground">
-                      💡 <span className="font-medium text-foreground">Совет:</span> Заполните свои офферы (Видео / Пост / Подкаст) в настройках студии, чтобы получать более точные предложения.
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="space-y-3">
-                {filteredDeals.map((deal) => {
-                  const advScore = advScoresMap.get(deal.advertiser_id || "");
-                  const isLow = advScore?.isLowScore;
-                  const advProfile = offerProfileMap.get(deal.advertiser_id || "");
-                  const brand = brandMap.get(deal.advertiser_id || "");
-                  const pStatus = getProposalStatus(deal.status);
-                  const statusCfg = proposalStatusConfig[pStatus];
-                  const placement = placementFromTitle(deal.title);
-                  const isNew = pStatus === "new";
+                </div>
 
-                  const briefHook = deal.description
-                    ? deal.description.length > 80
-                      ? deal.description.slice(0, 80).trimEnd() + "…"
-                      : deal.description
-                    : null;
-
-                  return (
-                    <Card
-                      key={deal.id}
-                      className={`overflow-hidden transition-all cursor-pointer ${isLow ? "opacity-60 border-destructive/20" : isNew ? "border-primary/25 hover:border-primary/50 hover:shadow-md" : "hover:border-border hover:shadow-sm"}`}
-                      onClick={() => setSelectedDeal(deal)}
-                    >
-                      <CardContent className="p-4 space-y-2.5">
-                        {/* Row 1: Brand/name + status pill */}
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                            <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden border border-border shrink-0">
-                              {brand?.brand_logo_url
-                                ? <img src={brand.brand_logo_url} alt="" className="h-full w-full object-cover" />
-                                : advProfile?.avatar_url
-                                  ? <img src={advProfile.avatar_url} alt="" className="h-full w-full object-cover" />
-                                  : <Briefcase className="h-4 w-4 text-primary" />}
-                            </div>
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-[15px] font-semibold text-card-foreground truncate leading-tight">
-                                  {brand?.brand_name || advProfile?.display_name || deal.advertiser_name}
-                                </span>
-                                {brand?.business_verified && (
-                                  <CheckCircle className="h-3.5 w-3.5 text-primary shrink-0" />
-                                )}
-                                {isLow && (
-                                  <Tooltip><TooltipTrigger><ShieldAlert className="h-3.5 w-3.5 text-destructive shrink-0" /></TooltipTrigger><TooltipContent><p className="text-xs">Низкий Partner Score: {advScore!.partnerScore.toFixed(1)}</p></TooltipContent></Tooltip>
-                                )}
-                              </div>
-                              {brand?.brand_name && advProfile?.display_name && brand.brand_name !== advProfile.display_name && (
-                                <p className="text-[12px] text-muted-foreground truncate leading-tight">{advProfile.display_name}</p>
-                              )}
-                            </div>
-                          </div>
-                          <Badge variant="outline" className={`text-[11px] shrink-0 border font-medium ${statusCfg.cls}`}>
-                            {statusCfg.label}
-                          </Badge>
-                        </div>
-
-                        {/* Row 2: Summary — placement + budget + deadline */}
-                        <div className="flex items-center gap-2 text-[14px] flex-wrap">
-                          {placement && (
-                            <span className="font-medium text-card-foreground">{placement}</span>
-                          )}
-                          {placement && <span className="text-muted-foreground">·</span>}
-                          <span className="font-bold text-card-foreground">{(deal.budget || 0).toLocaleString()} ₽</span>
-                          {deal.deadline && (
-                            <>
-                              <span className="text-muted-foreground">·</span>
-                              <span className="text-muted-foreground text-[13px] flex items-center gap-1">
-                                <CalendarDays className="h-3 w-3" />
-                                до {new Date(deal.deadline).toLocaleDateString("ru-RU")}
-                              </span>
-                            </>
-                          )}
-                        </div>
-
-                        {/* Row 3: Brief hook */}
-                        {briefHook && (
-                          <p className="text-[13px] text-foreground/70 leading-snug line-clamp-1">
-                            «{briefHook}»
-                          </p>
-                        )}
-
-                        {/* Row 4: Icons row + timestamp + CTA */}
-                        <div className="flex items-center justify-between pt-1.5 border-t border-border">
-                          <div className="flex items-center gap-3">
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span className="flex items-center gap-1 text-[12px] text-muted-foreground">
-                                  <ShieldCheck className="h-3.5 w-3.5" />
-                                </span>
-                              </TooltipTrigger>
-                              <TooltipContent><p className="text-xs">Маркировка через платформу</p></TooltipContent>
-                            </Tooltip>
-                            {brand?.business_category && (
-                              <span className="text-[12px] text-muted-foreground">{brand.business_category}</span>
-                            )}
-                            {advScore && advScore.partnerScore > 0 && !isLow && (
-                              <span className="text-[12px] text-muted-foreground flex items-center gap-0.5">
-                                <Star className="h-3 w-3 text-warning fill-warning" />
-                                {advScore.partnerScore.toFixed(1)}
-                              </span>
-                            )}
-                            <span className="text-[12px] text-muted-foreground flex items-center gap-1">
-                              <Clock className="h-3 w-3" />
-                              {timeAgo(deal.created_at)}
-                            </span>
-                          </div>
-
-                          {isNew ? (
-                            <Button
-                              size="sm"
-                              className="h-8 text-[13px] font-medium"
-                              onClick={(e) => { e.stopPropagation(); setSelectedDeal(deal); }}
-                            >
-                              Открыть предложение
-                            </Button>
-                          ) : pStatus === "active" ? (
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              className="h-8 text-[13px] font-medium"
-                              onClick={(e) => { e.stopPropagation(); setSelectedDeal(deal); }}
-                            >
-                              Продолжить
-                              <ChevronRight className="h-3 w-3 ml-1" />
-                            </Button>
-                          ) : null}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
+                {/* Has attachments */}
+                <div className="space-y-2.5">
+                  <label className="flex items-center gap-2 cursor-pointer py-0.5">
+                    <Checkbox checked={filterHasAttachments} onCheckedChange={(v) => setFilterHasAttachments(!!v)} />
+                    <span className="text-sm text-foreground flex items-center gap-1.5">
+                      <Paperclip className="h-3.5 w-3.5 text-muted-foreground" />
+                      С вложениями
+                    </span>
+                  </label>
+                </div>
               </div>
+
+              <DrawerFooter className="flex-row gap-2">
+                <Button variant="outline" className="flex-1" onClick={() => { resetDrawerFilters(); setDrawerOpen(false); }}>
+                  Сбросить
+                </Button>
+                <Button className="flex-1" onClick={() => setDrawerOpen(false)}>
+                  Применить
+                </Button>
+              </DrawerFooter>
+            </DrawerContent>
+          </Drawer>
+        </div>
+
+        {/* ── Active filter chips ── */}
+        {hasDrawerFilters && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {filterPlacement.map((p) => (
+              <Badge key={p} variant="secondary" className="text-[11px] gap-1 cursor-pointer" onClick={() => togglePlacement(p)}>
+                {p} <X className="h-2.5 w-2.5" />
+              </Badge>
+            ))}
+            {(filterBudgetRange[0] > 0 || filterBudgetRange[1] < maxBudget) && (
+              <Badge variant="secondary" className="text-[11px]">
+                {filterBudgetRange[0].toLocaleString()}–{filterBudgetRange[1].toLocaleString()} ₽
+              </Badge>
             )}
-
-            {/* Detail view modal */}
-            {selectedDeal && (
-              <IncomingProposalDetail
-                open={!!selectedDeal}
-                onClose={() => setSelectedDeal(null)}
-                deal={selectedDeal}
-                advertiserProfile={offerProfileMap.get(selectedDeal.advertiser_id || "") || null}
-                brand={brandMap.get(selectedDeal.advertiser_id || "") || null}
-              />
+            {filterDeadlineFrom && (
+              <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer" onClick={() => setFilterDeadlineFrom(undefined)}>
+                от {format(filterDeadlineFrom, "dd.MM")} <X className="h-2.5 w-2.5" />
+              </Badge>
             )}
-          </TabsContent>
+            {filterDeadlineTo && (
+              <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer" onClick={() => setFilterDeadlineTo(undefined)}>
+                до {format(filterDeadlineTo, "dd.MM")} <X className="h-2.5 w-2.5" />
+              </Badge>
+            )}
+            {filterHasAttachments && (
+              <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer" onClick={() => setFilterHasAttachments(false)}>
+                С вложениями <X className="h-2.5 w-2.5" />
+              </Badge>
+            )}
+            <button onClick={resetDrawerFilters} className="text-[11px] text-muted-foreground hover:text-foreground ml-1">
+              Сбросить все
+            </button>
+          </div>
+        )}
 
-          {/* ── Rating tab ── */}
-          <TabsContent value="rating"><PublicRating advertiserScores={rating.advertiserScores} profileMap={rating.profileMap} /></TabsContent>
+        {/* ── Deal list ── */}
+        {isLoading ? (
+          <div className="text-center py-12 text-muted-foreground animate-pulse">Загрузка...</div>
+        ) : filteredDeals.length === 0 ? (
+          <Card>
+            <CardContent className="py-12 text-center space-y-3">
+              <Briefcase className="h-10 w-10 mx-auto text-muted-foreground/30" />
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Пока нет предложений</p>
+                <p className="text-xs text-muted-foreground mt-1">Когда рекламодатели захотят сотрудничать, их предложения появятся здесь.</p>
+              </div>
+              <div className="rounded-lg bg-muted/50 border border-border px-4 py-3 max-w-sm mx-auto">
+                <p className="text-xs text-muted-foreground">
+                  💡 <span className="font-medium text-foreground">Совет:</span> Заполните свои офферы (Видео / Пост / Подкаст) в настройках студии, чтобы получать более точные предложения.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-3">
+            {filteredDeals.map((deal) => {
+              const advScore = advScoresMap.get(deal.advertiser_id || "");
+              const isLow = advScore?.isLowScore;
+              const advProfile = offerProfileMap.get(deal.advertiser_id || "");
+              const brand = brandMap.get(deal.advertiser_id || "");
+              const pStatus = getProposalStatus(deal.status);
+              const statusCfg = proposalStatusConfig[pStatus];
+              const placement = placementFromTitle(deal.title);
+              const isNew = pStatus === "new";
 
-          {/* ── Internal tab ── */}
-          {(rating.isModerator || rating.isCreator) && (
-            <TabsContent value="internal">
-              <Card><CardHeader><CardTitle className="text-base flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-warning" />Внутренняя аналитика (не видна рекламодателям)</CardTitle></CardHeader>
-              <CardContent><InternalAnalytics advertiserScores={rating.advertiserScores} profileMap={rating.profileMap} /></CardContent></Card>
-            </TabsContent>
-          )}
+              const briefHook = deal.description
+                ? deal.description.length > 80
+                  ? deal.description.slice(0, 80).trimEnd() + "…"
+                  : deal.description
+                : null;
 
-          {/* ── Rate tab ── */}
-          {rating.isCreator && (
-            <TabsContent value="rate">
-              <Card><CardHeader><CardTitle className="text-base flex items-center gap-2"><Star className="h-4 w-4 text-primary" />Оценить рекламодателя</CardTitle></CardHeader>
-              <CardContent><RateAdvertiser unratedDeals={rating.unratedDeals} completedDeals={rating.completedDeals} /></CardContent></Card>
-            </TabsContent>
-          )}
-        </Tabs>
+              return (
+                <Card
+                  key={deal.id}
+                  className={`overflow-hidden transition-all cursor-pointer ${isLow ? "opacity-60 border-destructive/20" : isNew ? "border-primary/25 hover:border-primary/50 hover:shadow-md" : "hover:border-border hover:shadow-sm"}`}
+                  onClick={() => setSelectedDeal(deal)}
+                >
+                  <CardContent className="p-4 space-y-2.5">
+                    {/* Row 1: Brand/name + status pill */}
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden border border-border shrink-0">
+                          {brand?.brand_logo_url
+                            ? <img src={brand.brand_logo_url} alt="" className="h-full w-full object-cover" />
+                            : advProfile?.avatar_url
+                              ? <img src={advProfile.avatar_url} alt="" className="h-full w-full object-cover" />
+                              : <Briefcase className="h-4 w-4 text-primary" />}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[15px] font-semibold text-card-foreground truncate leading-tight">
+                              {brand?.brand_name || advProfile?.display_name || deal.advertiser_name}
+                            </span>
+                            {brand?.business_verified && (
+                              <CheckCircle className="h-3.5 w-3.5 text-primary shrink-0" />
+                            )}
+                            {isLow && (
+                              <Tooltip><TooltipTrigger><ShieldAlert className="h-3.5 w-3.5 text-destructive shrink-0" /></TooltipTrigger><TooltipContent><p className="text-xs">Низкий Partner Score: {advScore!.partnerScore.toFixed(1)}</p></TooltipContent></Tooltip>
+                            )}
+                          </div>
+                          {brand?.brand_name && advProfile?.display_name && brand.brand_name !== advProfile.display_name && (
+                            <p className="text-[12px] text-muted-foreground truncate leading-tight">{advProfile.display_name}</p>
+                          )}
+                        </div>
+                      </div>
+                      <Badge variant="outline" className={`text-[11px] shrink-0 border font-medium ${statusCfg.cls}`}>
+                        {statusCfg.label}
+                      </Badge>
+                    </div>
+
+                    {/* Row 2: Summary — placement + budget + deadline */}
+                    <div className="flex items-center gap-2 text-[14px] flex-wrap">
+                      {placement && (
+                        <span className="font-medium text-card-foreground">{placement}</span>
+                      )}
+                      {placement && <span className="text-muted-foreground">·</span>}
+                      <span className="font-bold text-card-foreground">{(deal.budget || 0).toLocaleString()} ₽</span>
+                      {deal.deadline && (
+                        <>
+                          <span className="text-muted-foreground">·</span>
+                          <span className="text-muted-foreground text-[13px] flex items-center gap-1">
+                            <CalendarDays className="h-3 w-3" />
+                            до {new Date(deal.deadline).toLocaleDateString("ru-RU")}
+                          </span>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Row 3: Brief hook */}
+                    {briefHook && (
+                      <p className="text-[13px] text-foreground/70 leading-snug line-clamp-1">
+                        «{briefHook}»
+                      </p>
+                    )}
+
+                    {/* Row 4: Icons row + timestamp + CTA */}
+                    <div className="flex items-center justify-between pt-1.5 border-t border-border">
+                      <div className="flex items-center gap-3">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="flex items-center gap-1 text-[12px] text-muted-foreground">
+                              <ShieldCheck className="h-3.5 w-3.5" />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent><p className="text-xs">Маркировка через платформу</p></TooltipContent>
+                        </Tooltip>
+                        {brand?.business_category && (
+                          <span className="text-[12px] text-muted-foreground">{brand.business_category}</span>
+                        )}
+                        {advScore && advScore.partnerScore > 0 && !isLow && (
+                          <span className="text-[12px] text-muted-foreground flex items-center gap-0.5">
+                            <Star className="h-3 w-3 text-warning fill-warning" />
+                            {advScore.partnerScore.toFixed(1)}
+                          </span>
+                        )}
+                        <span className="text-[12px] text-muted-foreground flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          {timeAgo(deal.created_at)}
+                        </span>
+                      </div>
+
+                      {isNew ? (
+                        <Button
+                          size="sm"
+                          className="h-8 text-[13px] font-medium"
+                          onClick={(e) => { e.stopPropagation(); setSelectedDeal(deal); }}
+                        >
+                          Открыть предложение
+                        </Button>
+                      ) : pStatus === "active" ? (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="h-8 text-[13px] font-medium"
+                          onClick={(e) => { e.stopPropagation(); setSelectedDeal(deal); }}
+                        >
+                          Продолжить
+                          <ChevronRight className="h-3 w-3 ml-1" />
+                        </Button>
+                      ) : null}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Detail view modal */}
+        {selectedDeal && (
+          <IncomingProposalDetail
+            open={!!selectedDeal}
+            onClose={() => setSelectedDeal(null)}
+            deal={selectedDeal}
+            advertiserProfile={offerProfileMap.get(selectedDeal.advertiser_id || "") || null}
+            brand={brandMap.get(selectedDeal.advertiser_id || "") || null}
+          />
+        )}
       </div>
     </PageTransition>
   );
