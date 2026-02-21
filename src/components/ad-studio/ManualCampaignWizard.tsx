@@ -59,6 +59,8 @@ const MAX_FILE_MB = 10;
 export function ManualCampaignWizard({ isVerified, ordConnected, onBack, onComplete, onGoToSettings, initialDraft }: ManualCampaignWizardProps) {
   const draftIdRef = useRef(initialDraft?.id ?? createDraftId());
   const [step, setStep] = useState<WizardStep>((initialDraft?.step ?? 1) as WizardStep);
+  // Track the highest step where user made edits (for draft persistence)
+  const maxEditedStepRef = useRef<WizardStep>((initialDraft?.step ?? 1) as WizardStep);
 
   // Step 1 - Placement
   const [placement, setPlacement] = useState<Placement | null>(initialDraft?.placement ?? null);
@@ -117,30 +119,40 @@ export function ManualCampaignWizard({ isVerified, ordConnected, onBack, onCompl
     }
   }, [creativeFile]);
 
+  // Update maxEditedStep when any field changes (not just step navigation)
+  useEffect(() => {
+    if (step > maxEditedStepRef.current) {
+      maxEditedStepRef.current = step;
+    }
+  }, [step, placement, destinationUrl, utmParams, creativeTitle, creativeText, totalBudget, startDateVal, endDateVal, noEndDate, dailyCap, creativeFile, creativeType, creativeDataUrl]);
+
+  // Helper to build draft object
+  const buildDraft = (): CampaignDraft => ({
+    id: draftIdRef.current,
+    updatedAt: new Date().toISOString(),
+    step: maxEditedStepRef.current,
+    placement,
+    destinationUrl,
+    utmParams,
+    creativeTitle,
+    creativeText,
+    totalBudget,
+    startDate: startDateVal?.toISOString() ?? null,
+    endDate: endDateVal?.toISOString() ?? null,
+    noEndDate,
+    dailyCap,
+    creativeFileName: creativeFile?.name ?? initialDraft?.creativeFileName ?? null,
+    creativeFileSize: creativeFile?.size ?? initialDraft?.creativeFileSize ?? null,
+    creativeType,
+    creativeDataUrl,
+  });
+
   // ── Auto-save draft ──
   useEffect(() => {
     // Don't save while file is being converted — would overwrite data with null
     if (convertingFile) return;
 
-    const draft: CampaignDraft = {
-      id: draftIdRef.current,
-      updatedAt: new Date().toISOString(),
-      step,
-      placement,
-      destinationUrl,
-      utmParams,
-      creativeTitle,
-      creativeText,
-      totalBudget,
-      startDate: startDateVal?.toISOString() ?? null,
-      endDate: endDateVal?.toISOString() ?? null,
-      noEndDate,
-      dailyCap,
-      creativeFileName: creativeFile?.name ?? initialDraft?.creativeFileName ?? null,
-      creativeFileSize: creativeFile?.size ?? initialDraft?.creativeFileSize ?? null,
-      creativeType,
-      creativeDataUrl,
-    };
+    const draft = buildDraft();
     try {
       saveDraft(draft);
     } catch {
@@ -239,33 +251,63 @@ export function ManualCampaignWizard({ isVerified, ordConnected, onBack, onCompl
     }, 1200);
   };
 
+  const handleManualSave = () => {
+    if (convertingFile) {
+      toast.info("Файл ещё обрабатывается, подождите…");
+      return;
+    }
+    const draft = buildDraft();
+    try {
+      saveDraft(draft);
+      toast.success("Черновик сохранён");
+    } catch {
+      try {
+        saveDraft({ ...draft, creativeDataUrl: null });
+        toast.success("Черновик сохранён (без файла — недостаточно места)");
+      } catch {
+        toast.error("Не удалось сохранить черновик — хранилище переполнено");
+      }
+    }
+  };
+
   // ── Stepper ──
   const stepper = (
     <div className="flex items-center gap-1.5 mb-6">
-      {([1, 2, 3, 4, 5] as WizardStep[]).map((s) => {
-        const isDone = s < step;
-        const isCurrent = s === step;
-        return (
-          <div key={s} className="flex items-center gap-1.5 flex-1">
-            <button
-              type="button"
-              onClick={() => s < step && setStep(s)}
-              disabled={s > step}
-              className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-semibold shrink-0 transition-colors ${
-                isDone ? "bg-primary text-primary-foreground" :
-                isCurrent ? "bg-primary text-primary-foreground ring-2 ring-primary/30" :
-                "bg-muted text-muted-foreground"
-              }`}
-            >
-              {isDone ? <CheckCircle2 className="h-3.5 w-3.5" /> : s}
-            </button>
-            <span className={`text-[12px] hidden sm:inline truncate ${isCurrent ? "text-foreground font-medium" : "text-muted-foreground"}`}>
-              {STEP_LABELS[s]}
-            </span>
-            {s < 5 && <div className={`flex-1 h-px ${isDone ? "bg-primary/50" : "bg-border"}`} />}
-          </div>
-        );
-      })}
+      <div className="flex items-center gap-1.5 flex-1">
+        {([1, 2, 3, 4, 5] as WizardStep[]).map((s) => {
+          const isDone = s < step;
+          const isCurrent = s === step;
+          return (
+            <div key={s} className="flex items-center gap-1.5 flex-1">
+              <button
+                type="button"
+                onClick={() => s < step && setStep(s)}
+                disabled={s > step}
+                className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-semibold shrink-0 transition-colors ${
+                  isDone ? "bg-primary text-primary-foreground" :
+                  isCurrent ? "bg-primary text-primary-foreground ring-2 ring-primary/30" :
+                  "bg-muted text-muted-foreground"
+                }`}
+              >
+                {isDone ? <CheckCircle2 className="h-3.5 w-3.5" /> : s}
+              </button>
+              <span className={`text-[12px] hidden sm:inline truncate ${isCurrent ? "text-foreground font-medium" : "text-muted-foreground"}`}>
+                {STEP_LABELS[s]}
+              </span>
+              {s < 5 && <div className={`flex-1 h-px ${isDone ? "bg-primary/50" : "bg-border"}`} />}
+            </div>
+          );
+        })}
+      </div>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={handleManualSave}
+        className="text-[12px] gap-1.5 shrink-0 ml-3"
+      >
+        <Save className="h-3.5 w-3.5" />
+        Сохранить
+      </Button>
     </div>
   );
 
@@ -656,55 +698,10 @@ export function ManualCampaignWizard({ isVerified, ordConnected, onBack, onCompl
               <ArrowLeft className="h-3.5 w-3.5" />
               {step === 1 ? "Отмена" : "Назад"}
             </Button>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  if (convertingFile) {
-                    toast.info("Файл ещё обрабатывается, подождите…");
-                    return;
-                  }
-                  const draft: CampaignDraft = {
-                    id: draftIdRef.current,
-                    updatedAt: new Date().toISOString(),
-                    step,
-                    placement,
-                    destinationUrl,
-                    utmParams,
-                    creativeTitle,
-                    creativeText,
-                    totalBudget,
-                    startDate: startDateVal?.toISOString() ?? null,
-                    endDate: endDateVal?.toISOString() ?? null,
-                    noEndDate,
-                    dailyCap,
-                    creativeFileName: creativeFile?.name ?? initialDraft?.creativeFileName ?? null,
-                    creativeFileSize: creativeFile?.size ?? initialDraft?.creativeFileSize ?? null,
-                    creativeType,
-                    creativeDataUrl,
-                  };
-                  try {
-                    saveDraft(draft);
-                    toast.success("Черновик сохранён");
-                  } catch {
-                    try {
-                      saveDraft({ ...draft, creativeDataUrl: null });
-                      toast.success("Черновик сохранён (без файла — недостаточно места)");
-                    } catch {
-                      toast.error("Не удалось сохранить черновик — хранилище переполнено");
-                    }
-                  }
-                }}
-                className="text-[13px] gap-1.5"
-              >
-                <Save className="h-3.5 w-3.5" />
-                Сохранить черновик
-              </Button>
-              <Button onClick={goNext} disabled={!canNext} className="text-[13px] gap-1.5">
-                Далее
-                <ArrowRight className="h-3.5 w-3.5" />
-              </Button>
-            </div>
+            <Button onClick={goNext} disabled={!canNext} className="text-[13px] gap-1.5">
+              Далее
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Button>
           </div>
         )}
       </div>
