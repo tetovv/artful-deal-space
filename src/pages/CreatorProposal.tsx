@@ -593,10 +593,13 @@ export default function CreatorProposal() {
           </div>
         </div>
 
+        {/* ═══ TAB CONTENT WRAPPER — 2-column desktop layout ═══ */}
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-6">
+          {/* ── LEFT: Tab content ── */}
+          <div className="min-w-0">
         {/* ═══ OVERVIEW TAB ═══ */}
         {activeTab === "overview" && (
-          <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
-            <div className="lg:col-span-3 space-y-6">
+            <div className="space-y-6">
               {/* Next step block */}
               {nextStep && (
                 <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-2">
@@ -662,27 +665,6 @@ export default function CreatorProposal() {
                 </>
               )}
             </div>
-
-            {/* RIGHT: Quick terms snapshot */}
-            <div className="lg:col-span-2 space-y-4">
-              <h2 className="text-[15px] font-semibold text-foreground">Основные условия</h2>
-              <div className="rounded-xl border border-border bg-card p-4 space-y-3">
-                {placement && <KVRow label="Тип размещения" value={placement} />}
-                {deal.budget ? <KVRow label="Бюджет" value={fmtBudget(deal.budget)} bold /> : null}
-                {deal.deadline && <KVRow label="Дедлайн" value={fmtDate(deal.deadline)} />}
-                {termsFields?.revisions && !isBriefEmpty(termsFields.revisions) && (
-                  <KVRow label="Правки" value={termsFields.revisions} />
-                )}
-                {termsFields?.acceptanceCriteria && !isBriefEmpty(termsFields.acceptanceCriteria) && (
-                  <KVRow label="Приёмка" value={termsFields.acceptanceCriteria} />
-                )}
-                {allTermsSorted.length > 0 && <KVRow label="Версий переговоров" value={String(allTermsSorted.length)} />}
-              </div>
-              <Button variant="outline" size="sm" className="w-full gap-1.5 text-[13px]" onClick={() => setActiveTab("terms")}>
-                Смотреть полные условия <ChevronRight className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-          </div>
         )}
 
         {/* ═══ TERMS TAB ═══ */}
@@ -1032,9 +1014,32 @@ export default function CreatorProposal() {
             </div>
           </div>
         )}
-      </div>
+          </div>{/* end left column */}
 
-      {/* ── Reject dialog ── */}
+          {/* ── RIGHT: Sticky summary sidebar ── */}
+          <div className="lg:sticky lg:top-24 lg:self-start">
+            <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+              <h2 className="text-[15px] font-semibold text-foreground">Основные условия</h2>
+              {placement && <KVRow label="Тип размещения" value={placement} />}
+              {deal.budget ? <KVRow label="Бюджет" value={fmtBudget(deal.budget)} bold /> : null}
+              {deal.deadline && <KVRow label="Дедлайн" value={fmtDate(deal.deadline)} />}
+              {termsFields?.revisions && !isBriefEmpty(termsFields.revisions) && (
+                <KVRow label="Правки" value={termsFields.revisions} />
+              )}
+              {termsFields?.acceptanceCriteria && !isBriefEmpty(termsFields.acceptanceCriteria) && (
+                <KVRow label="Приёмка" value={termsFields.acceptanceCriteria} />
+              )}
+              {allTermsSorted.length > 0 && <KVRow label="Версий переговоров" value={String(allTermsSorted.length)} />}
+              <button
+                onClick={() => setActiveTab("terms")}
+                className="text-[13px] text-primary hover:underline pt-1 inline-flex items-center gap-1"
+              >
+                Открыть вкладку «Условия» <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        </div>{/* end 2-column grid */}
+      </div>
       <AlertDialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
