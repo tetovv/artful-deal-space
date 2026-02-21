@@ -39,11 +39,13 @@ import {
   ExternalLink, ScrollText, Archive, Lightbulb, ChevronRight, Printer, Eye,
   ChevronDown, Upload, Pin, MessageCircle, Files, CreditCard,
   HelpCircle, FileQuestion, Palette, PlayCircle, ClipboardCopy, ShieldCheck,
+  Radio,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { EscrowPayoutSection } from "@/components/ad-studio/EscrowPayoutSection";
+import { MarkingTab } from "@/components/ad-studio/MarkingTab";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { DatePickerField } from "@/components/ui/date-picker-field";
@@ -82,7 +84,7 @@ const paymentStatusColors: Record<string, string> = {
   review: "bg-accent/15 text-accent-foreground", released: "bg-green-500/10 text-green-500",
 };
 
-type WorkspaceTab = "chat" | "terms" | "files" | "payments" | "more";
+type WorkspaceTab = "chat" | "terms" | "files" | "payments" | "marking" | "more";
 
 /* ─── Helpers ─── */
 function isBriefEmpty(v: string | null | undefined): boolean {
@@ -495,11 +497,14 @@ export default function CreatorProposal() {
     );
   }
 
+  const showMarkingTab = deal.marking_required === true;
+
   const tabs: { value: WorkspaceTab; label: string; icon: any; disabled?: boolean }[] = [
     { value: "chat", label: "Чат", icon: MessageCircle },
     { value: "terms", label: "Условия", icon: ScrollText },
     { value: "files", label: "Файлы", icon: Files },
     { value: "payments", label: "Оплата", icon: CreditCard, disabled: !isAccepted },
+    ...(showMarkingTab ? [{ value: "marking" as WorkspaceTab, label: "Маркировка", icon: Radio }] : []),
     { value: "more", label: "Ещё", icon: MoreVertical },
   ];
 
@@ -857,6 +862,11 @@ export default function CreatorProposal() {
                 </div>
               </div>
             )
+          )}
+
+          {/* ═══ MARKING TAB ═══ */}
+          {activeTab === "marking" && showMarkingTab && (
+            <MarkingTab dealId={deal.id} />
           )}
 
           {/* ═══ MORE TAB ═══ */}

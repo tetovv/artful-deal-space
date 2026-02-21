@@ -947,9 +947,12 @@ export type Database = {
           creator_name: string
           deadline: string | null
           description: string | null
+          erid: string | null
           id: string
           marking_required: boolean | null
           marking_responsibility: string | null
+          marking_state: string
+          marking_state_updated_at: string | null
           placement_duration_days: number | null
           publication_required: boolean | null
           publication_url: string | null
@@ -967,9 +970,12 @@ export type Database = {
           creator_name?: string
           deadline?: string | null
           description?: string | null
+          erid?: string | null
           id?: string
           marking_required?: boolean | null
           marking_responsibility?: string | null
+          marking_state?: string
+          marking_state_updated_at?: string | null
           placement_duration_days?: number | null
           publication_required?: boolean | null
           publication_url?: string | null
@@ -987,9 +993,12 @@ export type Database = {
           creator_name?: string
           deadline?: string | null
           description?: string | null
+          erid?: string | null
           id?: string
           marking_required?: boolean | null
           marking_responsibility?: string | null
+          marking_state?: string
+          marking_state_updated_at?: string | null
           placement_duration_days?: number | null
           publication_required?: boolean | null
           publication_url?: string | null
