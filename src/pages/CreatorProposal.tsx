@@ -206,10 +206,11 @@ export default function CreatorProposal() {
       if (deal.advertiser_id) {
         await supabase.from("notifications").insert({ user_id: deal.advertiser_id, title: "Предложение принято", message: `${creatorName} принял(а) ваше предложение «${deal.title}»`, type: "deal", link: "/ad-studio" });
       }
-      toast.success("Сделка создана. Переход в рабочее пространство…");
+      toast.success("Предложение принято!");
       qc.invalidateQueries({ queryKey: ["creator-incoming-deals"] });
       qc.invalidateQueries({ queryKey: ["my_deals"] });
-      navigate("/marketplace", { state: { openDealId: deal.id }, replace: true });
+      qc.invalidateQueries({ queryKey: ["proposal-deal", proposalId] });
+      setActiveTab("negotiation");
     } catch (err) {
       console.error(err);
       toast.error("Не удалось принять предложение");
@@ -420,11 +421,11 @@ export default function CreatorProposal() {
               </Button>
             )}
 
-            {/* If accepted — show "Open deal" */}
-            {isAccepted && (
-              <Button size="sm" className="h-9 gap-1.5" onClick={() => navigate("/marketplace", { state: { openDealId: deal.id } })}>
-                <ExternalLink className="h-4 w-4" />
-                Открыть сделку
+            {/* If accepted — switch to negotiation/chat tab */}
+            {isAccepted && activeTab === "overview" && (
+              <Button size="sm" className="h-9 gap-1.5" onClick={() => setActiveTab("negotiation")}>
+                <MessageSquare className="h-4 w-4" />
+                Перейти к переговорам
               </Button>
             )}
 
