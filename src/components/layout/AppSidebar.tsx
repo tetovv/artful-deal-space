@@ -2,18 +2,30 @@ import { Home, Compass, Palette, Megaphone, Store, Brain, Settings, LogOut, Chev
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
-import { useState } from "react";
+import { useUserRole } from "@/hooks/useUserRole";
+import { useState, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
+import type { LucideIcon } from "lucide-react";
 
-const mainNav = [
+interface NavItem {
+  title: string;
+  url: string;
+  icon: LucideIcon;
+  /** If set, only these roles see this item */
+  roles?: ("creator" | "advertiser" | "moderator" | "user")[];
+  /** If set, these roles are hidden from this item */
+  hideForRoles?: ("creator" | "advertiser" | "moderator" | "user")[];
+}
+
+const allMainNav: NavItem[] = [
   { title: "Главная", url: "/", icon: Home },
   { title: "Каталог", url: "/explore", icon: Compass },
   { title: "Подписки", url: "/subscriptions", icon: Users },
   { title: "Библиотека", url: "/library", icon: Library },
-  { title: "Студия автора", url: "/creator-studio", icon: Palette },
+  { title: "Студия автора", url: "/creator-studio", icon: Palette, hideForRoles: ["advertiser"] },
   { title: "Рекламная студия", url: "/ad-studio", icon: Megaphone },
-  { title: "Предложения", url: "/marketplace", icon: Store },
+  { title: "Предложения", url: "/marketplace", icon: Store, hideForRoles: ["creator"] },
   { title: "AI Workspace", url: "/ai-workspace", icon: Brain },
   { title: "Достижения", url: "/achievements", icon: Trophy },
 ];
@@ -26,7 +38,22 @@ export function AppSidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const { profile, signOut } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const { isCreator, isAdvertiser, isModerator } = useUserRole();
   const navigate = useNavigate();
+
+  const mainNav = useMemo(() => {
+    return allMainNav.filter((item) => {
+      if (item.hideForRoles) {
+        if (item.hideForRoles.includes("creator") && isCreator && !isModerator) return false;
+        if (item.hideForRoles.includes("advertiser") && isAdvertiser && !isModerator) return false;
+      }
+      if (item.roles) {
+        const roleMap: Record<string, boolean> = { creator: isCreator, advertiser: isAdvertiser, moderator: isModerator };
+        return item.roles.some((r) => roleMap[r]) || isModerator;
+      }
+      return true;
+    });
+  }, [isCreator, isAdvertiser, isModerator]);
 
   const handleSignOut = async () => {
     await signOut();

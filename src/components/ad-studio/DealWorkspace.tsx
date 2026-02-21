@@ -4,6 +4,7 @@ import { deals as mockDeals, messages as allMessages } from "@/data/mockData";
 import { useRealtimeMessages } from "@/hooks/useRealtimeMessages";
 import { useAdvertiserScores } from "@/hooks/useAdvertiserScores";
 import { useAuth } from "@/contexts/AuthContext";
+import { useUserRole } from "@/hooks/useUserRole";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -1210,6 +1211,7 @@ function MoreTab({ dealId }: { dealId: string }) {
    ═══════════════════════════════════════════════════════ */
 export function DealWorkspace() {
   const { user } = useAuth();
+  const { isCreator: isCreatorRole } = useUserRole();
   const location = useLocation();
 
   // Fetch real deals from DB
@@ -1332,10 +1334,10 @@ export function DealWorkspace() {
               <p className="text-[14px] text-muted-foreground leading-relaxed">
                 Найдите авторов на бирже и отправьте предложение о сотрудничестве
               </p>
-              <div className="flex gap-2 justify-center pt-2">
-                <Button onClick={() => navigate("/marketplace")} className="text-[14px]">
+               <div className="flex gap-2 justify-center pt-2">
+                <Button onClick={() => navigate(isCreatorRole ? "/ad-studio" : "/marketplace")} className="text-[14px]">
                   <Search className="h-4 w-4 mr-1.5" />
-                  Найти авторов
+                  {isCreatorRole ? "Ожидайте предложений" : "Найти авторов"}
                 </Button>
               </div>
             </div>
