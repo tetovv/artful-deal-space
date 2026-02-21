@@ -63,9 +63,17 @@ export function saveDraft(draft: CampaignDraft) {
   try {
     localStorage.setItem(DRAFTS_KEY, JSON.stringify(drafts));
   } catch {
-    // Quota exceeded — try without file data
-    const lite = drafts.map((d) => ({ ...d, creativeDataUrl: null }));
-    localStorage.setItem(DRAFTS_KEY, JSON.stringify(lite));
+    // Quota exceeded — strip file data only from THIS draft, keep other drafts' files
+    const lite = drafts.map((d) =>
+      d.id === draft.id ? { ...d, creativeDataUrl: null } : d
+    );
+    try {
+      localStorage.setItem(DRAFTS_KEY, JSON.stringify(lite));
+    } catch {
+      // Still too large — strip all file data
+      const ultraLite = drafts.map((d) => ({ ...d, creativeDataUrl: null }));
+      localStorage.setItem(DRAFTS_KEY, JSON.stringify(ultraLite));
+    }
   }
 }
 
