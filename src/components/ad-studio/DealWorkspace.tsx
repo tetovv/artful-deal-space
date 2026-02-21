@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { deals as mockDeals, messages as allMessages } from "@/data/mockData";
 import { useRealtimeMessages } from "@/hooks/useRealtimeMessages";
 import { useAdvertiserScores } from "@/hooks/useAdvertiserScores";
@@ -34,7 +34,7 @@ import {
   CheckCircle2, AlertTriangle, Clock, FileText, Upload, Download,
   ExternalLink, Pin, RefreshCw, MessageCircle, ClipboardCopy,
   Archive, Files, CreditCard, Radio, ScrollText, CalendarDays, Copy,
-  ChevronDown, ChevronRight, ArrowLeftRight, Loader2,
+  ChevronDown, ChevronRight, ArrowLeftRight, Loader2, Megaphone,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Deal, DealStatus } from "@/types";
@@ -1219,7 +1219,7 @@ export function DealWorkspace() {
     }
   }, [location.state, allDeals]);
 
-  const activeDeal = selectedDeal || allDeals[0];
+  const activeDeal = selectedDeal;
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -1230,30 +1230,37 @@ export function DealWorkspace() {
   useRealtimeAuditLog(activeDeal?.id);
   useRealtimeEscrow(activeDeal?.id);
 
-  if (!activeDeal) {
-    return <div className="flex-1 flex items-center justify-center text-muted-foreground text-[15px]">Нет сделок</div>;
-  }
+  // Stats for empty state
+  const dealStats = useMemo(() => {
+    const stats: Record<string, number> = {};
+    allDeals.forEach((d) => {
+      const label = statusLabels[d.status] || d.status;
+      stats[label] = (stats[label] || 0) + 1;
+    });
+    return stats;
+  }, [allDeals]);
 
-  const dealStatus = activeDeal.status as string;
-  const isProposal = ["pending", "needs_changes", "accepted", "rejected"].includes(dealStatus);
-  const primaryAction = getPrimaryAction(dealStatus);
-  const nextStepHint = getNextStepHint(dealStatus);
-  const completedMs = activeDeal.milestones.filter((m) => m.completed).length;
-  const totalMs = activeDeal.milestones.length;
+  const navigate = useNavigate();
 
-  const coreTabs = [
+  const coreTabs = activeDeal ? [
     { value: "chat", label: "Чат", icon: MessageCircle },
     { value: "terms", label: "Условия", icon: ScrollText },
     { value: "files", label: "Файлы", icon: Files },
     { value: "payment", label: "Оплата", icon: CreditCard },
-  ];
+  ] : [];
 
+  const dealStatus = activeDeal?.status as string | undefined;
+  const isProposal = dealStatus ? ["pending", "needs_changes", "accepted", "rejected"].includes(dealStatus) : false;
+  const primaryAction = dealStatus ? getPrimaryAction(dealStatus) : null;
+  const nextStepHint = dealStatus ? getNextStepHint(dealStatus) : null;
+  const completedMs = activeDeal?.milestones.filter((m) => m.completed).length || 0;
+  const totalMs = activeDeal?.milestones.length || 0;
   const isMoreTab = activeSubTab === "more";
 
   return (
     <div className="flex-1 flex h-full overflow-hidden">
       <DealSidebar
-        selectedId={activeDeal.id}
+        selectedId={activeDeal?.id || ""}
         onSelect={(d) => {
           setSelectedDeal(d);
           const isProp = ["pending", "needs_changes", "accepted", "rejected"].includes(d.status as string);
@@ -1267,7 +1274,49 @@ export function DealWorkspace() {
         allDeals={allDeals}
       />
 
-      {/* Main workspace */}
+      {/* Main workspace — empty state or deal view */}
+      {!activeDeal ? (
+        <div className="flex-1 flex flex-col items-center justify-center min-w-0 bg-background/50">
+          {allDeals.length === 0 ? (
+            /* No deals at all */
+            <div className="text-center space-y-4 max-w-md px-6">
+              <div className="mx-auto w-16 h-16 rounded-2xl bg-muted/60 flex items-center justify-center">
+                <Megaphone className="h-7 w-7 text-muted-foreground" />
+              </div>
+              <h2 className="text-[18px] font-semibold text-foreground">У вас пока нет сделок</h2>
+              <p className="text-[14px] text-muted-foreground leading-relaxed">
+                Найдите авторов на бирже и отправьте предложение о сотрудничестве
+              </p>
+              <div className="flex gap-2 justify-center pt-2">
+                <Button onClick={() => navigate("/marketplace")} className="text-[14px]">
+                  <Search className="h-4 w-4 mr-1.5" />
+                  Найти авторов
+                </Button>
+              </div>
+            </div>
+          ) : (
+            /* Has deals, but none selected */
+            <div className="text-center space-y-5 max-w-md px-6">
+              <div className="mx-auto w-16 h-16 rounded-2xl bg-muted/60 flex items-center justify-center">
+                <ArrowLeftRight className="h-7 w-7 text-muted-foreground" />
+              </div>
+              <h2 className="text-[18px] font-semibold text-foreground">Выберите сделку слева</h2>
+              <p className="text-[14px] text-muted-foreground">
+                Выберите сделку из списка, чтобы увидеть детали
+              </p>
+              {/* Deal stats */}
+              <div className="flex flex-wrap gap-2 justify-center pt-1">
+                {Object.entries(dealStats).map(([label, count]) => (
+                  <span key={label} className="text-[12px] px-2.5 py-1 rounded-md bg-muted/60 text-muted-foreground">
+                    {label}: <span className="font-semibold text-foreground">{count}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+      /* Active deal workspace */
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* ── Header Row 1: Title + status + primary CTA + kebab ── */}
         <div className="px-5 py-2.5 border-b border-border bg-card">
@@ -1419,6 +1468,7 @@ export function DealWorkspace() {
           {activeSubTab === "more" && <MoreTab dealId={activeDeal.id} />}
         </div>
       </div>
+      )}
     </div>
   );
 }
