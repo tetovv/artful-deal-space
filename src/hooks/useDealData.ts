@@ -292,6 +292,31 @@ export function useDownloadDealFile() {
   });
 }
 
+export function useTogglePinFile() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  const logEvent = useLogDealEvent();
+  return useMutation({
+    mutationFn: async (params: { fileId: string; dealId: string; pinned: boolean; fileName: string }) => {
+      if (!user) throw new Error("Not authenticated");
+      const { error } = await supabase
+        .from("deal_files")
+        .update({ pinned: params.pinned })
+        .eq("id", params.fileId);
+      if (error) throw error;
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["deal_files", vars.dealId] });
+      logEvent.mutate({
+        dealId: vars.dealId,
+        action: vars.pinned ? `Закрепил файл: ${vars.fileName}` : `Открепил файл: ${vars.fileName}`,
+        category: "files",
+      });
+      toast.success(vars.pinned ? "Файл закреплён" : "Файл откреплён");
+    },
+  });
+}
+
 /* ─── Terms ─── */
 export function useDealTerms(dealId: string | undefined) {
   return useQuery({
