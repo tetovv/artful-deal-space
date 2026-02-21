@@ -164,6 +164,19 @@ export default function CreatorProposal() {
   useRealtimeMessages(deal?.id || "");
   useRealtimeInvoices(deal?.id || "");
 
+  // Realtime: re-fetch deal when status changes
+  useEffect(() => {
+    if (!deal?.id) return;
+    const channel = supabase
+      .channel(`deal-status-${deal.id}`)
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "deals", filter: `id=eq.${deal.id}` }, () => {
+        qc.invalidateQueries({ queryKey: ["proposal-deal", proposalId] });
+        qc.invalidateQueries({ queryKey: ["creator-incoming-deals"] });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [deal?.id, proposalId, qc]);
+
   const { data: chatMessages = [], refetch: refetchMessages } = useQuery({
     queryKey: ["deal-chat", deal?.id],
     queryFn: async () => {

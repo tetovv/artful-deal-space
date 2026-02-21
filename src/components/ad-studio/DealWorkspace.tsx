@@ -5,7 +5,7 @@ import { useRealtimeMessages } from "@/hooks/useRealtimeMessages";
 import { useAdvertiserScores } from "@/hooks/useAdvertiserScores";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserRole } from "@/hooks/useUserRole";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
   useDealAuditLog, useLogDealEvent,
@@ -1328,6 +1328,7 @@ function MoreTab({ dealId }: { dealId: string }) {
    ═══════════════════════════════════════════════════════ */
 export function DealWorkspace() {
   const { user } = useAuth();
+  const qc = useQueryClient();
   const { isCreator: isCreatorRole } = useUserRole();
   const location = useLocation();
 
@@ -1393,6 +1394,20 @@ export function DealWorkspace() {
   // Realtime subscriptions for audit log and escrow
   useRealtimeAuditLog(activeDeal?.id);
   useRealtimeEscrow(activeDeal?.id);
+
+  // Realtime: re-fetch deals list when any deal status changes
+  useEffect(() => {
+    if (!user) return;
+    const channel = supabase
+      .channel(`adv-deals-${user.id}`)
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "deals" }, (payload) => {
+        if (payload.new && ((payload.new as any).advertiser_id === user.id || (payload.new as any).creator_id === user.id)) {
+          qc.invalidateQueries({ queryKey: ["my_deals", user.id] });
+        }
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user, qc]);
 
   // Fetch latest terms for counter-offer banner
   const { data: latestTermsForBanner } = useDealTerms(activeDeal?.id || "");
