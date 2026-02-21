@@ -87,7 +87,7 @@ function DealMiniCard({ deal, navigate }: { deal: any; navigate: (path: string) 
   };
   return (
     <div
-      onClick={() => navigate("/marketplace")}
+      onClick={() => navigate("/ad-studio")}
       className="rounded-xl border border-border bg-card p-4 space-y-2 hover:shadow-lg hover:border-primary/20 transition-all duration-300 cursor-pointer"
     >
       <div className="flex items-center justify-between">
@@ -376,7 +376,7 @@ const Home = () => {
               <section className="space-y-3">
                 <div className="flex items-center justify-between">
                   <h2 className="text-lg font-semibold">Последние сделки</h2>
-                  <button onClick={() => navigate("/marketplace")} className="text-xs text-primary hover:underline flex items-center gap-1">Все <ArrowRight className="h-3 w-3" /></button>
+                  <button onClick={() => navigate("/ad-studio")} className="text-xs text-primary hover:underline flex items-center gap-1">Все <ArrowRight className="h-3 w-3" /></button>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   {recentDeals.map((d: any) => <DealMiniCard key={d.id} deal={d} navigate={navigate} />)}

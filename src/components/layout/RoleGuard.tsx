@@ -1,7 +1,8 @@
 import { useUserRole } from "@/hooks/useUserRole";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Shield, ArrowLeft } from "lucide-react";
+import { getMyDealsRoute } from "@/lib/roleRoutes";
 
 interface RoleGuardProps {
   /** Roles that are BLOCKED from accessing this page */
@@ -14,9 +15,10 @@ interface RoleGuardProps {
   children: React.ReactNode;
 }
 
-export function RoleGuard({ blockedRoles, allowedRoles, fallbackUrl = "/", fallbackLabel = "Вернуться на главную", children }: RoleGuardProps) {
-  const { isCreator, isAdvertiser, isModerator, isUser, isLoading } = useUserRole();
+export function RoleGuard({ blockedRoles, allowedRoles, fallbackUrl, fallbackLabel, children }: RoleGuardProps) {
+  const { isCreator, isAdvertiser, isModerator, isUser, isLoading, primaryRole } = useUserRole();
   const navigate = useNavigate();
+  const location = useLocation();
 
   if (isLoading) {
     return (
@@ -39,6 +41,15 @@ export function RoleGuard({ blockedRoles, allowedRoles, fallbackUrl = "/", fallb
   }
 
   if (blocked) {
+    // Debug logging — helps identify which links route users to forbidden pages
+    console.warn(
+      `[RoleGuard] BLOCKED route="${location.pathname}" detectedRole="${primaryRole}" blockedRoles=${JSON.stringify(blockedRoles)} allowedRoles=${JSON.stringify(allowedRoles)}`
+    );
+
+    // Role-aware fallback
+    const resolvedUrl = fallbackUrl ?? getMyDealsRoute(primaryRole);
+    const resolvedLabel = fallbackLabel ?? (isCreator ? "К моим сделкам" : isAdvertiser ? "К моим сделкам" : "Вернуться на главную");
+
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4">
         <Shield className="h-10 w-10 text-muted-foreground" />
@@ -48,9 +59,9 @@ export function RoleGuard({ blockedRoles, allowedRoles, fallbackUrl = "/", fallb
             Данный раздел предназначен для другой категории пользователей.
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => navigate(fallbackUrl)}>
+        <Button variant="outline" size="sm" onClick={() => navigate(resolvedUrl)}>
           <ArrowLeft className="h-4 w-4 mr-1.5" />
-          {fallbackLabel}
+          {resolvedLabel}
         </Button>
       </div>
     );
