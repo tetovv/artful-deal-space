@@ -282,7 +282,7 @@ export function DealProposalForm({ open, onClose, creator, resumeDraft }: DealPr
           title: "Новое предложение о сделке",
           message: `${advertiserName} предлагает сотрудничество: ${PLACEMENT_LABEL_MAP[placementType]}, бюджет ${finalBudget.toLocaleString()} ₽`,
           type: "deal",
-          link: "/marketplace",
+          link: `/creator/proposals/${deal.id}`,
         });
       }
 
