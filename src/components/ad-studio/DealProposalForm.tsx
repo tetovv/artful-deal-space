@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,12 +16,14 @@ import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import {
   Send, Save, CalendarIcon, Upload, X, Lock, FileText,
-  Video, FileEdit, Mic, Loader2, ChevronDown, HelpCircle,
+  Video, FileEdit, Mic, Loader2, ChevronDown, HelpCircle, Info,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { useExistingDraft, useSaveDraft, type DealProposal } from "@/hooks/useDealProposals";
+import { useNavigate } from "react-router-dom";
 
 /* ── Constants ── */
 
@@ -60,15 +62,20 @@ interface DealProposalFormProps {
   open: boolean;
   onClose: () => void;
   creator: CreatorInfo;
+  /** Pre-loaded draft to resume */
+  resumeDraft?: DealProposal | null;
 }
 
 /* ── Component ── */
 
-export function DealProposalForm({ open, onClose, creator }: DealProposalFormProps) {
+export function DealProposalForm({ open, onClose, creator, resumeDraft }: DealProposalFormProps) {
   const { user, profile } = useAuth();
+  const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const saveDraftMutation = useSaveDraft();
 
   /* Core fields */
+  const [draftId, setDraftId] = useState<string | null>(null);
   const [placementType, setPlacementType] = useState("");
   const [platform, setPlatform] = useState("");
   const [budgetMode, setBudgetMode] = useState<"fixed" | "range">("fixed");
@@ -79,6 +86,7 @@ export function DealProposalForm({ open, onClose, creator }: DealProposalFormPro
   const [deadlineEnd, setDeadlineEnd] = useState<Date | undefined>();
   const [briefText, setBriefText] = useState("");
   const [platformCompliance, setPlatformCompliance] = useState(false);
+  const [budgetAutoFilled, setBudgetAutoFilled] = useState(false);
 
   /* Detail fields */
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -88,9 +96,66 @@ export function DealProposalForm({ open, onClose, creator }: DealProposalFormPro
   const [files, setFiles] = useState<File[]>([]);
 
   const [submitting, setSubmitting] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // Load draft data when resumeDraft is provided
+  useEffect(() => {
+    if (resumeDraft && open) {
+      setDraftId(resumeDraft.id);
+      // Reverse-map placement type
+      const ptEntry = Object.entries(PLACEMENT_LABEL_MAP).find(([_, v]) => v === resumeDraft.placement_type);
+      setPlacementType(ptEntry ? ptEntry[0] : resumeDraft.placement_type);
+      if (resumeDraft.budget_value) {
+        setBudgetMode("fixed");
+        setBudgetFixed(String(resumeDraft.budget_value));
+      } else if (resumeDraft.budget_min || resumeDraft.budget_max) {
+        setBudgetMode("range");
+        setBudgetMin(String(resumeDraft.budget_min || ""));
+        setBudgetMax(String(resumeDraft.budget_max || ""));
+      }
+      if (resumeDraft.publish_start) setDeadlineStart(new Date(resumeDraft.publish_start));
+      if (resumeDraft.publish_end) setDeadlineEnd(new Date(resumeDraft.publish_end));
+      setBriefText(resumeDraft.brief_text || "");
+      setRevisions(String(resumeDraft.revisions_count || ""));
+      setAcceptanceCriteria(resumeDraft.acceptance_criteria || "");
+      setMarking(resumeDraft.ord_responsibility || "platform");
+    }
+  }, [resumeDraft, open]);
+
+  // Reset form on close
+  const resetForm = useCallback(() => {
+    setDraftId(null);
+    setPlacementType("");
+    setPlatform("");
+    setBudgetMode("fixed");
+    setBudgetFixed("");
+    setBudgetMin("");
+    setBudgetMax("");
+    setDeadlineStart(undefined);
+    setDeadlineEnd(undefined);
+    setBriefText("");
+    setPlatformCompliance(false);
+    setBudgetAutoFilled(false);
+    setDetailsOpen(false);
+    setRevisions("");
+    setAcceptanceCriteria("");
+    setMarking("platform");
+    setFiles([]);
+  }, []);
 
   /* Derived */
   const selectedOffer = creator.offers.find((o) => o.type === PLACEMENT_LABEL_MAP[placementType]);
+
+  // Auto-fill budget from creator offer when placement type changes
+  useEffect(() => {
+    if (placementType && selectedOffer && !budgetFixed && !budgetMin && !resumeDraft) {
+      setBudgetFixed(String(selectedOffer.price));
+      setBudgetAutoFilled(true);
+    } else if (!selectedOffer) {
+      setBudgetAutoFilled(false);
+    }
+  }, [placementType, selectedOffer]);
+
   const budgetDisplay = budgetMode === "fixed"
     ? (budgetFixed ? `${parseInt(budgetFixed).toLocaleString("ru-RU")} ₽` : "—")
     : (budgetMin && budgetMax ? `${parseInt(budgetMin).toLocaleString("ru-RU")} – ${parseInt(budgetMax).toLocaleString("ru-RU")} ₽` : "—");
@@ -115,6 +180,35 @@ export function DealProposalForm({ open, onClose, creator }: DealProposalFormPro
     if (e.target.files) setFiles((prev) => [...prev, ...Array.from(e.target.files!)]);
   };
   const removeFile = (idx: number) => setFiles((prev) => prev.filter((_, i) => i !== idx));
+
+  const buildDraftPayload = (): Partial<DealProposal> & { creator_id: string } => ({
+    ...(draftId ? { id: draftId } : {}),
+    creator_id: creator.userId,
+    placement_type: PLACEMENT_LABEL_MAP[placementType] || placementType,
+    budget_value: budgetMode === "fixed" && budgetFixed ? parseInt(budgetFixed) : null,
+    budget_min: budgetMode === "range" && budgetMin ? parseInt(budgetMin) : null,
+    budget_max: budgetMode === "range" && budgetMax ? parseInt(budgetMax) : null,
+    publish_start: deadlineStart?.toISOString() || null,
+    publish_end: deadlineEnd?.toISOString() || null,
+    brief_text: briefText,
+    revisions_count: revisions ? parseInt(revisions) : 0,
+    acceptance_criteria: acceptanceCriteria,
+    ord_responsibility: marking,
+  });
+
+  const handleSaveDraft = async () => {
+    if (!user) return;
+    setSaving(true);
+    try {
+      const result = await saveDraftMutation.mutateAsync(buildDraftPayload());
+      setDraftId(result.id);
+      toast.success("Черновик сохранён");
+    } catch {
+      toast.error("Ошибка сохранения черновика");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const handleSubmit = async () => {
     if (!user || !canSubmit) return;
@@ -164,6 +258,11 @@ export function DealProposalForm({ open, onClose, creator }: DealProposalFormPro
         metadata: { placementType: PLACEMENT_LABEL_MAP[placementType], budget: finalBudget },
       });
 
+      // If we had a draft, mark it as sent
+      if (draftId) {
+        await supabase.from("deal_proposals" as any).update({ status: "sent" }).eq("id", draftId);
+      }
+
       for (const file of files) {
         const path = `${user.id}/${deal.id}/${Date.now()}_${file.name}`;
         const { error: upErr } = await supabase.storage.from("deal-files").upload(path, file);
@@ -185,7 +284,13 @@ export function DealProposalForm({ open, onClose, creator }: DealProposalFormPro
         });
       }
 
-      toast.success("Предложение отправлено автору");
+      toast.success("Предложение отправлено автору", {
+        action: {
+          label: "Перейти в Мои сделки",
+          onClick: () => navigate("/ad-studio"),
+        },
+      });
+      resetForm();
       onClose();
     } catch (err: any) {
       console.error(err);
@@ -197,10 +302,13 @@ export function DealProposalForm({ open, onClose, creator }: DealProposalFormPro
 
   /* ── Render ── */
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+    <Dialog open={open} onOpenChange={(v) => { if (!v) { resetForm(); onClose(); } }}>
       <DialogContent className="max-w-[720px] max-h-[90vh] p-0 gap-0 flex flex-col">
         <DialogHeader className="px-6 pt-5 pb-0">
-          <DialogTitle className="text-lg">Предложение о сделке</DialogTitle>
+          <DialogTitle className="text-lg">
+            Предложение о сделке
+            {draftId && <Badge variant="secondary" className="ml-2 text-[10px]">Черновик</Badge>}
+          </DialogTitle>
         </DialogHeader>
 
         {/* ── Summary strip ── */}
@@ -244,7 +352,7 @@ export function DealProposalForm({ open, onClose, creator }: DealProposalFormPro
                         <button
                           key={pt.value}
                           type="button"
-                          onClick={() => setPlacementType(pt.value)}
+                          onClick={() => { setPlacementType(pt.value); setBudgetAutoFilled(false); }}
                           className={cn(
                             "flex flex-col items-center gap-1 px-3 py-3.5 text-center transition-colors relative",
                             "border-r last:border-r-0 border-border",
@@ -303,15 +411,25 @@ export function DealProposalForm({ open, onClose, creator }: DealProposalFormPro
                   </div>
 
                   {budgetMode === "fixed" ? (
-                    <div className="relative">
-                      <Input
-                        type="number"
-                        value={budgetFixed}
-                        onChange={(e) => setBudgetFixed(e.target.value)}
-                        placeholder={selectedOffer ? `напр. ${selectedOffer.price.toLocaleString("ru-RU")}` : "напр. 50 000"}
-                        className="h-10 pr-8"
-                      />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[13px] text-muted-foreground">₽</span>
+                    <div className="space-y-1">
+                      <div className="relative">
+                        <Input
+                          type="number"
+                          value={budgetFixed}
+                          onChange={(e) => { setBudgetFixed(e.target.value); setBudgetAutoFilled(false); }}
+                          placeholder={selectedOffer ? `напр. ${selectedOffer.price.toLocaleString("ru-RU")}` : "напр. 50 000"}
+                          className="h-10 pr-8"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[13px] text-muted-foreground">₽</span>
+                      </div>
+                      {budgetAutoFilled && selectedOffer && (
+                        <p className="text-[11px] text-primary flex items-center gap-1">
+                          <Info className="h-3 w-3" />На основе оффера автора
+                        </p>
+                      )}
+                      {!selectedOffer && placementType && (
+                        <p className="text-[11px] text-muted-foreground">Цена по запросу — автор не указал оффер</p>
+                      )}
                     </div>
                   ) : (
                     <div className="grid grid-cols-2 gap-2">
@@ -461,12 +579,13 @@ export function DealProposalForm({ open, onClose, creator }: DealProposalFormPro
 
         {/* ── Footer: 3 actions ── */}
         <div className="flex items-center justify-between px-6 py-3 border-t border-border bg-card">
-          <Button variant="ghost" size="sm" onClick={onClose} className="h-9 text-muted-foreground">
+          <Button variant="ghost" size="sm" onClick={() => { resetForm(); onClose(); }} className="h-9 text-muted-foreground">
             Отмена
           </Button>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => toast.info("Черновик сохранён (демо)")}>
-              <Save className="h-3.5 w-3.5" />Черновик
+            <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={handleSaveDraft} disabled={saving}>
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+              Черновик
             </Button>
             <Button
               size="sm"

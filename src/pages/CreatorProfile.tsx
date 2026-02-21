@@ -9,6 +9,13 @@ import { useState, useMemo } from "react";
 import { toast } from "sonner";
 import { useVideoViewCounts } from "@/hooks/useVideoViews";
 import { usePostImpressionCounts } from "@/hooks/usePostImpressions";
+import { useCreatorAnalytics } from "@/hooks/useCreatorAnalytics";
+import { useExistingDraft } from "@/hooks/useDealProposals";
+import { DealProposalForm } from "@/components/ad-studio/DealProposalForm";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 import { ProfileHero } from "@/components/creator-profile/ProfileHero";
 import { ProfileActionCard } from "@/components/creator-profile/ProfileActionCard";
@@ -26,7 +33,8 @@ const CreatorProfile = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const [dealSent, setDealSent] = useState(false);
+  const [proposalOpen, setProposalOpen] = useState(false);
+  const [resumePromptOpen, setResumePromptOpen] = useState(false);
 
   const isOwnProfile = id === user?.id || id === "me";
   const profileUserId = isOwnProfile ? user?.id : id;
@@ -124,6 +132,12 @@ const CreatorProfile = () => {
     enabled: !!profileUserId,
   });
 
+  // Creator analytics for audience section
+  const { data: analyticsData } = useCreatorAnalytics(profileUserId);
+
+  // Existing draft check for proposal resume prompt
+  const { data: existingDraft } = useExistingDraft(profileUserId);
+
   /* ── Mutations ── */
 
   const followMutation = useMutation({
@@ -157,6 +171,29 @@ const CreatorProfile = () => {
     },
   });
 
+  /* ── Deal proposal CTA ── */
+  const handleDealClick = () => {
+    if (existingDraft) {
+      setResumePromptOpen(true);
+    } else {
+      setProposalOpen(true);
+    }
+  };
+
+  const [resumeDraft, setResumeDraft] = useState<any>(null);
+
+  const handleResumeDraft = () => {
+    setResumeDraft(existingDraft);
+    setResumePromptOpen(false);
+    setProposalOpen(true);
+  };
+
+  const handleStartNew = () => {
+    setResumeDraft(null);
+    setResumePromptOpen(false);
+    setProposalOpen(true);
+  };
+
   /* ── Derived ── */
 
   const profileData = isLoading ? null : mockCreator
@@ -188,17 +225,27 @@ const CreatorProfile = () => {
         createdAt: item.created_at, tags: item.tags || [],
       }));
 
-  // Derive typical turnaround from offers
   const turnaroundDays = creatorOffers.length > 0
     ? Math.max(...creatorOffers.map((o) => o.turnaround_days))
     : null;
 
-  // 30% video view counts
   const videoIds = useMemo(() => contentToShow.filter(c => c.type === "video").map(c => c.id), [contentToShow]);
   const { data: videoViewCounts = {} } = useVideoViewCounts(videoIds);
 
   const postIds = useMemo(() => contentToShow.filter(c => c.type === "post").map(c => c.id), [contentToShow]);
   const { data: postImpressionCounts = {} } = usePostImpressionCounts(postIds);
+
+  // Build creator info for proposal form
+  const creatorInfo = profileUserId ? {
+    userId: profileUserId,
+    displayName: profileData?.name || "",
+    avatarUrl: profileData?.avatar || null,
+    offers: creatorOffers.map(o => ({
+      type: o.offer_type === "video" ? "Видео-интеграция" : o.offer_type === "post" ? "Пост" : o.offer_type === "podcast" ? "Подкаст" : o.offer_type,
+      price: o.price,
+    })),
+    platforms: [] as { name: string; metric: string }[],
+  } : null;
 
   if (isLoading) {
     return <div className="p-8 text-muted-foreground animate-pulse">Загрузка профиля...</div>;
@@ -230,12 +277,12 @@ const CreatorProfile = () => {
 
             <OffersSection
               offers={creatorOffers}
-              onDeal={!isOwnProfile ? () => setDealSent(true) : undefined}
+              onDeal={!isOwnProfile ? handleDealClick : undefined}
             />
 
             <PortfolioSection items={contentToShow} videoViewCounts={videoViewCounts} postImpressionCounts={postImpressionCounts} />
 
-            <AudienceCard connected={false} />
+            <AudienceCard connected={!!analyticsData} data={analyticsData} />
 
             <WorkingTermsCard />
 
@@ -250,12 +297,12 @@ const CreatorProfile = () => {
             isOwnProfile={isOwnProfile}
             isFollowing={!!isFollowing}
             hasPaidSub={!!hasPaidSub}
-            dealSent={dealSent}
+            dealSent={false}
             followPending={followMutation.isPending}
             paidSubPending={paidSubMutation.isPending}
             onFollow={() => followMutation.mutate()}
             onPaidSub={() => paidSubMutation.mutate()}
-            onDeal={() => setDealSent(true)}
+            onDeal={handleDealClick}
             onEditProfile={() => navigate("/settings")}
             responseHours={profileData.responseHours}
             dealsCount={profileData.dealsCount}
@@ -265,6 +312,32 @@ const CreatorProfile = () => {
           />
         </div>
       </div>
+
+      {/* Resume draft prompt */}
+      <Dialog open={resumePromptOpen} onOpenChange={setResumePromptOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-base">У вас есть черновик</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Найден сохранённый черновик предложения для этого автора. Продолжить редактирование или начать заново?
+          </p>
+          <DialogFooter className="flex gap-2">
+            <Button variant="outline" onClick={handleStartNew}>Начать заново</Button>
+            <Button onClick={handleResumeDraft}>Продолжить черновик</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Proposal form modal */}
+      {creatorInfo && (
+        <DealProposalForm
+          open={proposalOpen}
+          onClose={() => { setProposalOpen(false); setResumeDraft(null); }}
+          creator={creatorInfo}
+          resumeDraft={resumeDraft}
+        />
+      )}
     </PageTransition>
   );
 };
