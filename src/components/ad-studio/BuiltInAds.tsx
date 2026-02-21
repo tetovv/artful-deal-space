@@ -16,6 +16,7 @@ import {
 import { CampaignManageView } from "./CampaignManageView";
 import type { Campaign, CampaignStatus, Placement } from "./CampaignManageView";
 import { ContractImportWizard } from "./ContractImportWizard";
+import { ManualCampaignWizard } from "./ManualCampaignWizard";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -244,6 +245,7 @@ export function BuiltInAds({ isVerified, onGoToSettings }: BuiltInAdsProps) {
   const [sortBy, setSortBy] = useState<string>("spent");
   const [managingCampaign, setManagingCampaign] = useState<Campaign | null>(null);
   const [showContractWizard, setShowContractWizard] = useState(false);
+  const [showManualWizard, setShowManualWizard] = useState(false);
 
   const filtered = useMemo(() => {
     let result = [...mockCampaigns];
@@ -282,13 +284,27 @@ export function BuiltInAds({ isVerified, onGoToSettings }: BuiltInAdsProps) {
     };
   }, []);
 
+  if (showManualWizard) {
+    return (
+      <ManualCampaignWizard
+        isVerified={isVerified}
+        ordConnected={isVerified}
+        onBack={() => setShowManualWizard(false)}
+        onComplete={(campaign) => {
+          setShowManualWizard(false);
+          setManagingCampaign(campaign);
+        }}
+        onGoToSettings={onGoToSettings}
+      />
+    );
+  }
+
   if (showContractWizard) {
     return (
       <ContractImportWizard
         onBack={() => setShowContractWizard(false)}
         onComplete={() => {
           setShowContractWizard(false);
-          // In real app, would create campaign and navigate to manage view
         }}
       />
     );
@@ -333,7 +349,7 @@ export function BuiltInAds({ isVerified, onGoToSettings }: BuiltInAdsProps) {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">
-                  <DropdownMenuItem className="text-sm gap-2 py-2.5">
+                  <DropdownMenuItem className="text-sm gap-2 py-2.5" onClick={() => setShowManualWizard(true)}>
                     <Plus className="h-3.5 w-3.5" />
                     <div>
                       <p className="font-medium">Вручную</p>
