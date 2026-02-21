@@ -327,7 +327,7 @@ export function DealProposalForm({ open, onClose, creator, resumeDraft }: DealPr
           </div>
         </div>
 
-        <ScrollArea className="flex-1 max-h-[calc(90vh-200px)]">
+        <ScrollArea className="flex-1 min-h-0 overflow-y-auto">
           <div className="px-6 pb-4 pt-4 space-y-1">
 
             {/* ═══════════ Section A: Core (required) ═══════════ */}
