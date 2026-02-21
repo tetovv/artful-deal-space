@@ -1,4 +1,5 @@
-import { useState, useMemo, useCallback, useRef } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import { deals as mockDeals, messages as allMessages } from "@/data/mockData";
 import { useRealtimeMessages } from "@/hooks/useRealtimeMessages";
 import { useAdvertiserScores } from "@/hooks/useAdvertiserScores";
@@ -1164,6 +1165,7 @@ function MoreTab({ dealId }: { dealId: string }) {
    ═══════════════════════════════════════════════════════ */
 export function DealWorkspace() {
   const { user } = useAuth();
+  const location = useLocation();
 
   // Fetch real deals from DB
   const { data: dbDeals = [] } = useQuery({
@@ -1203,6 +1205,20 @@ export function DealWorkspace() {
   }, [dbDeals]);
 
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
+
+  // Auto-select deal from navigation state
+  useEffect(() => {
+    const state = (location.state as { openDealId?: string }) || {};
+    if (state.openDealId && allDeals.length > 0) {
+      const target = allDeals.find((d) => d.id === state.openDealId);
+      if (target) {
+        setSelectedDeal(target);
+        // Clear state to avoid re-selecting on re-renders
+        window.history.replaceState({}, "");
+      }
+    }
+  }, [location.state, allDeals]);
+
   const activeDeal = selectedDeal || allDeals[0];
 
   const [searchQuery, setSearchQuery] = useState("");

@@ -405,8 +405,9 @@ function CreatorOffers() {
     if (error) toast.error("Не удалось принять предложение");
     else {
       if (deal) await sendNotification(deal, true);
-      toast.success("Предложение принято!");
+      toast.success("Сделка создана. Ожидайте резервирования средств.");
       queryClient.invalidateQueries({ queryKey: ["creator-incoming-deals"] });
+      queryClient.invalidateQueries({ queryKey: ["my_deals"] });
       navigate("/ad-studio", { state: { openDealId: dealId } });
     }
     setActionLoading(null);

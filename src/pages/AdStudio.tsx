@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import { DealWorkspace } from "@/components/ad-studio/DealWorkspace";
 import { useAdvertiserVerification } from "@/components/ad-studio/AdvertiserSettings";
 import { AdvertiserSettings } from "@/components/ad-studio/AdvertiserSettings";
@@ -12,8 +13,17 @@ import { Search, Megaphone, MonitorPlay, Settings } from "lucide-react";
 type AdStudioTab = "birzha" | "deals" | "builtin" | "settings";
 
 const AdStudio = () => {
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState<AdStudioTab>("birzha");
   const { isVerified } = useAdvertiserVerification();
+
+  // Auto-switch to deals tab when navigated with openDealId
+  useEffect(() => {
+    const state = location.state as { openDealId?: string } | null;
+    if (state?.openDealId) {
+      setActiveTab("deals");
+    }
+  }, [location.state]);
 
   const goToSettings = () => setActiveTab("settings");
 
