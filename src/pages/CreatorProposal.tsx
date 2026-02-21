@@ -87,6 +87,7 @@ export default function CreatorProposal() {
 
   const [activeTab, setActiveTab] = useState<ProposalTab>("overview");
   const [selectedVersionIdx, setSelectedVersionIdx] = useState<number | null>(null);
+  const [briefExpanded, setBriefExpanded] = useState(false);
 
   /* ── Data fetching ── */
   const { data: deal, isLoading } = useQuery({
@@ -475,7 +476,7 @@ export default function CreatorProposal() {
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-[20px] font-bold text-foreground truncate">{advertiserDisplayName}</h1>
+                <h1 className="text-[20px] font-bold text-foreground truncate safe-text">{advertiserDisplayName}</h1>
                 {brand?.business_verified && <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />}
                 <Badge variant="outline" className={cn("text-[11px] border font-medium shrink-0", st.cls)}>{st.label}</Badge>
               </div>
@@ -614,20 +615,46 @@ export default function CreatorProposal() {
 
               {/* Brief */}
               <div className="space-y-3">
-                <h2 className="text-[15px] font-semibold text-foreground">Бриф</h2>
+                <div className="flex items-center justify-between">
+                  <h2 className="text-[15px] font-semibold text-foreground">Бриф</h2>
+                  {hasBrief && (
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(rawBrief || "");
+                        toast.success("Бриф скопирован");
+                      }}
+                      className="text-[12px] text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+                    >
+                      <FileText className="h-3.5 w-3.5" /> Скопировать
+                    </button>
+                  )}
+                </div>
                 {hasBrief ? (
-                  <div className="space-y-3">
-                    <p className="text-[14px] text-foreground/90 leading-relaxed whitespace-pre-wrap">{rawBrief}</p>
+                  <div className="space-y-3 rounded-xl border border-border bg-card p-4">
+                    <div className="relative">
+                      <p className={cn(
+                        "safe-text text-[14px] text-foreground/90 leading-relaxed",
+                        !briefExpanded && "line-clamp-6"
+                      )}>{rawBrief}</p>
+                      {(rawBrief?.length || 0) > 300 && (
+                        <button
+                          onClick={() => setBriefExpanded(!briefExpanded)}
+                          className="text-[13px] text-primary hover:underline mt-1"
+                        >
+                          {briefExpanded ? "Свернуть" : "Показать полностью"}
+                        </button>
+                      )}
+                    </div>
                     {briefCta && (
                       <div className="rounded-lg bg-primary/5 border border-primary/15 px-3 py-2">
                         <span className="text-[12px] font-medium text-muted-foreground block mb-0.5">Призыв к действию (CTA)</span>
-                        <span className="text-[13px] text-foreground">{briefCta}</span>
+                        <span className="text-[13px] text-foreground safe-text">{briefCta}</span>
                       </div>
                     )}
                     {briefRestrictions && (
                       <div className="rounded-lg bg-destructive/5 border border-destructive/15 px-3 py-2">
                         <span className="text-[12px] font-medium text-muted-foreground block mb-0.5">Ограничения</span>
-                        <span className="text-[13px] text-foreground">{briefRestrictions}</span>
+                        <span className="text-[13px] text-foreground safe-text">{briefRestrictions}</span>
                       </div>
                     )}
                   </div>
@@ -893,7 +920,7 @@ export default function CreatorProposal() {
                                   {new Date(msg.created_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}
                                 </span>
                               </div>
-                              <p className="text-[13px] leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+                              <p className="text-[13px] leading-relaxed safe-text">{msg.content}</p>
                             </div>
                           </div>
                         );
