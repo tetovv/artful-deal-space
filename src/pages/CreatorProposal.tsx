@@ -334,14 +334,7 @@ export default function CreatorProposal() {
     }
   };
 
-  /* Deal-phase actions */
-  const handleStartWork = async () => {
-    if (!user || !deal) return;
-    await supabase.from("deals").update({ status: "in_progress" }).eq("id", deal.id);
-    logEvent.mutate({ dealId: deal.id, action: "Автор начал работу", category: "general" });
-    toast.success("Статус обновлён: В работе");
-    qc.invalidateQueries({ queryKey: ["proposal-deal", proposalId] });
-  };
+  /* Deal-phase actions — "Start work" removed; acceptance triggers invoice flow */
 
   const handleSubmitDraft = async () => {
     if (!user || !deal) return;
@@ -589,14 +582,12 @@ export default function CreatorProposal() {
               </div>
             </div>
 
-            {/* Persistent key details summary */}
+            {/* Persistent key details summary — status shown only next to title */}
             <div className="flex items-center gap-1.5 mt-1 text-[13px] text-muted-foreground flex-wrap">
               {placement && <><span className="text-muted-foreground/70">Тип:</span> <span className="text-foreground/80">{placement}</span> <span className="text-border">•</span></>}
               <span className="text-muted-foreground/70">Бюджет:</span> <span className="text-foreground/80 font-medium">{fmtBudget(deal.budget)}</span>
               <span className="text-border">•</span>
               <span className="text-muted-foreground/70">Дедлайн:</span> <span className="text-foreground/80">{deal.deadline ? fmtDate(deal.deadline) : "—"}</span>
-              <span className="text-border">•</span>
-              <Badge variant="outline" className={cn("text-[10px] h-5 font-medium border", st.cls)}>{st.label}</Badge>
               <span className="text-border">•</span>
               <button onClick={() => setDetailsOpen(true)} className="text-primary hover:underline text-[13px] font-medium">
                 Смотреть детали
