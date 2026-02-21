@@ -43,6 +43,7 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { PageTransition } from "@/components/layout/PageTransition";
+import { EscrowPayoutSection } from "@/components/ad-studio/EscrowPayoutSection";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { DatePickerField } from "@/components/ui/date-picker-field";
@@ -840,6 +841,7 @@ export default function CreatorProposal() {
                 isWaitingPayment={isWaitingPayment}
                 isPaid={isPaid}
                 budget={deal.budget}
+                deal={deal}
                 hasResultAwaitingConfirmation={files.some((f: any) => f.category === "result")}
                 onSendInvoice={() => {
                   setInvoiceAmount(String(deal.budget || ""));
@@ -1474,15 +1476,21 @@ function FileRow({ f, dealId, downloadFile, togglePin }: { f: any; dealId: strin
 }
 
 /* ─── PAYMENTS TAB ─── */
-function PaymentsTabContent({ escrowItems, invoices, isInvoiceNeeded, isWaitingPayment, isPaid, budget, onSendInvoice, hasResultAwaitingConfirmation }: {
+function PaymentsTabContent({ escrowItems, invoices, isInvoiceNeeded, isWaitingPayment, isPaid, budget, onSendInvoice, hasResultAwaitingConfirmation, deal }: {
   escrowItems: any[]; invoices: any[]; isInvoiceNeeded: boolean; isWaitingPayment: boolean; isPaid: boolean; budget: number; onSendInvoice: () => void;
   hasResultAwaitingConfirmation?: boolean;
+  deal?: any;
 }) {
+  const { user } = useAuth();
   const total = escrowItems.reduce((s: number, m: any) => s + m.amount, 0);
   const released = escrowItems.filter((m: any) => m.status === "released").reduce((s: number, m: any) => s + m.amount, 0);
   const reserved = escrowItems.filter((m: any) => m.status === "reserved").reduce((s: number, m: any) => s + m.amount, 0);
   const commission = Math.round(total * 0.1);
   const latestInvoice = invoices.length > 0 ? invoices[0] : null;
+
+  const isCreator = deal?.creator_id === user?.id;
+  const isAdvertiser = deal?.advertiser_id === user?.id;
+  const payoutEscrow = escrowItems.find((e: any) => e.escrow_state && e.escrow_state !== "WAITING_INVOICE");
 
   return (
     <div className="p-5 space-y-4 max-w-[820px] mx-auto">
@@ -1492,6 +1500,17 @@ function PaymentsTabContent({ escrowItems, invoices, isInvoiceNeeded, isWaitingP
           <p className="text-[13px] text-foreground/80">Результат отправлен — ожидается подтверждение рекламодателя</p>
         </div>
       )}
+
+      {/* Escrow payout section — new flow */}
+      {payoutEscrow && deal && (
+        <EscrowPayoutSection
+          escrowItem={payoutEscrow}
+          deal={deal}
+          isCreator={isCreator}
+          isAdvertiser={isAdvertiser}
+        />
+      )}
+
       {/* Invoice needed — empty state with CTA */}
       {isInvoiceNeeded && !latestInvoice && (
         <div className="text-center py-12 space-y-3">
@@ -1515,7 +1534,7 @@ function PaymentsTabContent({ escrowItems, invoices, isInvoiceNeeded, isWaitingP
               </div>
               <Badge variant="outline" className={cn("text-[11px]",
                 latestInvoice.status === "paid"
-                  ? "bg-green-500/10 text-green-500 border-green-500/30"
+                  ? "bg-success/15 text-success border-success/30"
                   : "bg-warning/15 text-warning border-warning/30"
               )}>
                 {latestInvoice.status === "paid" ? "Оплачено" : "Ожидает оплаты"}
@@ -1545,7 +1564,7 @@ function PaymentsTabContent({ escrowItems, invoices, isInvoiceNeeded, isWaitingP
               {latestInvoice.paid_at && (
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Оплачен</span>
-                  <span className="text-green-500 font-medium">{fmtDate(latestInvoice.paid_at)}</span>
+                  <span className="text-success font-medium">{fmtDate(latestInvoice.paid_at)}</span>
                 </div>
               )}
             </div>
@@ -1554,14 +1573,14 @@ function PaymentsTabContent({ escrowItems, invoices, isInvoiceNeeded, isWaitingP
       )}
 
       {/* Escrow summary */}
-      {isPaid && (
+      {isPaid && !payoutEscrow && (
         <>
           <div className="flex items-center gap-3 flex-wrap text-[15px]">
             <span className="text-muted-foreground">Итого: <span className="font-semibold text-foreground">{total.toLocaleString()} ₽</span></span>
             <span className="text-border">·</span>
             <span className="text-muted-foreground">Резерв: <span className="font-semibold text-foreground">{reserved.toLocaleString()} ₽</span></span>
             <span className="text-border">·</span>
-            <span className="text-muted-foreground">Выплачено: <span className="font-semibold text-green-500">{released.toLocaleString()} ₽</span></span>
+            <span className="text-muted-foreground">Выплачено: <span className="font-semibold text-success">{released.toLocaleString()} ₽</span></span>
           </div>
 
           {escrowItems.length > 0 && (

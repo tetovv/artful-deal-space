@@ -604,12 +604,20 @@ export type Database = {
       }
       deal_escrow: {
         Row: {
+          active_ends_at: string | null
+          active_started_at: string | null
           amount: number
           created_at: string
           deal_id: string
+          escrow_state: string
           id: string
           label: string
           milestone_id: string | null
+          paid_out_at: string | null
+          payout_amount: number | null
+          platform_fee: number | null
+          proof_screenshot_path: string | null
+          publication_url: string | null
           released_at: string | null
           released_by: string | null
           reserved_at: string | null
@@ -617,12 +625,20 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          active_ends_at?: string | null
+          active_started_at?: string | null
           amount?: number
           created_at?: string
           deal_id: string
+          escrow_state?: string
           id?: string
           label: string
           milestone_id?: string | null
+          paid_out_at?: string | null
+          payout_amount?: number | null
+          platform_fee?: number | null
+          proof_screenshot_path?: string | null
+          publication_url?: string | null
           released_at?: string | null
           released_by?: string | null
           reserved_at?: string | null
@@ -630,12 +646,20 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          active_ends_at?: string | null
+          active_started_at?: string | null
           amount?: number
           created_at?: string
           deal_id?: string
+          escrow_state?: string
           id?: string
           label?: string
           milestone_id?: string | null
+          paid_out_at?: string | null
+          payout_amount?: number | null
+          platform_fee?: number | null
+          proof_screenshot_path?: string | null
+          publication_url?: string | null
           released_at?: string | null
           released_by?: string | null
           reserved_at?: string | null
@@ -912,6 +936,11 @@ export type Database = {
           deadline: string | null
           description: string | null
           id: string
+          marking_required: boolean | null
+          marking_responsibility: string | null
+          placement_duration_days: number | null
+          publication_required: boolean | null
+          publication_url: string | null
           rejected_at: string | null
           rejection_reason: string | null
           status: string
@@ -927,6 +956,11 @@ export type Database = {
           deadline?: string | null
           description?: string | null
           id?: string
+          marking_required?: boolean | null
+          marking_responsibility?: string | null
+          placement_duration_days?: number | null
+          publication_required?: boolean | null
+          publication_url?: string | null
           rejected_at?: string | null
           rejection_reason?: string | null
           status?: string
@@ -942,6 +976,11 @@ export type Database = {
           deadline?: string | null
           description?: string | null
           id?: string
+          marking_required?: boolean | null
+          marking_responsibility?: string | null
+          placement_duration_days?: number | null
+          publication_required?: boolean | null
+          publication_url?: string | null
           rejected_at?: string | null
           rejection_reason?: string | null
           status?: string
