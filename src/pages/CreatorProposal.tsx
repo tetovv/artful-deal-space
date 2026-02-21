@@ -219,8 +219,6 @@ export default function CreatorProposal() {
     return null;
   })();
 
-  const st = statusConfig[deal?.status || "pending"] || statusConfig.pending;
-
   const isPending = deal?.status === "pending";
   const isNeedsChanges = deal?.status === "needs_changes";
   const isInvoiceNeeded = deal?.status === "invoice_needed";
@@ -232,6 +230,13 @@ export default function CreatorProposal() {
   const advertiserCountered = isNeedsChanges && latestCreatedBy === deal?.advertiser_id;
   const creatorCountered = isNeedsChanges && latestCreatedBy === user?.id;
   const canRespond = isPending || advertiserCountered;
+
+  // Role-aware status pill
+  const st = (() => {
+    if (creatorCountered) return { label: "Встречное отправлено", cls: "bg-primary/15 text-primary border-primary/30" };
+    if (advertiserCountered) return { label: "Встречное от рекламодателя", cls: "bg-warning/15 text-warning border-warning/30" };
+    return statusConfig[deal?.status || "pending"] || statusConfig.pending;
+  })();
 
   const isAuthorized = deal && deal.creator_id === user?.id;
   const advertiserDisplayName = brand?.brand_name || advertiserProfile?.display_name || deal?.advertiser_name || "Рекламодатель";
@@ -626,6 +631,18 @@ export default function CreatorProposal() {
             )}
           </div>
         </div>
+
+        {/* ════════ COUNTER-OFFER SENT BANNER (creator side, subtle) ════════ */}
+        {creatorCountered && latestTerms && (
+          <div className="border-b border-primary/20 bg-primary/5">
+            <div className="max-w-[1100px] mx-auto px-6 py-2.5 flex items-center gap-2 text-[13px]">
+              <ArrowLeftRight className="h-4 w-4 text-primary shrink-0" />
+              <span className="text-foreground/80">
+                Встречные условия (v{(latestTerms as any).version}) отправлены. Ждём ответа рекламодателя.
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* ════════ TAB CONTENT ════════ */}
         <div className="flex-1 overflow-y-auto">
