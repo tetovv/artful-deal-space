@@ -26,6 +26,9 @@ import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import {
+  Sheet, SheetContent, SheetHeader, SheetTitle,
+} from "@/components/ui/sheet";
+import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
@@ -110,7 +113,8 @@ export default function CreatorProposal() {
   const qc = useQueryClient();
   const logEvent = useLogDealEvent();
 
-  const [activeTab, setActiveTab] = useState<WorkspaceTab>("chat");
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>("terms");
+  const [tabInitialized, setTabInitialized] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [briefExpanded, setBriefExpanded] = useState(false);
 
@@ -230,7 +234,19 @@ export default function CreatorProposal() {
   const isInProgress = deal?.status === "in_progress";
   const isWaitingInputs = deal?.status === "briefing" || deal?.status === "waiting_inputs";
 
-  /* ─── Actions ─── */
+  /* ── Smart default tab ── */
+  useEffect(() => {
+    if (tabInitialized || !deal) return;
+    if (isAccepted) {
+      setActiveTab("chat");
+    } else if (chatMessages.length > 0) {
+      setActiveTab("chat");
+    } else {
+      setActiveTab("terms");
+    }
+    setTabInitialized(true);
+  }, [deal, chatMessages, isAccepted, tabInitialized]);
+
   const handleAccept = async () => {
     if (!user || !deal) return;
     setAccepting(true);
@@ -588,55 +604,19 @@ export default function CreatorProposal() {
               </div>
             </div>
 
-            {/* Collapsible details line */}
-            <Collapsible open={detailsOpen} onOpenChange={setDetailsOpen}>
-              <CollapsibleTrigger className="flex items-center gap-1.5 mt-1 text-[13px] text-muted-foreground hover:text-foreground transition-colors">
-                {detailsOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-                <span>Детали</span>
-                {!detailsOpen && (
-                  <span className="text-muted-foreground/60 ml-1">
-                    — {deal.title} · {(deal.budget || 0).toLocaleString()} ₽
-                    {deal.deadline && ` · до ${fmtDate(deal.deadline)}`}
-                  </span>
-                )}
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1.5 text-[15px] pb-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground">Сумма:</span>
-                    <span className="font-semibold">{(deal.budget || 0).toLocaleString()} ₽</span>
-                  </div>
-                  {deal.deadline && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-muted-foreground">Дедлайн:</span>
-                      <span className="font-medium flex items-center gap-1"><CalendarDays className="h-3.5 w-3.5" /> {fmtDate(deal.deadline)}</span>
-                    </div>
-                  )}
-                  <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground">Рекламодатель:</span>
-                    <span>{advertiserDisplayName}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground flex items-center gap-1">
-                      <ShieldCheck className="h-3.5 w-3.5 text-green-500" /> Безопасная сделка
-                    </span>
-                  </div>
-                  {placement && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-muted-foreground">Тип:</span>
-                      <span>{placement}</span>
-                    </div>
-                  )}
-                  <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground">ID:</span>
-                    <button className="flex items-center gap-1 hover:text-foreground font-mono text-[12px] text-muted-foreground"
-                      onClick={() => { navigator.clipboard.writeText(deal.id); toast.success("ID скопирован"); }}>
-                      #{deal.id.slice(0, 8)} <ClipboardCopy className="h-3 w-3" />
-                    </button>
-                  </div>
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
+            {/* Persistent key details summary */}
+            <div className="flex items-center gap-1.5 mt-1 text-[13px] text-muted-foreground flex-wrap">
+              {placement && <><span className="text-muted-foreground/70">Тип:</span> <span className="text-foreground/80">{placement}</span> <span className="text-border">•</span></>}
+              <span className="text-muted-foreground/70">Бюджет:</span> <span className="text-foreground/80 font-medium">{fmtBudget(deal.budget)}</span>
+              <span className="text-border">•</span>
+              <span className="text-muted-foreground/70">Дедлайн:</span> <span className="text-foreground/80">{deal.deadline ? fmtDate(deal.deadline) : "—"}</span>
+              <span className="text-border">•</span>
+              <Badge variant="outline" className={cn("text-[10px] h-5 font-medium border", st.cls)}>{st.label}</Badge>
+              <span className="text-border">•</span>
+              <button onClick={() => setDetailsOpen(true)} className="text-primary hover:underline text-[13px] font-medium">
+                Смотреть детали
+              </button>
+            </div>
           </div>
         </div>
 
@@ -878,6 +858,62 @@ export default function CreatorProposal() {
 
       {/* File request modal */}
       <RequestFilesModal open={showFileRequestModal} onClose={() => setShowFileRequestModal(false)} dealId={deal.id} />
+
+      {/* Details drawer */}
+      <Sheet open={detailsOpen} onOpenChange={setDetailsOpen}>
+        <SheetContent className="w-[400px] sm:w-[440px] overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle className="text-[17px]">Детали предложения</SheetTitle>
+          </SheetHeader>
+          <div className="space-y-5 mt-4">
+            {/* Key terms */}
+            <div className="space-y-3">
+              <h4 className="text-[13px] font-semibold text-muted-foreground uppercase tracking-wide">Условия</h4>
+              <div className="space-y-2.5">
+                <DetailRow label="Рекламодатель" value={advertiserDisplayName} />
+                {placement && <DetailRow label="Тип размещения" value={placement} />}
+                <DetailRow label="Бюджет" value={fmtBudget(deal.budget)} bold />
+                <DetailRow label="Дедлайн" value={deal.deadline ? fmtDate(deal.deadline) : "—"} />
+                {termsFields?.revisions && !isBriefEmpty(termsFields.revisions) && <DetailRow label="Правки" value={termsFields.revisions} />}
+                {termsFields?.acceptanceCriteria && !isBriefEmpty(termsFields.acceptanceCriteria) && <DetailRow label="Приёмка" value={termsFields.acceptanceCriteria} />}
+                <DetailRow label="Статус" value={st.label} />
+                <DetailRow label="ID" value={`#${deal.id.slice(0, 8)}`} mono />
+              </div>
+            </div>
+
+            {/* Brief */}
+            {hasBrief && (
+              <>
+                <Separator />
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-[13px] font-semibold text-muted-foreground uppercase tracking-wide">Бриф</h4>
+                    <button
+                      onClick={() => { navigator.clipboard.writeText(rawBrief || ""); toast.success("Бриф скопирован"); }}
+                      className="text-[12px] text-muted-foreground hover:text-foreground flex items-center gap-1"
+                    >
+                      <ClipboardCopy className="h-3 w-3" /> Скопировать
+                    </button>
+                  </div>
+                  <p className="text-[14px] text-foreground/90 leading-relaxed safe-text whitespace-pre-wrap">{rawBrief}</p>
+                  {briefCta && (
+                    <div className="rounded-lg bg-primary/5 border border-primary/15 px-3 py-2 mt-2">
+                      <span className="text-[12px] font-medium text-muted-foreground block mb-0.5">CTA</span>
+                      <span className="text-[13px] text-foreground safe-text">{briefCta}</span>
+                    </div>
+                  )}
+                  {briefRestrictions && (
+                    <div className="rounded-lg bg-destructive/5 border border-destructive/15 px-3 py-2 mt-2">
+                      <span className="text-[12px] font-medium text-muted-foreground block mb-0.5">Ограничения</span>
+                      <span className="text-[13px] text-foreground safe-text">{briefRestrictions}</span>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
     </PageTransition>
   );
 }
@@ -1382,6 +1418,15 @@ function RequestFilesModal({ open, onClose, dealId }: { open: boolean; onClose: 
 }
 
 /* ─── Helper components ─── */
+
+function DetailRow({ label, value, bold, mono }: { label: string; value: string; bold?: boolean; mono?: boolean }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <span className="text-[13px] text-muted-foreground shrink-0">{label}</span>
+      <span className={cn("text-[14px] text-foreground text-right safe-text", bold && "font-bold", mono && "font-mono text-[12px]")}>{value}</span>
+    </div>
+  );
+}
 
 function KVRow({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
   return (
