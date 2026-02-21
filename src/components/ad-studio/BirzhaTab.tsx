@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -15,11 +16,15 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   CheckCircle2, AlertTriangle,
   Search, MapPin, Users, Filter, MessageSquarePlus, Eye, X, Loader2, RotateCcw, Globe, Clock,
-  Handshake, Zap, ExternalLink, ShieldCheck, Tag, Lock, Sparkles, ArrowLeft,
+  Handshake, Zap, ExternalLink, ShieldCheck, Tag, Lock, Sparkles, ArrowLeft, UserPlus, UserCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BriefWizard, type BriefData } from "./BriefWizard";
 import { DealProposalForm } from "./DealProposalForm";
+import { useCreatorsAvgViews } from "@/hooks/useCreatorAnalytics";
+import { useMyDrafts } from "@/hooks/useDealProposals";
+import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 
 const NICHES = ["Образование", "Технологии", "Дизайн", "Фото", "Музыка", "Подкасты", "Бизнес", "Видео", "Motion"];
 const GEOS = ["Россия", "Беларусь", "Казахстан", "Украина"];
@@ -91,20 +96,22 @@ interface FilterState {
   categories: string[];
   verifiedOnly: boolean;
   reachRange: [number, number];
+  followingOnly: boolean;
 }
 
 const defaultFilters: FilterState = {
   niches: [], geos: [], platforms: [], categories: [],
-  verifiedOnly: false, reachRange: [0, 1000000],
+  verifiedOnly: false, reachRange: [0, 1000000], followingOnly: false,
 };
 
 function hasActiveFilters(f: FilterState): boolean {
   return f.niches.length > 0 || f.geos.length > 0 || f.platforms.length > 0 ||
-    f.categories.length > 0 || f.verifiedOnly || f.reachRange[0] > 0 || f.reachRange[1] < 1000000;
+    f.categories.length > 0 || f.verifiedOnly || f.reachRange[0] > 0 || f.reachRange[1] < 1000000 || f.followingOnly;
 }
 
 function getActiveChips(f: FilterState): { key: string; label: string }[] {
   const chips: { key: string; label: string }[] = [];
+  if (f.followingOnly) chips.push({ key: "following", label: "Подписки" });
   f.niches.forEach((n) => chips.push({ key: `niche-${n}`, label: n }));
   f.geos.forEach((g) => chips.push({ key: `geo-${g}`, label: g }));
   f.platforms.forEach((p) => chips.push({ key: `platform-${p}`, label: p }));
@@ -122,7 +129,6 @@ const fmt = (n: number | null) => {
   return String(n);
 };
 
-/** Build creator meta from real DB data */
 function buildCreatorMeta(
   profile: ProfileRow,
   offersMap: Map<string, OfferRow[]>,
@@ -133,14 +139,11 @@ function buildCreatorMeta(
     price: o.price,
     turnaroundDays: o.turnaround_days,
   }));
-
   const platforms = (platformsMap.get(profile.user_id) || []).map((p) => ({
     name: p.platform_name,
     metric: fmt(p.subscriber_count) || "0",
   }));
-
   const minPrice = offers.length > 0 ? Math.min(...offers.map((o) => o.price)) : null;
-
   return {
     responseHours: profile.response_hours || 24,
     dealsCount: profile.deals_count || 0,
@@ -235,15 +238,16 @@ function FilterDrawerContent({ filters, setFilters, onApply, onReset }: {
 }
 
 /* ── Quick View Modal ── */
-function QuickViewModal({ creator, meta, open, onClose, isVerified, categoryLabel, onPropose }: {
+function QuickViewModal({ creator, meta, open, onClose, isVerified, categoryLabel, onPropose, avgViews }: {
   creator: ProfileRow; meta: CreatorMeta; open: boolean; onClose: () => void; isVerified: boolean; categoryLabel?: string;
-  onPropose: () => void;
+  onPropose: () => void; avgViews?: { avgViews: number; videoCount: number } | null;
 }) {
   const metrics: { icon: React.ReactNode; label: string; value: string }[] = [];
   const tgPlatform = meta.platforms.find((p) => p.name === "TG" || p.name === "Telegram");
   const ytPlatform = meta.platforms.find((p) => p.name === "YT" || p.name === "YouTube");
   if (tgPlatform) metrics.push({ icon: <Users className="h-4 w-4" />, label: "TG подписчики", value: tgPlatform.metric });
   if (ytPlatform) metrics.push({ icon: <Eye className="h-4 w-4" />, label: "YT avg views", value: ytPlatform.metric });
+  if (avgViews && avgViews.videoCount >= 3) metrics.push({ icon: <Eye className="h-4 w-4" />, label: "Avg views (30%)", value: fmt(avgViews.avgViews) || "—" });
   if (meta.dealsCount > 0) metrics.push({ icon: <Handshake className="h-4 w-4" />, label: "Сделки завершены", value: String(meta.dealsCount) });
   if (meta.responseHours > 0) metrics.push({ icon: <Clock className="h-4 w-4" />, label: "Среднее время ответа", value: `~${meta.responseHours} ч` });
 
@@ -251,7 +255,6 @@ function QuickViewModal({ creator, meta, open, onClose, isVerified, categoryLabe
   for (const o of meta.offers) {
     turnaroundMap.set(o.type, `${o.turnaroundDays} дн`);
   }
-
   const niches = (creator.niche || []).slice(0, 4);
   const bestFitLine = niches.length > 0 ? `Подходит для: ${niches.join(" / ")}` : null;
 
@@ -289,7 +292,6 @@ function QuickViewModal({ creator, meta, open, onClose, isVerified, categoryLabe
             </div>
           </DialogTitle>
         </DialogHeader>
-
         <div className="space-y-5 mt-3">
           {metrics.length > 0 ? (
             <div className="grid grid-cols-2 gap-2.5">
@@ -306,7 +308,6 @@ function QuickViewModal({ creator, meta, open, onClose, isVerified, categoryLabe
           ) : (
             <p className="text-[13px] text-muted-foreground/60 italic">Аналитика не подключена</p>
           )}
-
           <div className="space-y-2">
             <p className="text-[12px] font-semibold text-muted-foreground uppercase tracking-wider">Размещения</p>
             {meta.offers.length > 0 ? (
@@ -329,11 +330,7 @@ function QuickViewModal({ creator, meta, open, onClose, isVerified, categoryLabe
               <div className="bg-muted/30 rounded-lg px-4 py-3 text-[15px] text-muted-foreground">Цена по запросу</div>
             )}
           </div>
-
-          {bestFitLine && (
-            <p className="text-[13px] text-muted-foreground italic">{bestFitLine}</p>
-          )}
-
+          {bestFitLine && <p className="text-[13px] text-muted-foreground italic">{bestFitLine}</p>}
           <div className="flex gap-3 pt-3 border-t border-border">
             <Button className="flex-1 h-10 text-[15px]" disabled={!isVerified} onClick={() => { onClose(); onPropose(); }}>
               <MessageSquarePlus className="h-4 w-4 mr-2" />Предложить сделку
@@ -348,21 +345,11 @@ function QuickViewModal({ creator, meta, open, onClose, isVerified, categoryLabe
   );
 }
 
-function MetricCell({ icon, label, value }: { icon: React.ReactNode; label: string; value: string | null }) {
-  return (
-    <div className="flex items-center gap-2 bg-muted/30 rounded-md px-2.5 py-1.5">
-      <span className="text-muted-foreground">{icon}</span>
-      <div className="min-w-0">
-        <p className="text-[11px] text-muted-foreground leading-tight">{label}</p>
-        <p className="text-sm font-medium text-foreground leading-tight">{value || "—"}</p>
-      </div>
-    </div>
-  );
-}
-
 /* ── Creator Card ── */
-function CreatorCard({ creator, meta, isVerified, categoryLabel, matchReasons }: {
+function CreatorCard({ creator, meta, isVerified, categoryLabel, matchReasons, avgViews, isFollowing, onToggleFollow }: {
   creator: ProfileRow; meta: CreatorMeta; isVerified: boolean; categoryLabel?: string; matchReasons?: string[];
+  avgViews?: { avgViews: number; videoCount: number } | null;
+  isFollowing?: boolean; onToggleFollow?: () => void;
 }) {
   const [quickView, setQuickView] = useState(false);
   const [proposalOpen, setProposalOpen] = useState(false);
@@ -387,6 +374,18 @@ function CreatorCard({ creator, meta, isVerified, categoryLabel, matchReasons }:
                 <p className="text-[13px] text-muted-foreground line-clamp-1">{creator.bio}</p>
               )}
             </div>
+            {/* Follow button */}
+            {onToggleFollow && (
+              <Button
+                variant={isFollowing ? "secondary" : "ghost"}
+                size="sm"
+                className="h-7 px-2 text-[11px] shrink-0"
+                onClick={(e) => { e.stopPropagation(); onToggleFollow(); }}
+              >
+                {isFollowing ? <UserCheck className="h-3 w-3 mr-1" /> : <UserPlus className="h-3 w-3 mr-1" />}
+                {isFollowing ? "Подписан" : "Следить"}
+              </Button>
+            )}
             {meta.responseHours > 0 && (
               <span className="text-[11px] text-muted-foreground whitespace-nowrap flex items-center gap-1 shrink-0">
                 <Clock className="h-3 w-3" />~{meta.responseHours}ч
@@ -435,13 +434,22 @@ function CreatorCard({ creator, meta, isVerified, categoryLabel, matchReasons }:
             <p className="text-[13px] text-muted-foreground">Цена по запросу</p>
           )}
 
-          {(meta.dealsCount > 0 || meta.responseHours > 0) && (
-            <div className="flex items-center gap-3 text-[12px] text-muted-foreground">
-              {meta.dealsCount > 0 && (
-                <span className="flex items-center gap-1"><Handshake className="h-3 w-3" />Сделки: {meta.dealsCount}</span>
-              )}
-            </div>
-          )}
+          {/* Metrics row: deals + avg views */}
+          <div className="flex items-center gap-3 text-[12px] text-muted-foreground">
+            {meta.dealsCount > 0 && (
+              <span className="flex items-center gap-1"><Handshake className="h-3 w-3" />Сделки: {meta.dealsCount}</span>
+            )}
+            {avgViews && avgViews.videoCount >= 3 && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="flex items-center gap-1 cursor-help">
+                    <Eye className="h-3 w-3" />Avg views: {fmt(avgViews.avgViews) || "—"}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent><p className="text-xs">Средние просмотры (≥30% просмотрено) по последним {avgViews.videoCount} видео</p></TooltipContent>
+              </Tooltip>
+            )}
+          </div>
 
           {matchReasons && matchReasons.length > 0 && (
             <div className="bg-primary/5 border border-primary/20 rounded-md px-3 py-2 space-y-0.5">
@@ -477,7 +485,7 @@ function CreatorCard({ creator, meta, isVerified, categoryLabel, matchReasons }:
       </Card>
 
       <QuickViewModal creator={creator} meta={meta} open={quickView} onClose={() => setQuickView(false)}
-        isVerified={isVerified} categoryLabel={categoryLabel} onPropose={() => setProposalOpen(true)} />
+        isVerified={isVerified} categoryLabel={categoryLabel} onPropose={() => setProposalOpen(true)} avgViews={avgViews} />
 
       <DealProposalForm
         open={proposalOpen}
@@ -508,52 +516,94 @@ function getMatchReasons(creator: ProfileRow, brief: BriefData, meta: CreatorMet
   const matchingOffer = meta.offers.find((o) => o.type === targetType);
   if (matchingOffer) {
     if (brief.budgetMax > 0 && matchingOffer.price <= brief.budgetMax) {
-      reasons.push(`${targetType} в рамках бюджета (от ${matchingOffer.price.toLocaleString("ru-RU")} ₽)`);
+      reasons.push(`Бюджет: ${targetType} от ${matchingOffer.price.toLocaleString("ru-RU")} ₽ (в рамках)`);
     } else {
-      reasons.push(`Предлагает ${targetType}`);
+      reasons.push(`Есть оффер: ${targetType}`);
     }
   }
 
   if (brief.niches.length > 0) {
     const matching = (creator.niche || []).filter((n) => brief.niches.includes(n));
-    if (matching.length > 0) reasons.push(`Ниша совпадает: ${matching.slice(0, 2).join(", ")}`);
+    if (matching.length > 0) reasons.push(`Ниша: ${matching.slice(0, 2).join(", ")}`);
   }
 
-
-  if (brief.turnaroundDays > 0 && meta.responseHours <= brief.turnaroundDays * 24) {
-    if (meta.responseHours <= 12) reasons.push(`Быстрый ответ (~${meta.responseHours} ч)`);
+  if (brief.turnaroundDays > 0 && meta.responseHours <= 12) {
+    reasons.push(`Быстрый ответ: ~${meta.responseHours} ч`);
   }
 
-  return reasons.slice(0, 2);
+  return reasons.slice(0, 3);
 }
 
 function matchesBrief(creator: ProfileRow, brief: BriefData, meta: CreatorMeta): boolean {
   const targetType = PLACEMENT_TYPE_MAP[brief.placementType];
-
   const hasOffer = meta.offers.some((o) => o.type === targetType);
   if (!hasOffer && meta.offers.length > 0) return false;
-
   if (brief.budgetMax > 0 && brief.budgetMax < 500000) {
     const matchingOffer = meta.offers.find((o) => o.type === targetType);
     if (matchingOffer && matchingOffer.price > brief.budgetMax) return false;
   }
-
   if (brief.niches.length > 0) {
     const match = (creator.niche || []).some((n) => brief.niches.includes(n));
     if (!match) return false;
   }
-
-
   if (brief.audienceMin > 0 && (creator.followers || 0) < brief.audienceMin) return false;
   if (brief.audienceMax < 1000000 && (creator.followers || 0) > brief.audienceMax) return false;
-
   if (brief.excludeNoAnalytics && meta.platforms.length === 0) return false;
-
   return true;
+}
+
+/* ── My Drafts Panel ── */
+function MyDraftsPanel({ onClose }: { onClose: () => void }) {
+  const { data: drafts = [], isLoading } = useMyDrafts();
+  const navigate = useNavigate();
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="sm" onClick={onClose} className="gap-1.5 text-[13px] h-8">
+            <ArrowLeft className="h-3.5 w-3.5" />Назад к каталогу
+          </Button>
+          <Separator orientation="vertical" className="h-5" />
+          <p className="text-[15px] font-semibold text-foreground">Мои черновики</p>
+        </div>
+        <span className="text-[13px] text-muted-foreground">{drafts.length} черновиков</span>
+      </div>
+      {isLoading ? (
+        <div className="text-center py-16 text-muted-foreground flex flex-col items-center gap-2">
+          <Loader2 className="h-5 w-5 animate-spin" /><span className="text-sm">Загрузка...</span>
+        </div>
+      ) : drafts.length === 0 ? (
+        <div className="text-center py-16 text-sm text-muted-foreground">У вас нет сохранённых черновиков</div>
+      ) : (
+        <div className="space-y-2">
+          {drafts.map((draft) => (
+            <Card key={draft.id} className="hover:border-primary/30 transition-colors cursor-pointer"
+              onClick={() => navigate(`/creator/${draft.creator_id}`)}>
+              <CardContent className="p-4 flex items-center justify-between">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate">{draft.placement_type || "Без типа"}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Автор: {draft.creator_id.slice(0, 8)}...
+                    {draft.budget_value && ` • ${draft.budget_value.toLocaleString("ru-RU")} ₽`}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground/60 mt-0.5">
+                    Обновлено: {new Date(draft.updated_at).toLocaleDateString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                  </p>
+                </div>
+                <Badge variant="secondary" className="text-[10px]">Черновик</Badge>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 /* ── Main BirzhaTab ── */
 export function BirzhaTab({ isVerified, onGoToSettings }: { isVerified: boolean; onGoToSettings: () => void }) {
+  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState("recommended");
   const [profiles, setProfiles] = useState<ProfileRow[]>([]);
@@ -562,6 +612,7 @@ export function BirzhaTab({ isVerified, onGoToSettings }: { isVerified: boolean;
   const [filters, setFilters] = useState<FilterState>({ ...defaultFilters });
   const [appliedFilters, setAppliedFilters] = useState<FilterState>({ ...defaultFilters });
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [showDrafts, setShowDrafts] = useState(false);
 
   // Real data from DB
   const [offersMap, setOffersMap] = useState<Map<string, OfferRow[]>>(new Map());
@@ -571,20 +622,22 @@ export function BirzhaTab({ isVerified, onGoToSettings }: { isVerified: boolean;
   const [briefOpen, setBriefOpen] = useState(false);
   const [activeBrief, setActiveBrief] = useState<BriefData | null>(null);
 
+  // Follow state
+  const [followedIds, setFollowedIds] = useState<Set<string>>(new Set());
+
+  // Avg views for marketplace cards
+  const creatorIds = useMemo(() => profiles.map(p => p.user_id), [profiles]);
+  const { data: avgViewsMap = {} } = useCreatorsAvgViews(creatorIds);
+
   useEffect(() => {
     const fetchAll = async () => {
       setLoading(true);
-
-      // Fetch profiles, offers, platforms in parallel
       const [profilesRes, offersRes, platformsRes] = await Promise.all([
         supabase.from("profiles").select("user_id, display_name, bio, avatar_url, niche, followers, reach, geo, verified, content_count, response_hours, safe_deal, deals_count"),
         supabase.from("creator_offers").select("creator_id, offer_type, price, turnaround_days").eq("is_active", true),
         supabase.from("creator_platforms").select("creator_id, platform_name, subscriber_count, avg_views"),
       ]);
-
       if (profilesRes.data) setProfiles(profilesRes.data as ProfileRow[]);
-
-      // Build offers map
       const oMap = new Map<string, OfferRow[]>();
       if (offersRes.data) {
         for (const row of offersRes.data) {
@@ -594,8 +647,6 @@ export function BirzhaTab({ isVerified, onGoToSettings }: { isVerified: boolean;
         }
       }
       setOffersMap(oMap);
-
-      // Build platforms map
       const pMap = new Map<string, PlatformRow[]>();
       if (platformsRes.data) {
         for (const row of platformsRes.data) {
@@ -605,11 +656,18 @@ export function BirzhaTab({ isVerified, onGoToSettings }: { isVerified: boolean;
         }
       }
       setPlatformsMap(pMap);
-
       setLoading(false);
     };
     fetchAll();
   }, []);
+
+  // Fetch subscriptions
+  useEffect(() => {
+    if (!user?.id) return;
+    supabase.from("subscriptions").select("creator_id").eq("user_id", user.id).then(({ data }) => {
+      if (data) setFollowedIds(new Set(data.map((s) => s.creator_id)));
+    });
+  }, [user?.id]);
 
   useEffect(() => {
     if (profiles.length === 0) return;
@@ -626,9 +684,20 @@ export function BirzhaTab({ isVerified, onGoToSettings }: { isVerified: boolean;
     fetchCategories();
   }, [profiles]);
 
-  /** Get meta for a creator using real data */
-  const getMeta = (profile: ProfileRow): CreatorMeta => {
-    return buildCreatorMeta(profile, offersMap, platformsMap);
+  const getMeta = (profile: ProfileRow): CreatorMeta => buildCreatorMeta(profile, offersMap, platformsMap);
+
+  const toggleFollow = async (creatorId: string) => {
+    if (!user?.id) return;
+    const isFollowing = followedIds.has(creatorId);
+    if (isFollowing) {
+      await supabase.from("subscriptions").delete().eq("user_id", user.id).eq("creator_id", creatorId);
+      setFollowedIds(prev => { const n = new Set(prev); n.delete(creatorId); return n; });
+      toast.success("Отписка выполнена");
+    } else {
+      await supabase.from("subscriptions").insert({ user_id: user.id, creator_id: creatorId });
+      setFollowedIds(prev => new Set(prev).add(creatorId));
+      toast.success("Вы подписались!");
+    }
   };
 
   const applyFilters = () => { setAppliedFilters({ ...filters }); setDrawerOpen(false); };
@@ -637,7 +706,8 @@ export function BirzhaTab({ isVerified, onGoToSettings }: { isVerified: boolean;
   const removeChip = (key: string) => {
     const updater = (prev: FilterState) => {
       const next = { ...prev };
-      if (key.startsWith("niche-")) next.niches = prev.niches.filter((n) => `niche-${n}` !== key);
+      if (key === "following") next.followingOnly = false;
+      else if (key.startsWith("niche-")) next.niches = prev.niches.filter((n) => `niche-${n}` !== key);
       else if (key.startsWith("geo-")) next.geos = prev.geos.filter((g) => `geo-${g}` !== key);
       else if (key.startsWith("platform-")) next.platforms = prev.platforms.filter((p) => `platform-${p}` !== key);
       else if (key.startsWith("cat-")) next.categories = prev.categories.filter((c) => `cat-${c}` !== key);
@@ -653,13 +723,12 @@ export function BirzhaTab({ isVerified, onGoToSettings }: { isVerified: boolean;
     setActiveBrief(brief);
     setBriefOpen(false);
   };
-
   const clearBrief = () => setActiveBrief(null);
 
-  // Normal filtered list
   const filtered = useMemo(() => {
     let result = [...profiles];
     const f = appliedFilters;
+    if (f.followingOnly) result = result.filter(c => followedIds.has(c.user_id));
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       result = result.filter((c) =>
@@ -673,41 +742,26 @@ export function BirzhaTab({ isVerified, onGoToSettings }: { isVerified: boolean;
     if (f.verifiedOnly) result = result.filter((c) => c.verified);
     if (f.reachRange[0] > 0) result = result.filter((c) => (c.reach || 0) >= f.reachRange[0]);
     if (f.reachRange[1] < 1000000) result = result.filter((c) => (c.reach || 0) <= f.reachRange[1]);
-
     result.sort((a, b) => {
-      if (sortBy === "cheapest") {
-        const pa = getMeta(a).minPrice || Infinity;
-        const pb = getMeta(b).minPrice || Infinity;
-        return pa - pb;
-      }
-      if (sortBy === "response") {
-        return (a.response_hours || 24) - (b.response_hours || 24);
-      }
-      if (sortBy === "deals") {
-        return (b.deals_count || 0) - (a.deals_count || 0);
-      }
-      if (sortBy === "audience") {
-        return (b.followers || 0) - (a.followers || 0);
-      }
+      if (sortBy === "cheapest") return (getMeta(a).minPrice || Infinity) - (getMeta(b).minPrice || Infinity);
+      if (sortBy === "response") return (a.response_hours || 24) - (b.response_hours || 24);
+      if (sortBy === "deals") return (b.deals_count || 0) - (a.deals_count || 0);
+      if (sortBy === "audience") return (b.followers || 0) - (a.followers || 0);
       return (b.reach || 0) - (a.reach || 0);
     });
     return result;
-  }, [searchQuery, appliedFilters, sortBy, profiles, brandCategories, offersMap, platformsMap]);
+  }, [searchQuery, appliedFilters, sortBy, profiles, brandCategories, offersMap, platformsMap, followedIds]);
 
-  // Brief-matched list
   const briefResults = useMemo(() => {
     if (!activeBrief) return [];
     return profiles
       .filter((c) => matchesBrief(c, activeBrief, getMeta(c)))
-      .sort((a, b) => {
-        return getMatchReasons(b, activeBrief!, getMeta(b)).length - getMatchReasons(a, activeBrief!, getMeta(a)).length;
-      });
+      .sort((a, b) => getMatchReasons(b, activeBrief!, getMeta(b)).length - getMatchReasons(a, activeBrief!, getMeta(a)).length);
   }, [activeBrief, profiles, offersMap, platformsMap]);
 
   const activeChips = getActiveChips(appliedFilters);
   const filtersActive = hasActiveFilters(appliedFilters);
   const filterCount = activeChips.length;
-
   const showBriefResults = activeBrief !== null;
 
   return (
@@ -715,7 +769,9 @@ export function BirzhaTab({ isVerified, onGoToSettings }: { isVerified: boolean;
       <div className="max-w-[1200px] mx-auto px-4 py-4 space-y-3">
         {!isVerified && <VerificationBanner onGoToSettings={onGoToSettings} />}
 
-        {showBriefResults ? (
+        {showDrafts ? (
+          <MyDraftsPanel onClose={() => setShowDrafts(false)} />
+        ) : showBriefResults ? (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -762,6 +818,9 @@ export function BirzhaTab({ isVerified, onGoToSettings }: { isVerified: boolean;
                     isVerified={isVerified}
                     categoryLabel={brandCategories[creator.user_id] ? BUSINESS_CATEGORIES[brandCategories[creator.user_id]] || brandCategories[creator.user_id] : undefined}
                     matchReasons={getMatchReasons(creator, activeBrief, getMeta(creator))}
+                    avgViews={avgViewsMap[creator.user_id] || null}
+                    isFollowing={followedIds.has(creator.user_id)}
+                    onToggleFollow={() => toggleFollow(creator.user_id)}
                   />
                 ))}
               </div>
@@ -777,6 +836,21 @@ export function BirzhaTab({ isVerified, onGoToSettings }: { isVerified: boolean;
               </div>
               <Button variant="outline" className="h-10 gap-1.5 shrink-0" onClick={() => setBriefOpen(true)}>
                 <Sparkles className="h-4 w-4" />Подобрать по брифу
+              </Button>
+              <Button variant="outline" className="h-10 gap-1.5 shrink-0" onClick={() => setShowDrafts(true)}>
+                <Tag className="h-4 w-4" />Черновики
+              </Button>
+              {/* Following quick filter */}
+              <Button
+                variant={appliedFilters.followingOnly ? "default" : "outline"}
+                className="h-10 gap-1.5 shrink-0"
+                onClick={() => {
+                  const val = !appliedFilters.followingOnly;
+                  setAppliedFilters(prev => ({ ...prev, followingOnly: val }));
+                  setFilters(prev => ({ ...prev, followingOnly: val }));
+                }}
+              >
+                <UserCheck className="h-4 w-4" />Подписки
               </Button>
               <Select value={sortBy} onValueChange={setSortBy}>
                 <SelectTrigger className="w-48 h-10"><SelectValue /></SelectTrigger>
@@ -833,8 +907,16 @@ export function BirzhaTab({ isVerified, onGoToSettings }: { isVerified: boolean;
             ) : (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                 {filtered.map((creator) => (
-                  <CreatorCard key={creator.user_id} creator={creator} meta={getMeta(creator)} isVerified={isVerified}
-                    categoryLabel={brandCategories[creator.user_id] ? BUSINESS_CATEGORIES[brandCategories[creator.user_id]] || brandCategories[creator.user_id] : undefined} />
+                  <CreatorCard
+                    key={creator.user_id}
+                    creator={creator}
+                    meta={getMeta(creator)}
+                    isVerified={isVerified}
+                    categoryLabel={brandCategories[creator.user_id] ? BUSINESS_CATEGORIES[brandCategories[creator.user_id]] || brandCategories[creator.user_id] : undefined}
+                    avgViews={avgViewsMap[creator.user_id] || null}
+                    isFollowing={followedIds.has(creator.user_id)}
+                    onToggleFollow={() => toggleFollow(creator.user_id)}
+                  />
                 ))}
               </div>
             )}
