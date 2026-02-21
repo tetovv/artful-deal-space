@@ -172,7 +172,7 @@ export function ManualCampaignWizard({ isVerified, ordConnected, onBack, onCompl
   };
 
   // ── Stepper ──
-  const Stepper = () => (
+  const stepper = (
     <div className="flex items-center gap-1.5 mb-6">
       {([1, 2, 3, 4, 5] as WizardStep[]).map((s) => {
         const isDone = s < step;
@@ -202,7 +202,7 @@ export function ManualCampaignWizard({ isVerified, ordConnected, onBack, onCompl
   );
 
   // ═══ Step 1: Placement ═══
-  const StepPlacement = () => (
+  const stepPlacement = (
     <div className="space-y-5">
       <div>
         <h3 className="text-[15px] font-semibold text-foreground">Выберите тип размещения</h3>
@@ -240,7 +240,7 @@ export function ManualCampaignWizard({ isVerified, ordConnected, onBack, onCompl
   );
 
   // ═══ Step 2: Creative ═══
-  const StepCreative = () => (
+  const stepCreative = (
     <div className="space-y-5">
       <div>
         <h3 className="text-[15px] font-semibold text-foreground">Креатив</h3>
@@ -312,7 +312,7 @@ export function ManualCampaignWizard({ isVerified, ordConnected, onBack, onCompl
   );
 
   // ═══ Step 3: Budget & Schedule ═══
-  const StepBudget = () => (
+  const stepBudget = (
     <div className="space-y-5">
       <div>
         <h3 className="text-[15px] font-semibold text-foreground">Бюджет и расписание</h3>
@@ -371,7 +371,7 @@ export function ManualCampaignWizard({ isVerified, ordConnected, onBack, onCompl
   );
 
   // ═══ Step 4: ORD / Marking ═══
-  const StepOrd = () => (
+  const stepOrd = (
     <div className="space-y-4">
       <div>
         <h3 className="text-[15px] font-semibold text-foreground">Маркировка рекламы (ОРД)</h3>
@@ -439,7 +439,7 @@ export function ManualCampaignWizard({ isVerified, ordConnected, onBack, onCompl
   // ═══ Step 5: Review & Launch ═══
   const selectedPlacement = PLACEMENTS.find((p) => p.value === placement);
 
-  const StepReview = () => (
+  const stepReview = (
     <div className="space-y-4">
       <div>
         <h3 className="text-[15px] font-semibold text-foreground">Обзор кампании</h3>
@@ -578,15 +578,15 @@ export function ManualCampaignWizard({ isVerified, ordConnected, onBack, onCompl
           </div>
         </div>
 
-        <Stepper />
+        {stepper}
 
         {/* Step content */}
         <div className="min-h-[300px]">
-          {step === 1 && <StepPlacement />}
-          {step === 2 && <StepCreative />}
-          {step === 3 && <StepBudget />}
-          {step === 4 && <StepOrd />}
-          {step === 5 && <StepReview />}
+          {step === 1 && stepPlacement}
+          {step === 2 && stepCreative}
+          {step === 3 && stepBudget}
+          {step === 4 && stepOrd}
+          {step === 5 && stepReview}
         </div>
 
         {/* Footer nav */}
