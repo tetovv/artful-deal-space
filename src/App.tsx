@@ -25,6 +25,8 @@ import NotFound from "./pages/NotFound";
 import Library from "./pages/Library";
 import Subscriptions from "./pages/Subscriptions";
 import Achievements from "./pages/Achievements";
+import CreatorProposal from "./pages/CreatorProposal";
+import { RoleGuard } from "@/components/layout/RoleGuard";
 
 const queryClient = new QueryClient();
 
@@ -56,11 +58,12 @@ const App = () => (
               <Route path="/ad-studio" element={<Protected><AdStudio /></Protected>} />
               <Route path="/marketplace" element={<Protected><Marketplace /></Protected>} />
               <Route path="/trust-rating" element={<Navigate to="/marketplace" replace />} />
+              <Route path="/creator/proposals/:proposalId" element={<Protected><CreatorProposal /></Protected>} />
               <Route path="/ai-workspace" element={<Protected><AIWorkspace /></Protected>} />
               <Route path="/admin" element={<Protected><AdminPanel /></Protected>} />
               <Route path="/my-purchases" element={<Protected><MyPurchases /></Protected>} />
               <Route path="/achievements" element={<Protected><Achievements /></Protected>} />
-              <Route path="/creator/proposals/:proposalId" element={<Navigate to="/ad-studio" replace />} />
+              {/* legacy redirect removed — now has dedicated page above */}
               <Route path="/settings" element={<Protected><Settings /></Protected>} />
               <Route path="*" element={<NotFound />} />
             </Routes>
