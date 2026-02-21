@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
+import { useUserRole } from "@/hooks/useUserRole";
 import { DealWorkspace } from "@/components/ad-studio/DealWorkspace";
 import { useAdvertiserVerification } from "@/components/ad-studio/AdvertiserSettings";
 import { AdvertiserSettings } from "@/components/ad-studio/AdvertiserSettings";
@@ -8,14 +9,16 @@ import { BirzhaTab } from "@/components/ad-studio/BirzhaTab";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Search, Megaphone, MonitorPlay, Settings } from "lucide-react";
 
-
 /* ── Main AdStudio Page ── */
 type AdStudioTab = "birzha" | "deals" | "builtin" | "settings";
 
 const AdStudio = () => {
   const location = useLocation();
-  const [activeTab, setActiveTab] = useState<AdStudioTab>("birzha");
+  const { isCreator } = useUserRole();
   const { isVerified } = useAdvertiserVerification();
+
+  // Creators only see the deals tab
+  const [activeTab, setActiveTab] = useState<AdStudioTab>(isCreator ? "deals" : "birzha");
 
   // Auto-switch to deals tab when navigated with openDealId
   useEffect(() => {
@@ -25,7 +28,26 @@ const AdStudio = () => {
     }
   }, [location.state]);
 
+  // Force deals tab for creators
+  useEffect(() => {
+    if (isCreator && activeTab !== "deals") {
+      setActiveTab("deals");
+    }
+  }, [isCreator, activeTab]);
+
   const goToSettings = () => setActiveTab("settings");
+
+  // Creator view: only deals workspace, no advertiser tabs
+  if (isCreator) {
+    return (
+      <div className="flex flex-col h-[calc(100vh-3.5rem)] max-h-[calc(100vh-3.5rem)]">
+        <div className="px-4 pt-3 pb-0 bg-card border-b border-border">
+          <h2 className="text-[15px] font-semibold text-card-foreground py-2">Мои сделки</h2>
+        </div>
+        <DealWorkspace />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-[calc(100vh-3.5rem)] max-h-[calc(100vh-3.5rem)]">
