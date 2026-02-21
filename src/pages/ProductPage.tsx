@@ -153,6 +153,7 @@ const ProductPage = () => {
                   src={item.video_url}
                   poster={item.thumbnail}
                   className="w-full h-full"
+                  videoId={item.id}
                 />
               ) : (
                 <img src={item.thumbnail} alt={item.title} className="w-full h-full object-cover" />

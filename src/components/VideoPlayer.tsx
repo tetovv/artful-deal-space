@@ -2,11 +2,13 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, SkipBack, SkipForward, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Slider } from "@/components/ui/slider";
+import { useVideoViewTracker } from "@/hooks/useVideoViews";
 
 interface VideoPlayerProps {
   src: string;
   poster?: string;
   className?: string;
+  videoId?: string;
 }
 
 function formatTime(seconds: number) {
@@ -15,8 +17,11 @@ function formatTime(seconds: number) {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-export function VideoPlayer({ src, poster, className }: VideoPlayerProps) {
+export function VideoPlayer({ src, poster, className, videoId }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Track 30% view
+  useVideoViewTracker(videoId, videoRef);
   const containerRef = useRef<HTMLDivElement>(null);
   const hideTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
 

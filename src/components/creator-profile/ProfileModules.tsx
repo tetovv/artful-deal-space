@@ -1,9 +1,10 @@
 import {
   Trophy, Briefcase, BarChart3, FileText, Handshake, Building2, Globe,
-  ShieldCheck, Tag, Mail, Video, FileEdit, Mic, AlertCircle,
+  ShieldCheck, Tag, Mail, Video, FileEdit, Mic, AlertCircle, Eye,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ContentCard } from "@/components/content/ContentCard";
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -139,22 +140,38 @@ export const OffersSection = ({ offers, onDeal }: { offers: OfferData[]; onDeal?
 };
 
 /* ─── Portfolio Section ─── */
-export const PortfolioSection = ({ items }: { items: any[] }) => (
-  <section className="space-y-3">
-    <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
-      <Briefcase className="h-4 w-4 text-muted-foreground" /> Портфолио
-    </h2>
-    {items.length > 0 ? (
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {items.slice(0, 6).map((item) => (
-          <ContentCard key={item.id} item={item} />
-        ))}
-      </div>
-    ) : (
-      <CompactEmpty text="Автор пока не добавил примеры работ" />
-    )}
-  </section>
-);
+export const PortfolioSection = ({ items, videoViewCounts = {} }: { items: any[]; videoViewCounts?: Record<string, number> }) => {
+  const fmtNum = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}K` : String(n));
+
+  return (
+    <section className="space-y-3">
+      <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
+        <Briefcase className="h-4 w-4 text-muted-foreground" /> Портфолио
+      </h2>
+      {items.length > 0 ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {items.slice(0, 6).map((item) => (
+            <div key={item.id} className="space-y-1">
+              <ContentCard item={item} />
+              {item.type === "video" && videoViewCounts[item.id] !== undefined && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex items-center gap-1 text-[11px] text-primary/80 cursor-help px-1">
+                      <Eye className="h-3 w-3" />{fmtNum(videoViewCounts[item.id])} просм. (30%)
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent><p className="text-xs">Просмотры: пользователь посмотрел ≥30% видео</p></TooltipContent>
+                </Tooltip>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <CompactEmpty text="Автор пока не добавил примеры работ" />
+      )}
+    </section>
+  );
+};
 
 /* ─── Audience Card ─── */
 export const AudienceCard = ({ connected = false }: { connected?: boolean }) => (
