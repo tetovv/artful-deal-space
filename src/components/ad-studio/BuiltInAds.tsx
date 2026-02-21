@@ -11,7 +11,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import {
   Plus, BarChart3, Eye, MousePointerClick, TrendingUp, AlertTriangle, Search,
   ChevronDown, CheckCircle2, ShieldCheck, Landmark, MoreVertical, Pause, Play,
-  Copy, Archive, Settings, CalendarDays, HelpCircle, ArrowUpDown,
+  Copy, Archive, Settings, CalendarDays, HelpCircle, ArrowUpDown, FileEdit, Trash2,
 } from "lucide-react";
 import { CampaignManageView } from "./CampaignManageView";
 import type { Campaign, CampaignStatus, Placement } from "./CampaignManageView";
@@ -21,6 +21,8 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { FileText } from "lucide-react";
+import { loadDrafts, deleteDraft, type CampaignDraft } from "./campaignDrafts";
+import { toast } from "sonner";
 
 interface BuiltInAdsProps {
   isVerified: boolean;
@@ -73,6 +75,17 @@ function formatNum(n: number): string {
   if (n >= 1000000) return (n / 1000000).toFixed(1) + "M";
   if (n >= 1000) return (n / 1000).toFixed(1) + "K";
   return n.toLocaleString("ru-RU");
+}
+
+function formatTimeAgo(date: Date): string {
+  const diff = Date.now() - date.getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "только что";
+  if (mins < 60) return `${mins} мин. назад`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} ч. назад`;
+  const days = Math.floor(hours / 24);
+  return `${days} дн. назад`;
 }
 
 // ─── KPI Card ───
@@ -246,7 +259,11 @@ export function BuiltInAds({ isVerified, onGoToSettings }: BuiltInAdsProps) {
   const [managingCampaign, setManagingCampaign] = useState<Campaign | null>(null);
   const [showContractWizard, setShowContractWizard] = useState(false);
   const [showManualWizard, setShowManualWizard] = useState(false);
+  const [activeDraft, setActiveDraft] = useState<CampaignDraft | undefined>();
   const [campaigns, setCampaigns] = useState<Campaign[]>(mockCampaigns);
+  const [drafts, setDrafts] = useState<CampaignDraft[]>(() => loadDrafts());
+
+  const refreshDrafts = () => setDrafts(loadDrafts());
 
   const filtered = useMemo(() => {
     let result = [...campaigns];
@@ -290,12 +307,19 @@ export function BuiltInAds({ isVerified, onGoToSettings }: BuiltInAdsProps) {
       <ManualCampaignWizard
         isVerified={isVerified}
         ordConnected={isVerified}
-        onBack={() => setShowManualWizard(false)}
+        onBack={() => {
+          setShowManualWizard(false);
+          setActiveDraft(undefined);
+          refreshDrafts();
+        }}
         onComplete={(campaign) => {
           setCampaigns(prev => [campaign, ...prev]);
           setShowManualWizard(false);
+          setActiveDraft(undefined);
+          refreshDrafts();
         }}
         onGoToSettings={onGoToSettings}
+        initialDraft={activeDraft}
       />
     );
   }
@@ -455,7 +479,65 @@ export function BuiltInAds({ isVerified, onGoToSettings }: BuiltInAdsProps) {
           )}
         </div>
 
-        {/* Campaign list */}
+        {/* Drafts */}
+        {drafts.length > 0 && (
+          <Collapsible defaultOpen={drafts.length <= 3}>
+            <div className="rounded-xl border border-border bg-card overflow-hidden">
+              <CollapsibleTrigger className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors cursor-pointer">
+                <div className="flex items-center gap-2">
+                  <FileEdit className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-semibold text-card-foreground">Черновики</span>
+                  <Badge variant="outline" className="text-[10px]">{drafts.length}</Badge>
+                </div>
+                <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 [[data-state=open]>&]:rotate-180" />
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="border-t border-border divide-y divide-border">
+                  {drafts.map((d) => {
+                    const stepLabel = d.step <= 5 ? ["Размещение", "Креатив", "Бюджет", "ОРД", "Обзор"][d.step - 1] : "";
+                    const name = d.creativeTitle || (d.placement ? placementLabels[d.placement] : "Без названия");
+                    const updated = new Date(d.updatedAt);
+                    const timeAgo = formatTimeAgo(updated);
+                    return (
+                      <div key={d.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted/20 transition-colors">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[13px] font-medium text-card-foreground truncate">{name}</p>
+                          <p className="text-[11px] text-muted-foreground">
+                            Шаг {d.step}: {stepLabel} · {timeAgo}
+                          </p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-[11px] px-2.5"
+                          onClick={() => {
+                            setActiveDraft(d);
+                            setShowManualWizard(true);
+                          }}
+                        >
+                          Продолжить
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                          onClick={() => {
+                            deleteDraft(d.id);
+                            refreshDrafts();
+                            toast.success("Черновик удалён");
+                          }}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </CollapsibleContent>
+            </div>
+          </Collapsible>
+        )}
+
         <div className="space-y-3">
           {filtered.map((c) => (
             <CampaignRow key={c.id} campaign={c} isVerified={isVerified} onManage={setManagingCampaign} />
