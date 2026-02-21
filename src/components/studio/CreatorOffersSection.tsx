@@ -13,13 +13,9 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 const OFFER_TYPES = [
-  { value: "video_integration", label: "Видео-интеграция" },
-  { value: "preroll", label: "Преролл" },
+  { value: "video", label: "Видео-интеграция" },
   { value: "post", label: "Пост" },
-  { value: "stories", label: "Stories" },
-  { value: "podcast_mention", label: "Упоминание в подкасте" },
-  { value: "review", label: "Обзор" },
-  { value: "custom", label: "Индивидуальное" },
+  { value: "podcast", label: "Подкаст" },
 ];
 
 const OFFER_TYPE_LABELS: Record<string, string> = Object.fromEntries(OFFER_TYPES.map((t) => [t.value, t.label]));
@@ -45,7 +41,7 @@ export function CreatorOffersSection() {
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ offer_type: "video_integration", price: "", turnaround_days: "7" });
+  const [form, setForm] = useState({ offer_type: "video", price: "", turnaround_days: "7" });
 
   const addOffer = useMutation({
     mutationFn: async () => {
@@ -62,7 +58,7 @@ export function CreatorOffersSection() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["my_offers"] });
       setShowAdd(false);
-      setForm({ offer_type: "video_integration", price: "", turnaround_days: "7" });
+      setForm({ offer_type: "video", price: "", turnaround_days: "7" });
       toast.success("Оффер добавлен");
     },
     onError: () => toast.error("Ошибка при добавлении"),
