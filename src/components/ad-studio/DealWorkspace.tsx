@@ -283,7 +283,7 @@ function DealSidebar({
             className="pl-8 h-9 text-[14px] bg-background"
           />
         </div>
-        <div className="flex gap-1.5">
+        <div className="flex gap-1.5 overflow-x-auto max-w-full [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
           {[
             { key: "all", label: "Все" },
             { key: "action", label: "Действие", count: actionCount },
@@ -295,7 +295,7 @@ function DealSidebar({
               key={f.key}
               onClick={() => setStatusFilter(f.key)}
               className={cn(
-                "px-2.5 py-1 rounded-md text-[13px] font-medium transition-colors flex items-center gap-1",
+                "px-2.5 py-1 rounded-md text-[13px] font-medium transition-colors flex items-center gap-1 whitespace-nowrap shrink-0",
                 statusFilter === f.key
                   ? "bg-primary/15 text-primary"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
@@ -324,24 +324,24 @@ function DealSidebar({
               key={deal.id}
               onClick={() => onSelect(deal)}
               className={cn(
-                "w-full text-left px-3.5 py-3 border-b border-border/40 transition-colors",
-                isSelected ? "bg-primary/8 border-l-2 border-l-primary" : "hover:bg-muted/30"
+                "w-full text-left px-3.5 py-3 border-b border-border/40 transition-colors min-h-[60px]",
+                isSelected ? "bg-primary/8 border-l-2 border-l-primary pl-[12px]" : "hover:bg-muted/30"
               )}
             >
               {/* Row 1: Creator name + status */}
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[15px] font-semibold text-card-foreground truncate flex-1">{deal.creatorName}</span>
-                <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded border shrink-0", statusColor)}>
+              <div className="flex items-start justify-between gap-2 min-w-0">
+                <span className="text-[15px] font-semibold text-card-foreground truncate min-w-0 flex-1">{deal.creatorName}</span>
+                <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded border shrink-0 whitespace-nowrap max-w-[120px] truncate", statusColor)}>
                   {statusLabels[deal.status] || deal.status}
                 </span>
               </div>
 
               {/* Row 2: Placement type */}
-              <div className="flex items-center gap-1.5 mt-0.5">
+              <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
                 {placement && (
-                  <span className="text-[12px] font-medium text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded">{placement}</span>
+                  <span className="text-[12px] font-medium text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded shrink-0">{placement}</span>
                 )}
-                <span className="text-[13px] text-muted-foreground truncate">{deal.title}</span>
+                <span className="text-[13px] text-muted-foreground truncate min-w-0">{deal.title}</span>
               </div>
 
               {/* Row 3: Amount + last activity */}
@@ -353,7 +353,7 @@ function DealSidebar({
               </div>
 
               {/* Row 4: Next step hint + unread indicators */}
-              <div className="flex items-center justify-between mt-1">
+              <div className="flex items-center justify-between mt-1 min-w-0 gap-1.5">
                 {nextStep ? (
                   <span className="text-[12px] text-primary/80 font-medium truncate">→ {nextStep}</span>
                 ) : (
