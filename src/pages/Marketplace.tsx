@@ -415,7 +415,7 @@ function QuickPreviewModal({ deal, onClose, advProfile, brand }: {
         {/* Footer */}
         <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-border">
           <Button variant="ghost" size="sm" onClick={onClose}>Закрыть</Button>
-          <Button size="sm" className="gap-1.5" onClick={() => { onClose(); navigate(`/creator/proposals/${deal.id}`); }}>
+          <Button size="sm" className="gap-1.5" onClick={() => { onClose(); navigate(`/ad-studio?deal=${deal.id}`); }}>
             Открыть переговоры
             <ChevronRight className="h-3 w-3" />
           </Button>
@@ -762,7 +762,7 @@ function CreatorOffers() {
                 <Card
                   key={deal.id}
                   className={`overflow-hidden transition-all cursor-pointer ${isLow ? "opacity-60 border-destructive/20" : isNew ? "border-primary/25 hover:border-primary/50 hover:shadow-md" : "hover:border-border hover:shadow-sm"}`}
-                  onClick={() => navigate(`/creator/proposals/${deal.id}`)}
+                  onClick={() => navigate(`/ad-studio?deal=${deal.id}`)}
                 >
                   <CardContent className="p-4 space-y-2.5">
                     {/* Row 1: Brand/name + status pill */}
@@ -863,7 +863,7 @@ function CreatorOffers() {
                         <Button
                           size="sm"
                           className="h-8 text-[13px] font-medium"
-                          onClick={(e) => { e.stopPropagation(); navigate(`/creator/proposals/${deal.id}`); }}
+                          onClick={(e) => { e.stopPropagation(); navigate(`/ad-studio?deal=${deal.id}`); }}
                         >
                           Открыть предложение
                         </Button>
@@ -872,7 +872,7 @@ function CreatorOffers() {
                           size="sm"
                           variant="secondary"
                           className="h-8 text-[13px] font-medium"
-                          onClick={(e) => { e.stopPropagation(); navigate(`/creator/proposals/${deal.id}`); }}
+                          onClick={(e) => { e.stopPropagation(); navigate(`/ad-studio?deal=${deal.id}`); }}
                         >
                           Продолжить
                           <ChevronRight className="h-3 w-3 ml-1" />
