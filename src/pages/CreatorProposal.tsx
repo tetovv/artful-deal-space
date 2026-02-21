@@ -751,6 +751,7 @@ export default function CreatorProposal() {
               canRespond={canRespond}
               userId={user?.id}
               getDiffFields={getDiffFields}
+              onCounterOffer={() => setShowCounterModal(true)}
             />
           )}
         </div>
@@ -1179,10 +1180,11 @@ function PaymentsTabContent({ escrowItems }: { escrowItems: any[] }) {
 }
 
 /* ─── MORE TAB (Negotiations + Audit) ─── */
-function MoreTabContent({ deal, auditLog, advertiserDisplayName, allTermsSorted, isAccepted, isRejected, canRespond, userId, getDiffFields }: {
+function MoreTabContent({ deal, auditLog, advertiserDisplayName, allTermsSorted, isAccepted, isRejected, canRespond, userId, getDiffFields, onCounterOffer }: {
   deal: any; auditLog: any[]; advertiserDisplayName: string;
   allTermsSorted: any[]; isAccepted: boolean; isRejected: boolean; canRespond: boolean; userId?: string;
   getDiffFields: (cur: Record<string, string> | null, prev: Record<string, string> | null) => { key: string; label: string; from: string; to: string }[];
+  onCounterOffer?: () => void;
 }) {
   const [showAll, setShowAll] = useState(false);
   const display = showAll ? auditLog : auditLog.slice(0, 10);
@@ -1200,13 +1202,27 @@ function MoreTabContent({ deal, auditLog, advertiserDisplayName, allTermsSorted,
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="text-[15px] font-semibold text-foreground flex items-center gap-2">
-            <History className="h-4 w-4 text-muted-foreground" /> Версии условий / Переговоры
+            <History className="h-4 w-4 text-muted-foreground" /> Версии условий
             {allTermsSorted.length > 0 && <span className="text-[12px] text-muted-foreground font-normal">({allTermsSorted.length})</span>}
           </h3>
-          {isAccepted && (
-            <Badge variant="outline" className="text-[11px] bg-muted text-muted-foreground border-muted-foreground/20">Только чтение</Badge>
-          )}
+          <div className="flex items-center gap-2">
+            {isAccepted && (
+              <Badge variant="outline" className="text-[11px] bg-muted text-muted-foreground border-muted-foreground/20">Только чтение</Badge>
+            )}
+            {canRespond && !isAccepted && onCounterOffer && (
+              <Button variant="outline" size="sm" className="text-[13px] h-8 gap-1.5" onClick={onCounterOffer}>
+                <ArrowLeftRight className="h-3.5 w-3.5" /> Встречное предложение
+              </Button>
+            )}
+          </div>
         </div>
+
+        {isAccepted && (
+          <div className="rounded-lg border border-green-500/20 bg-green-500/5 px-3.5 py-2.5 flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-green-500 shrink-0" />
+            <p className="text-[13px] text-foreground/80">Предложение принято, история доступна только для просмотра</p>
+          </div>
+        )}
 
         {allTermsSorted.length === 0 ? (
           <div className="text-center py-8">
