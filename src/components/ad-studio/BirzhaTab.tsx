@@ -519,9 +519,6 @@ function getMatchReasons(creator: ProfileRow, brief: BriefData, meta: CreatorMet
     if (matching.length > 0) reasons.push(`Ниша совпадает: ${matching.slice(0, 2).join(", ")}`);
   }
 
-  if (brief.geos.length > 0 && creator.geo && brief.geos.includes(creator.geo)) {
-    reasons.push(`Регион: ${creator.geo}`);
-  }
 
   if (brief.turnaroundDays > 0 && meta.responseHours <= brief.turnaroundDays * 24) {
     if (meta.responseHours <= 12) reasons.push(`Быстрый ответ (~${meta.responseHours} ч)`);
@@ -546,9 +543,6 @@ function matchesBrief(creator: ProfileRow, brief: BriefData, meta: CreatorMeta):
     if (!match) return false;
   }
 
-  if (brief.geos.length > 0) {
-    if (!creator.geo || !brief.geos.includes(creator.geo)) return false;
-  }
 
   if (brief.audienceMin > 0 && (creator.followers || 0) < brief.audienceMin) return false;
   if (brief.audienceMax < 1000000 && (creator.followers || 0) > brief.audienceMax) return false;
