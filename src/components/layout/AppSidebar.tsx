@@ -25,7 +25,7 @@ const allMainNav: NavItem[] = [
   { title: "Библиотека", url: "/library", icon: Library },
   { title: "Студия автора", url: "/creator-studio", icon: Palette, hideForRoles: ["advertiser"] },
   { title: "Рекламная студия", url: "/ad-studio", icon: Megaphone },
-  { title: "Предложения", url: "/marketplace", icon: Store, hideForRoles: ["creator"] },
+  { title: "Предложения", url: "/marketplace", icon: Store, hideForRoles: ["advertiser"] },
   { title: "AI Workspace", url: "/ai-workspace", icon: Brain },
   { title: "Достижения", url: "/achievements", icon: Trophy },
 ];
