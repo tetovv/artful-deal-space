@@ -26,6 +26,7 @@ import Library from "./pages/Library";
 import Subscriptions from "./pages/Subscriptions";
 import Achievements from "./pages/Achievements";
 import CreatorProposal from "./pages/CreatorProposal";
+import CreatorDealWorkspace from "./pages/CreatorDealWorkspace";
 import { RoleGuard } from "@/components/layout/RoleGuard";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useEffect } from "react";
@@ -81,6 +82,7 @@ const App = () => (
               <Route path="/marketplace" element={<Protected><MarketplaceGuard /></Protected>} />
               <Route path="/trust-rating" element={<Navigate to="/marketplace" replace />} />
               <Route path="/creator/proposals/:proposalId" element={<Protected><CreatorProposal /></Protected>} />
+              <Route path="/creator/deals/:dealId" element={<Protected><CreatorDealWorkspace /></Protected>} />
               <Route path="/ai-workspace" element={<Protected><AIWorkspace /></Protected>} />
               <Route path="/admin" element={<Protected><AdminPanel /></Protected>} />
               <Route path="/my-purchases" element={<Protected><MyPurchases /></Protected>} />

@@ -234,11 +234,12 @@ export default function CreatorProposal() {
       if (deal.advertiser_id) {
         await supabase.from("notifications").insert({ user_id: deal.advertiser_id, title: "Предложение принято", message: `${creatorName} принял(а) ваше предложение «${deal.title}»`, type: "deal", link: "/ad-studio" });
       }
-      toast.success("Предложение принято!");
+      toast.success("Предложение принято! Переход в рабочее пространство сделки…");
       qc.invalidateQueries({ queryKey: ["creator-incoming-deals"] });
       qc.invalidateQueries({ queryKey: ["my_deals"] });
       qc.invalidateQueries({ queryKey: ["proposal-deal", proposalId] });
-      setActiveTab("negotiation");
+      // Redirect to Creator Deal Workspace
+      navigate(`/creator/deals/${deal.id}`);
     } catch (err) {
       console.error(err);
       toast.error("Не удалось принять предложение");
