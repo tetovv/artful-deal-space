@@ -151,10 +151,10 @@ export function IncomingProposalDetail({ open, onClose, deal, advertiserProfile,
         });
       }
 
-      toast.success("Предложение принято! Сделка переведена в работу.");
+      toast.success("Сделка создана. Ожидайте резервирования средств.");
       qc.invalidateQueries({ queryKey: ["creator-incoming-deals"] });
+      qc.invalidateQueries({ queryKey: ["my_deals"] });
       onClose();
-      // Navigate to deal workspace
       navigate("/ad-studio", { state: { openDealId: deal.id } });
     } catch (err) {
       console.error(err);
