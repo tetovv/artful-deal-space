@@ -33,8 +33,9 @@ import {
   CheckCircle2, AlertTriangle, Clock, FileText, Upload, Download,
   ExternalLink, Pin, RefreshCw, MessageCircle, ClipboardCopy,
   Archive, Files, CreditCard, Radio, ScrollText, CalendarDays, Copy,
-  ChevronDown, ChevronRight,
+  ChevronDown, ChevronRight, ArrowLeftRight, Loader2,
 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 import { Deal, DealStatus } from "@/types";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -467,6 +468,7 @@ function TermsTab({ dealId }: { dealId: string }) {
   });
 
   const isAdvertiser = deal?.advertiser_id === user?.id;
+  const isCreator = deal?.creator_id === user?.id;
   const isNeedsChanges = deal?.status === "needs_changes";
 
   const termsVersions = dbTerms.length > 0
@@ -508,7 +510,21 @@ function TermsTab({ dealId }: { dealId: string }) {
   const canAccept = (ver.status === "draft" || ver.status === "pending") && !ver.myAccepted;
   const hasAcceptedAndNoDraft = ver.status === "accepted" && selectedVersion === termsVersions.length - 1;
 
-  // Counter-offer accept/reject for advertiser
+  // Determine if the latest version was created by the other party (needs response)
+  const latestVer = termsVersions[termsVersions.length - 1];
+  const otherPartyProposed = latestVer && latestVer.createdBy && latestVer.createdBy !== user?.id;
+  const iWaitingForResponse = isNeedsChanges && otherPartyProposed;
+  const otherPartyLabel = isAdvertiser ? "Автор" : "Рекламодатель";
+
+  // Counter-offer state (for both parties)
+  const [showCounterForm, setShowCounterForm] = useState(false);
+  const [counterBudget, setCounterBudget] = useState("");
+  const [counterDeadline, setCounterDeadline] = useState("");
+  const [counterRevisions, setCounterRevisions] = useState("");
+  const [counterAcceptance, setCounterAcceptance] = useState("");
+  const [counterMessage, setCounterMessage] = useState("");
+  const [submittingCounter, setSubmittingCounter] = useState(false);
+
   const [acceptingCounter, setAcceptingCounter] = useState(false);
   const [rejectingCounter, setRejectingCounter] = useState(false);
 
@@ -524,19 +540,16 @@ function TermsTab({ dealId }: { dealId: string }) {
     if (!user || !ver.id) return;
     setAcceptingCounter(true);
     try {
-      // Accept the terms
       await supabase.from("deal_terms_acceptance").insert({ terms_id: ver.id, user_id: user.id });
-      // Mark terms as accepted
       await supabase.from("deal_terms").update({ status: "accepted" }).eq("id", ver.id);
-      // Update deal status to in_progress
       await supabase.from("deals").update({ status: "in_progress" }).eq("id", dealId);
-      // Audit
-      await supabase.from("deal_audit_log").insert({ deal_id: dealId, user_id: user.id, action: `Рекламодатель принял контр-предложение v${ver.version}`, category: "terms" });
-      // Notify creator
-      if (deal?.creator_id) {
-        await supabase.from("notifications").insert({ user_id: deal.creator_id, title: "Контр-предложение принято", message: `Рекламодатель принял ваши условия v${ver.version}`, type: "deal", link: "/marketplace" });
+      const myRole = isAdvertiser ? "Рекламодатель" : "Автор";
+      await supabase.from("deal_audit_log").insert({ deal_id: dealId, user_id: user.id, action: `${myRole} принял условия v${ver.version}`, category: "terms" });
+      const notifyUserId = isAdvertiser ? deal?.creator_id : deal?.advertiser_id;
+      if (notifyUserId) {
+        await supabase.from("notifications").insert({ user_id: notifyUserId, title: "Условия приняты", message: `${myRole} принял условия v${ver.version}`, type: "deal", link: "/ad-studio" });
       }
-      toast.success("Контр-предложение принято, сделка переведена в работу");
+      toast.success("Условия приняты, сделка переведена в работу");
     } catch { toast.error("Ошибка"); } finally { setAcceptingCounter(false); }
   };
 
@@ -545,43 +558,167 @@ function TermsTab({ dealId }: { dealId: string }) {
     setRejectingCounter(true);
     try {
       await supabase.from("deals").update({ status: "rejected" }).eq("id", dealId);
-      await supabase.from("deal_audit_log").insert({ deal_id: dealId, user_id: user.id, action: `Рекламодатель отклонил контр-предложение v${ver.version}`, category: "terms" });
-      if (deal?.creator_id) {
-        await supabase.from("notifications").insert({ user_id: deal.creator_id, title: "Контр-предложение отклонено", message: `Рекламодатель отклонил условия v${ver.version}`, type: "deal" });
+      const myRole = isAdvertiser ? "Рекламодатель" : "Автор";
+      await supabase.from("deal_audit_log").insert({ deal_id: dealId, user_id: user.id, action: `${myRole} отклонил условия v${ver.version}`, category: "terms" });
+      const notifyUserId = isAdvertiser ? deal?.creator_id : deal?.advertiser_id;
+      if (notifyUserId) {
+        await supabase.from("notifications").insert({ user_id: notifyUserId, title: "Условия отклонены", message: `${myRole} отклонил условия v${ver.version}`, type: "deal" });
       }
-      toast.success("Контр-предложение отклонено");
+      toast.success("Предложение отклонено");
     } catch { toast.error("Ошибка"); } finally { setRejectingCounter(false); }
+  };
+
+  const handleSubmitCounterOffer = async () => {
+    if (!user || !counterMessage.trim()) return;
+    setSubmittingCounter(true);
+    try {
+      const currentVersion = latestVer ? latestVer.version : 0;
+      const baseFields = latestVer?.fields || {};
+      const newFields = {
+        ...baseFields,
+        ...(counterBudget ? { budget: counterBudget } : {}),
+        ...(counterDeadline ? { deadline: counterDeadline } : {}),
+        ...(counterRevisions ? { revisions: counterRevisions } : {}),
+        ...(counterAcceptance ? { acceptanceCriteria: counterAcceptance } : {}),
+        counterMessage,
+      };
+
+      await supabase.from("deal_terms").insert({
+        deal_id: dealId,
+        created_by: user.id,
+        version: currentVersion + 1,
+        status: "draft",
+        fields: newFields,
+      });
+
+      await supabase.from("deals").update({ status: "needs_changes" }).eq("id", dealId);
+
+      const myRole = isAdvertiser ? "Рекламодатель" : "Автор";
+      await supabase.from("deal_audit_log").insert({
+        deal_id: dealId,
+        user_id: user.id,
+        action: `${myRole} предложил изменения (v${currentVersion + 1})`,
+        category: "terms",
+        metadata: { counterBudget, counterDeadline },
+      });
+
+      const notifyUserId = isAdvertiser ? deal?.creator_id : deal?.advertiser_id;
+      if (notifyUserId) {
+        await supabase.from("notifications").insert({
+          user_id: notifyUserId,
+          title: "Предложены изменения",
+          message: `${myRole} предложил изменения к условиям (v${currentVersion + 1})`,
+          type: "deal",
+          link: isAdvertiser ? "/marketplace" : "/ad-studio",
+        });
+      }
+
+      toast.success("Контр-предложение отправлено");
+      setShowCounterForm(false);
+      setCounterBudget(""); setCounterDeadline(""); setCounterRevisions(""); setCounterAcceptance(""); setCounterMessage("");
+    } catch (err) {
+      console.error(err);
+      toast.error("Ошибка при отправке");
+    } finally { setSubmittingCounter(false); }
+  };
+
+  const openCounterPrefilled = () => {
+    const f = latestVer?.fields || {};
+    setCounterBudget((f as any).budget || "");
+    setCounterDeadline((f as any).deadline || "");
+    setCounterRevisions((f as any).revisions || "");
+    setCounterAcceptance((f as any).acceptanceCriteria || "");
+    setCounterMessage("");
+    setShowCounterForm(true);
   };
 
   return (
     <div className="p-5 space-y-4 max-w-[820px] mx-auto">
-      {/* Counter-offer banner for advertiser */}
-      {isNeedsChanges && isAdvertiser && (
+      {/* Counter-offer banner — shown when the OTHER party proposed changes */}
+      {isNeedsChanges && iWaitingForResponse && (
         <div className="bg-warning/10 border border-warning/30 rounded-lg p-4 space-y-3">
           <div className="flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 text-warning" />
-            <span className="text-[14px] font-semibold text-foreground">Автор предложил изменения</span>
+            <span className="text-[14px] font-semibold text-foreground">
+              {otherPartyLabel} предложил изменения (v{latestVer.version})
+            </span>
           </div>
-          {(ver.fields as any)?.counterMessage && (
+          {(latestVer.fields as any)?.counterMessage && (
             <p className="text-[14px] text-foreground/80 bg-background/50 rounded-md px-3 py-2">
-              «{(ver.fields as any).counterMessage}»
+              «{(latestVer.fields as any).counterMessage}»
             </p>
           )}
           <div className="flex items-center gap-3 text-[14px]">
-            {(ver.fields as any)?.budget && (
-              <span className="text-muted-foreground">Бюджет: <span className="font-semibold text-foreground">{Number((ver.fields as any).budget).toLocaleString()} ₽</span></span>
+            {(latestVer.fields as any)?.budget && (
+              <span className="text-muted-foreground">Бюджет: <span className="font-semibold text-foreground">{Number((latestVer.fields as any).budget).toLocaleString()} ₽</span></span>
             )}
-            {(ver.fields as any)?.deadline && (
-              <span className="text-muted-foreground">Дедлайн: <span className="font-medium text-foreground">{(ver.fields as any).deadline}</span></span>
+            {(latestVer.fields as any)?.deadline && (
+              <span className="text-muted-foreground">Дедлайн: <span className="font-medium text-foreground">{(latestVer.fields as any).deadline}</span></span>
             )}
           </div>
           <div className="flex items-center gap-2">
             <Button size="sm" className="text-[14px] h-9" onClick={handleAcceptCounterOffer} disabled={acceptingCounter}>
               <CheckCircle2 className="h-4 w-4 mr-1.5" />
-              {acceptingCounter ? "Принятие…" : "Принять условия автора"}
+              {acceptingCounter ? "Принятие…" : `Принять v${latestVer.version}`}
             </Button>
-            <Button size="sm" variant="outline" className="text-[14px] h-9 text-destructive border-destructive/30 hover:bg-destructive/10" onClick={handleRejectCounterOffer} disabled={rejectingCounter}>
-              {rejectingCounter ? "Отклонение…" : "Отклонить"}
+            <Button size="sm" variant="outline" className="text-[14px] h-9" onClick={openCounterPrefilled}>
+              <ArrowLeftRight className="h-4 w-4 mr-1.5" />
+              Предложить свои изменения (v{latestVer.version + 1})
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-9 w-9">
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive"
+                  onClick={handleRejectCounterOffer}
+                  disabled={rejectingCounter}
+                >
+                  {rejectingCounter ? "Отклонение…" : "Отклонить предложение"}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+      )}
+
+      {/* Counter-offer form — structured */}
+      {showCounterForm && (
+        <div className="bg-muted/20 border border-border rounded-xl p-4 space-y-3">
+          <h3 className="text-[14px] font-semibold text-foreground flex items-center gap-2">
+            <ArrowLeftRight className="h-4 w-4 text-primary" />
+            Предложить изменения (v{(latestVer?.version || 0) + 1})
+          </h3>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-[12px] font-medium text-muted-foreground">Бюджет (₽)</label>
+              <Input type="number" value={counterBudget} onChange={(e) => setCounterBudget(e.target.value)} placeholder="Оставить текущий" className="h-8 text-[13px]" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[12px] font-medium text-muted-foreground">Дедлайн</label>
+              <Input type="date" value={counterDeadline} onChange={(e) => setCounterDeadline(e.target.value)} className="h-8 text-[13px]" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[12px] font-medium text-muted-foreground">Кол-во правок</label>
+              <Input value={counterRevisions} onChange={(e) => setCounterRevisions(e.target.value)} placeholder="напр. 2 правки" className="h-8 text-[13px]" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[12px] font-medium text-muted-foreground">Критерии приёмки</label>
+              <Input value={counterAcceptance} onChange={(e) => setCounterAcceptance(e.target.value)} placeholder="Оставить текущий" className="h-8 text-[13px]" />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <label className="text-[12px] font-medium text-muted-foreground">Комментарий к изменениям <span className="text-destructive">*</span></label>
+            <Textarea value={counterMessage} onChange={(e) => setCounterMessage(e.target.value)} placeholder="Объясните предлагаемые изменения..." rows={3} className="text-[13px]" />
+          </div>
+          <div className="flex items-center gap-2 justify-end">
+            <Button variant="ghost" size="sm" className="h-8 text-[13px]" onClick={() => setShowCounterForm(false)}>Отмена</Button>
+            <Button size="sm" className="h-8 text-[13px] gap-1.5" disabled={!counterMessage.trim() || submittingCounter} onClick={handleSubmitCounterOffer}>
+              {submittingCounter ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+              Отправить
             </Button>
           </div>
         </div>
@@ -607,6 +744,11 @@ function TermsTab({ dealId }: { dealId: string }) {
           <span className={cn("text-[12px] font-medium px-2 py-0.5 rounded border", statusColor)}>
             {statusLabel}
           </span>
+          {ver.createdBy && (
+            <span className="text-[11px] text-muted-foreground">
+              от {ver.createdBy === deal?.advertiser_id ? "рекламодателя" : "автора"}
+            </span>
+          )}
         </div>
         {prevVer && changedKeys.size > 0 && (
           <button
@@ -616,7 +758,7 @@ function TermsTab({ dealId }: { dealId: string }) {
               showChanges ? "text-primary" : "text-muted-foreground hover:text-foreground"
             )}
           >
-            {showChanges ? "Все поля" : "Показать изменения"}
+            {showChanges ? "Все поля" : `Показать изменения (${changedKeys.size})`}
           </button>
         )}
       </div>
@@ -652,6 +794,7 @@ function TermsTab({ dealId }: { dealId: string }) {
                 <div className="space-y-0">
                   {visibleFields.map((field, fi) => {
                     const value = (ver.fields as any)[field.key] || "—";
+                    const prevValue = prevVer ? (prevVer.fields as any)[field.key] || "—" : null;
                     const changed = changedKeys.has(field.key);
                     return (
                       <div
@@ -663,7 +806,17 @@ function TermsTab({ dealId }: { dealId: string }) {
                         )}
                       >
                         <span className="text-[14px] text-muted-foreground w-36 shrink-0">{field.label}</span>
-                        <span className="text-[15px] font-medium text-card-foreground text-right flex-1">{value}</span>
+                        <div className="text-right flex-1">
+                          {changed && showChanges && prevValue ? (
+                            <>
+                              <span className="text-[13px] line-through text-destructive/60">{prevValue}</span>
+                              <span className="text-[13px] mx-1.5 text-muted-foreground">→</span>
+                              <span className="text-[15px] font-medium text-success">{value}</span>
+                            </>
+                          ) : (
+                            <span className="text-[15px] font-medium text-card-foreground">{value}</span>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
@@ -674,8 +827,8 @@ function TermsTab({ dealId }: { dealId: string }) {
         })}
       </Accordion>
 
-      {/* Action buttons */}
-      {!isNeedsChanges && (
+      {/* Action buttons — only when NOT in needs_changes banner mode */}
+      {!isNeedsChanges && !showCounterForm && (
         <div className="flex items-center gap-2 pt-1">
           {canAccept && (
             <Button size="sm" className="text-[14px] h-9" onClick={handleAccept} disabled={acceptTerms.isPending}>
@@ -683,7 +836,7 @@ function TermsTab({ dealId }: { dealId: string }) {
               {acceptTerms.isPending ? "Подтверждение…" : "Подтвердить условия"}
             </Button>
           )}
-          <Button size="sm" variant="outline" className="text-[14px] h-9">
+          <Button size="sm" variant="outline" className="text-[14px] h-9" onClick={openCounterPrefilled}>
             Предложить изменения{hasAcceptedAndNoDraft ? ` (v${ver.version + 1})` : ""}
           </Button>
         </div>
@@ -691,7 +844,6 @@ function TermsTab({ dealId }: { dealId: string }) {
     </div>
   );
 }
-
 /* ═══════════════════════════════════════════════════════
    FILES TAB — deduplicated, one row per file
    ═══════════════════════════════════════════════════════ */
