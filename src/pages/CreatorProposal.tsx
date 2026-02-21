@@ -201,6 +201,8 @@ export default function CreatorProposal() {
   const [invoiceAmount, setInvoiceAmount] = useState("");
   const [invoiceComment, setInvoiceComment] = useState("");
   const [invoiceDueDate, setInvoiceDueDate] = useState<Date | undefined>(undefined);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   /* Chat state */
   const [chatInput, setChatInput] = useState("");
@@ -302,19 +304,58 @@ export default function CreatorProposal() {
     if (!user || !deal) return;
     setRejecting(true);
     try {
-      await supabase.from("deals").update({ status: "rejected" }).eq("id", deal.id);
-      await supabase.from("deal_audit_log").insert({ deal_id: deal.id, user_id: user.id, action: `Автор отклонил предложение${rejectReason ? `: ${rejectReason}` : ""}`, category: "general", metadata: rejectReason ? { reason: rejectReason } : {} });
+      await supabase.from("deals").update({
+        status: "rejected",
+        rejection_reason: rejectReason.trim() || null,
+        rejected_at: new Date().toISOString(),
+      }).eq("id", deal.id);
+      // System chat message
+      const creatorName = profile?.display_name || "Автор";
+      const reasonSuffix = rejectReason.trim() ? `\n\nПричина: ${rejectReason.trim()}` : "";
+      await supabase.from("messages").insert({
+        deal_id: deal.id, sender_id: user.id, sender_name: "Система",
+        content: `❌ ${creatorName} отклонил(а) предложение.${reasonSuffix}`,
+      });
+      // Audit log
+      await supabase.from("deal_audit_log").insert({ deal_id: deal.id, user_id: user.id, action: `Автор отклонил предложение${rejectReason.trim() ? `: ${rejectReason.trim()}` : ""}`, category: "general", metadata: rejectReason.trim() ? { reason: rejectReason.trim() } : {} });
+      // Notification to advertiser
       if (deal.advertiser_id) {
-        await supabase.from("notifications").insert({ user_id: deal.advertiser_id, title: "Предложение отклонено", message: `${profile?.display_name || "Автор"} отклонил(а) предложение «${deal.title}»${rejectReason ? `. Причина: ${rejectReason}` : ""}`, type: "deal", link: "/ad-studio" });
+        await supabase.from("notifications").insert({ user_id: deal.advertiser_id, title: "Предложение отклонено", message: `${creatorName} отклонил(а) предложение «${deal.title}»${rejectReason.trim() ? `. Причина: ${rejectReason.trim()}` : ""}`, type: "deal", link: "/ad-studio" });
       }
       toast.success("Предложение отклонено");
       qc.invalidateQueries({ queryKey: ["creator-incoming-deals"] });
+      qc.invalidateQueries({ queryKey: ["my_deals"] });
       setShowRejectDialog(false);
-      navigate("/marketplace");
+      setRejectReason("");
     } catch {
       toast.error("Ошибка при отклонении");
     } finally {
       setRejecting(false);
+    }
+  };
+
+  /* Hard delete rejected deal */
+  const handleHardDelete = async () => {
+    if (!user || !deal) return;
+    setDeleting(true);
+    try {
+      // Delete related records first
+      await supabase.from("deal_audit_log").delete().eq("deal_id", deal.id);
+      await supabase.from("messages").delete().eq("deal_id", deal.id);
+      await supabase.from("deal_terms_acceptance").delete().in("terms_id", (terms || []).map((t: any) => t.id));
+      await supabase.from("deal_terms").delete().eq("deal_id", deal.id);
+      await supabase.from("deal_files").delete().eq("deal_id", deal.id);
+      await supabase.from("deal_escrow").delete().eq("deal_id", deal.id);
+      await supabase.from("deal_invoices").delete().eq("deal_id", deal.id);
+      await supabase.from("milestones").delete().eq("deal_id", deal.id);
+      await supabase.from("deals").delete().eq("id", deal.id);
+      toast.success("Предложение удалено");
+      qc.invalidateQueries({ queryKey: ["creator-incoming-deals"] });
+      navigate("/marketplace");
+    } catch {
+      toast.error("Не удалось удалить");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -591,6 +632,14 @@ export default function CreatorProposal() {
                         </DropdownMenuItem>
                       </>
                     )}
+                    {isRejected && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem className="text-destructive focus:text-destructive text-[14px]" onClick={() => setShowDeleteConfirm(true)}>
+                          <XCircle className="h-4 w-4 mr-2" /> Удалить навсегда
+                        </DropdownMenuItem>
+                      </>
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
@@ -672,6 +721,29 @@ export default function CreatorProposal() {
                 setShowInvoiceModal(true);
               }}>
                 <FileText className="h-4 w-4 mr-1.5" /> Отправить счёт
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* ════════ REJECTED BANNER (creator declined) ════════ */}
+        {isRejected && (
+          <div className="border-b border-destructive/20 bg-destructive/5">
+            <div className="max-w-[1100px] mx-auto px-6 py-3 flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                <XCircle className="h-5 w-5 text-destructive shrink-0" />
+                <div>
+                  <span className="text-[14px] font-semibold text-foreground">Предложение отклонено</span>
+                  {(deal as any).rejection_reason && (
+                    <p className="text-[13px] text-muted-foreground mt-0.5">Причина: {(deal as any).rejection_reason}</p>
+                  )}
+                  {(deal as any).rejected_at && (
+                    <p className="text-[12px] text-muted-foreground mt-0.5">{fmtDateTime((deal as any).rejected_at)}</p>
+                  )}
+                </div>
+              </div>
+              <Button size="sm" variant="destructive" className="text-[13px] h-8 shrink-0" onClick={() => setShowDeleteConfirm(true)}>
+                <XCircle className="h-3.5 w-3.5 mr-1" /> Удалить
               </Button>
             </div>
           </div>
@@ -812,6 +884,22 @@ export default function CreatorProposal() {
             <AlertDialogCancel>Отмена</AlertDialogCancel>
             <AlertDialogAction onClick={handleReject} disabled={rejecting} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
               {rejecting ? "Отклонение…" : "Отклонить"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Удалить предложение навсегда?</AlertDialogTitle>
+            <AlertDialogDescription>Все данные, файлы и переписка будут удалены. Это действие нельзя отменить.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogAction onClick={handleHardDelete} disabled={deleting} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              {deleting ? "Удаление…" : "Удалить навсегда"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

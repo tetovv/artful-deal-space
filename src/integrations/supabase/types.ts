@@ -912,6 +912,8 @@ export type Database = {
           deadline: string | null
           description: string | null
           id: string
+          rejected_at: string | null
+          rejection_reason: string | null
           status: string
           title: string
         }
@@ -925,6 +927,8 @@ export type Database = {
           deadline?: string | null
           description?: string | null
           id?: string
+          rejected_at?: string | null
+          rejection_reason?: string | null
           status?: string
           title: string
         }
@@ -938,6 +942,8 @@ export type Database = {
           deadline?: string | null
           description?: string | null
           id?: string
+          rejected_at?: string | null
+          rejection_reason?: string | null
           status?: string
           title?: string
         }
