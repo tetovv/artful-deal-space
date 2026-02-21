@@ -334,9 +334,10 @@ function ExtractionStep({ onNext, file, redactSensitive, onFieldsExtracted, onTe
           editable: true,
           category: fm.category,
         };
-      }).filter((f) => f.value || f.sourceSnippet);
+      });
 
-      setFieldsCount(mappedFields.length);
+      const filledCount = mappedFields.filter((f) => f.value).length;
+      setFieldsCount(filledCount);
       onFieldsExtracted(mappedFields);
 
       // Store text length info for audit (no actual text stored client-side)
@@ -457,9 +458,12 @@ function ExtractionStep({ onNext, file, redactSensitive, onFieldsExtracted, onTe
 
       {stage === "done" && (
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-sm text-success">
-            <CheckCircle2 className="h-4 w-4" />
-            <span className="font-medium">Извлечено {fieldsCount} полей</span>
+          <div className="flex items-center gap-2 text-sm">
+            <CheckCircle2 className="h-4 w-4 text-success" />
+            <span className="font-medium text-success">Извлечено {fieldsCount} из {fieldMeta.length} полей</span>
+            {fieldsCount < fieldMeta.length && (
+              <span className="text-xs text-warning ml-1">— остальные потребуют ручного ввода</span>
+            )}
           </div>
           <Button className="h-10 text-sm gap-2" onClick={onNext}>
             Проверить данные
@@ -486,8 +490,28 @@ function ReviewStep({ onNext, fields, setFields }: {
     setFields(fields.map((f) => f.key === key ? { ...f, value } : f));
   };
 
+  const emptyCount = fields.filter((f) => !f.value).length;
+
   return (
     <div className="space-y-5">
+      {emptyCount > 0 && (
+        <Card className="border-warning/30 bg-warning/5">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-4 w-4 text-warning flex-shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-card-foreground">
+                  {emptyCount} {emptyCount === 1 ? "поле не распознано" : emptyCount < 5 ? "поля не распознаны" : "полей не распознано"}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  AI не смог извлечь некоторые данные из договора. Заполните пустые поля вручную, чтобы создать кампанию.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Card className="border-primary/20 bg-primary/5">
         <CardContent className="p-4">
           <div className="flex items-start gap-3">
@@ -537,15 +561,22 @@ function ReviewStep({ onNext, fields, setFields }: {
                             </TooltipContent>
                           </Tooltip>
                         )}
-                        <Badge variant="outline" className={`text-[10px] ${confidenceColor(field.confidence)}`}>
-                          {Math.round(field.confidence * 100)}% · {confidenceLabel(field.confidence)}
-                        </Badge>
+                        {field.value ? (
+                          <Badge variant="outline" className={`text-[10px] ${confidenceColor(field.confidence)}`}>
+                            {Math.round(field.confidence * 100)}% · {confidenceLabel(field.confidence)}
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[10px] text-warning border-warning/40 bg-warning/10">
+                            Не распознано
+                          </Badge>
+                        )}
                       </div>
                     </div>
                     <Input
                       value={field.value}
                       onChange={(e) => updateField(field.key, e.target.value)}
-                      className="h-9"
+                      placeholder={!field.value ? "Заполните вручную…" : undefined}
+                      className={`h-9 ${!field.value ? "border-warning/50 bg-warning/5" : ""}`}
                     />
                     {expandedSnippet === field.key && field.sourceSnippet && (
                       <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground leading-relaxed">
