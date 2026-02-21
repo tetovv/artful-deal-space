@@ -421,11 +421,11 @@ export default function CreatorProposal() {
               </Button>
             )}
 
-            {/* If accepted — switch to negotiation/chat tab */}
-            {isAccepted && activeTab === "overview" && (
+            {/* If accepted — "Open deal" goes to negotiation (read-only history) */}
+            {isAccepted && (
               <Button size="sm" className="h-9 gap-1.5" onClick={() => setActiveTab("negotiation")}>
-                <MessageSquare className="h-4 w-4" />
-                Перейти к переговорам
+                <ExternalLink className="h-4 w-4" />
+                Открыть сделку
               </Button>
             )}
 
@@ -751,8 +751,8 @@ export default function CreatorProposal() {
                 </div>
               )}
 
-              {/* Counter-offer form */}
-              {showCounterForm && canRespond && (
+              {/* Counter-offer form — only pre-accept */}
+              {!isAccepted && showCounterForm && canRespond && (
                 <div className="space-y-3 bg-muted/20 rounded-xl p-4 border border-border">
                   <h3 className="text-[14px] font-semibold text-foreground flex items-center gap-2">
                     <ArrowLeftRight className="h-4 w-4 text-primary" /> Встречное предложение
@@ -809,6 +809,14 @@ export default function CreatorProposal() {
                   </div>
                 </div>
               )}
+
+              {/* Read-only notice when accepted */}
+              {isAccepted && (
+                <div className="bg-green-500/5 border border-green-500/20 rounded-lg p-3 flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
+                  <span className="text-[13px] text-foreground">Предложение принято. История переговоров доступна только для просмотра.</span>
+                </div>
+              )}
             </div>
 
             {/* RIGHT: Discussion thread */}
@@ -852,24 +860,30 @@ export default function CreatorProposal() {
                   )}
                 </ScrollArea>
 
-                {/* Chat input */}
-                <div className="border-t border-border p-2 flex items-center gap-2">
-                  <Input
-                    value={chatInput}
-                    onChange={(e) => setChatInput(e.target.value)}
-                    placeholder="Задать вопрос…"
-                    className="h-8 text-[13px] flex-1"
-                    onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSendChat()}
-                  />
-                  <Button
-                    size="icon"
-                    className="h-8 w-8 shrink-0"
-                    disabled={!chatInput.trim() || sendingChat}
-                    onClick={handleSendChat}
-                  >
-                    {sendingChat ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-                  </Button>
-                </div>
+                {/* Chat input — editable only pre-accept */}
+                {!isAccepted ? (
+                  <div className="border-t border-border p-2 flex items-center gap-2">
+                    <Input
+                      value={chatInput}
+                      onChange={(e) => setChatInput(e.target.value)}
+                      placeholder="Задать вопрос…"
+                      className="h-8 text-[13px] flex-1"
+                      onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSendChat()}
+                    />
+                    <Button
+                      size="icon"
+                      className="h-8 w-8 shrink-0"
+                      disabled={!chatInput.trim() || sendingChat}
+                      onClick={handleSendChat}
+                    >
+                      {sendingChat ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="border-t border-border p-2 px-3">
+                    <p className="text-[12px] text-muted-foreground">Переписка завершена — предложение принято</p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
