@@ -9,7 +9,6 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -18,9 +17,6 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {
-  Collapsible, CollapsibleContent, CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import {
   ArrowLeft, CheckCircle2, MoreVertical, Download, FileText, Shield,
   CalendarDays, Video, FileEdit, Mic, Loader2, Send, ArrowLeftRight,
@@ -33,7 +29,7 @@ import { PageTransition } from "@/components/layout/PageTransition";
 /* ─── Status config ─── */
 const statusConfig: Record<string, { label: string; cls: string }> = {
   pending: { label: "Новое", cls: "bg-warning/15 text-warning border-warning/30" },
-  briefing: { label: "Активно", cls: "bg-primary/15 text-primary border-primary/30" },
+  briefing: { label: "Принято", cls: "bg-green-500/10 text-green-500 border-green-500/30" },
   in_progress: { label: "В работе", cls: "bg-primary/15 text-primary border-primary/30" },
   needs_changes: { label: "Ожидает ответа", cls: "bg-accent/15 text-accent-foreground border-accent/30" },
   completed: { label: "Завершено", cls: "bg-green-500/10 text-green-500 border-green-500/30" },
@@ -45,22 +41,22 @@ const placementIcons: Record<string, any> = {
   "Видео-интеграция": Video, "Видео": Video, "Пост": FileEdit, "Подкаст": Mic,
 };
 
+type ProposalTab = "overview" | "negotiation" | "files";
+
 export default function CreatorProposal() {
   const { proposalId } = useParams<{ proposalId: string }>();
   const navigate = useNavigate();
   const { user, profile } = useAuth();
   const qc = useQueryClient();
 
+  const [activeTab, setActiveTab] = useState<ProposalTab>("overview");
+
   // Fetch deal
   const { data: deal, isLoading } = useQuery({
     queryKey: ["proposal-deal", proposalId],
     queryFn: async () => {
       if (!proposalId) return null;
-      const { data, error } = await supabase
-        .from("deals")
-        .select("*")
-        .eq("id", proposalId)
-        .single();
+      const { data, error } = await supabase.from("deals").select("*").eq("id", proposalId).single();
       if (error) throw error;
       return data;
     },
@@ -103,7 +99,6 @@ export default function CreatorProposal() {
   const [counterDeadline, setCounterDeadline] = useState("");
   const [counterMessage, setCounterMessage] = useState("");
   const [submittingCounter, setSubmittingCounter] = useState(false);
-  const [historyOpen, setHistoryOpen] = useState(false);
 
   // Derived
   const allTermsSorted = useMemo(() => {
@@ -162,6 +157,7 @@ export default function CreatorProposal() {
       toast.success("Сделка создана. Ожидайте резервирования средств.");
       qc.invalidateQueries({ queryKey: ["creator-incoming-deals"] });
       qc.invalidateQueries({ queryKey: ["my_deals"] });
+      // Redirect to creator deal workspace (NOT advertiser routes)
       navigate("/ad-studio", { state: { openDealId: deal.id } });
     } catch (err) {
       console.error(err);
@@ -183,6 +179,7 @@ export default function CreatorProposal() {
       toast.success("Предложение отклонено");
       qc.invalidateQueries({ queryKey: ["creator-incoming-deals"] });
       setShowRejectDialog(false);
+      // Back to proposals list (creator view of marketplace)
       navigate("/marketplace");
     } catch {
       toast.error("Ошибка при отклонении");
@@ -262,9 +259,15 @@ export default function CreatorProposal() {
   const rawBrief = deal.description;
   const hasBrief = rawBrief && rawBrief !== "0" && rawBrief.trim().length > 0;
 
+  const tabs: { key: ProposalTab; label: string; count?: number }[] = [
+    { key: "overview", label: "Обзор" },
+    { key: "negotiation", label: "Переговоры", count: allTermsSorted.length || undefined },
+    { key: "files", label: "Файлы", count: files.length || undefined },
+  ];
+
   return (
     <PageTransition>
-      <div className="max-w-[1100px] mx-auto px-4 lg:px-8 py-6 space-y-6">
+      <div className="max-w-[1100px] mx-auto px-4 lg:px-8 py-6 space-y-5">
         {/* ── Back link ── */}
         <button
           onClick={() => navigate("/marketplace")}
@@ -274,297 +277,371 @@ export default function CreatorProposal() {
           Назад к предложениям
         </button>
 
+        {/* ── Banners ── */}
+        {advertiserCountered && (
+          <div className="bg-warning/10 border border-warning/30 rounded-lg p-4 space-y-2">
+            <div className="flex items-center gap-2">
+              <ArrowLeftRight className="h-4 w-4 text-warning" />
+              <span className="text-[14px] font-semibold text-foreground">
+                Рекламодатель предложил изменения (v{(latestTerms as any)?.version || "?"})
+              </span>
+            </div>
+            {termsFields?.counterMessage && (
+              <p className="text-[13px] text-foreground/80 bg-background/50 rounded-md px-3 py-2">«{termsFields.counterMessage}»</p>
+            )}
+          </div>
+        )}
+
+        {creatorCountered && (
+          <div className="bg-muted/50 border border-border rounded-lg p-4 flex items-center gap-3">
+            <Clock className="h-4 w-4 text-muted-foreground shrink-0" />
+            <div>
+              <span className="text-[14px] font-medium text-foreground">Ожидаем ответа рекламодателя</span>
+              <p className="text-[12px] text-muted-foreground">
+                Вы отправили встречное предложение (v{(latestTerms as any)?.version || "?"}). Редактирование заблокировано до ответа.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* ── Header ── */}
-        <div className="space-y-3">
-          {/* Counter-offer banner */}
-          {advertiserCountered && (
-            <div className="bg-warning/10 border border-warning/30 rounded-lg p-4 space-y-2">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden border border-border shrink-0">
+              {advertiserProfile?.avatar_url
+                ? <img src={advertiserProfile.avatar_url} alt="" className="h-full w-full object-cover" />
+                : <span className="text-sm font-bold text-primary">{(advertiserProfile?.display_name || deal.advertiser_name).charAt(0)}</span>}
+            </div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <ArrowLeftRight className="h-4 w-4 text-warning" />
-                <span className="text-[14px] font-semibold text-foreground">
-                  Рекламодатель предложил изменения (v{(latestTerms as any)?.version || "?"})
-                </span>
+                <h1 className="text-[18px] font-bold text-foreground truncate">
+                  {advertiserProfile?.display_name || deal.advertiser_name}
+                </h1>
+                {brand?.business_verified && <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />}
+                <Badge variant="outline" className={cn("text-[11px] border font-medium shrink-0", st.cls)}>{st.label}</Badge>
               </div>
-              {termsFields?.counterMessage && (
-                <p className="text-[13px] text-foreground/80 bg-background/50 rounded-md px-3 py-2">«{termsFields.counterMessage}»</p>
-              )}
-            </div>
-          )}
-
-          {/* Waiting banner */}
-          {creatorCountered && (
-            <div className="bg-muted/50 border border-border rounded-lg p-4 flex items-center gap-3">
-              <Clock className="h-4 w-4 text-muted-foreground shrink-0" />
-              <div>
-                <span className="text-[14px] font-medium text-foreground">Ожидаем ответа рекламодателя</span>
-                <p className="text-[12px] text-muted-foreground">
-                  Вы отправили встречное предложение (v{(latestTerms as any)?.version || "?"}). Редактирование заблокировано до ответа.
-                </p>
-              </div>
-            </div>
-          )}
-
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden border border-border shrink-0">
-                {advertiserProfile?.avatar_url
-                  ? <img src={advertiserProfile.avatar_url} alt="" className="h-full w-full object-cover" />
-                  : <span className="text-sm font-bold text-primary">{(advertiserProfile?.display_name || deal.advertiser_name).charAt(0)}</span>}
-              </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <h1 className="text-[18px] font-bold text-foreground truncate">
-                    {advertiserProfile?.display_name || deal.advertiser_name}
-                  </h1>
-                  {brand?.business_verified && <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />}
-                  <Badge variant="outline" className={cn("text-[11px] border font-medium shrink-0", st.cls)}>{st.label}</Badge>
-                </div>
-                {brand?.brand_name && (
-                  <p className="text-[13px] text-muted-foreground truncate">{brand.brand_name}</p>
-                )}
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 shrink-0">
-              {/* Single primary CTA */}
-              {canRespond && !showCounterForm && (
-                <Button size="sm" className="h-9 gap-1.5" disabled={accepting} onClick={handleAccept}>
-                  {accepting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                  Принять предложение
-                </Button>
-              )}
-
-              {creatorCountered && (
-                <Badge variant="outline" className="text-[12px] border-muted-foreground/20 text-muted-foreground">
-                  <Clock className="h-3 w-3 mr-1" />
-                  Ожидание рекламодателя
-                </Badge>
-              )}
-
-              {/* Kebab menu */}
-              {canRespond && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-9 w-9">
-                      <MoreVertical className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => setShowCounterForm(true)}>
-                      <ArrowLeftRight className="h-4 w-4 mr-2" />
-                      Встречное предложение
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      className="text-destructive focus:text-destructive"
-                      onClick={() => setShowRejectDialog(true)}
-                    >
-                      <XCircle className="h-4 w-4 mr-2" />
-                      Отклонить
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+              {brand?.brand_name && (
+                <p className="text-[13px] text-muted-foreground truncate">{brand.brand_name}</p>
               )}
             </div>
           </div>
 
-          {/* Key meta line */}
-          <div className="flex items-center gap-4 text-[14px] flex-wrap">
-            {placement && (
-              <span className="flex items-center gap-1.5 text-foreground font-medium">
-                <PlacementIcon className="h-4 w-4 text-primary" />
-                {placement}
-              </span>
+          <div className="flex items-center gap-2 shrink-0">
+            {canRespond && !showCounterForm && (
+              <Button size="sm" className="h-9 gap-1.5" disabled={accepting} onClick={handleAccept}>
+                {accepting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                Принять предложение
+              </Button>
             )}
-            <span className="font-bold text-foreground text-lg">{(deal.budget || 0).toLocaleString()} ₽</span>
-            {deal.deadline && (
-              <span className="text-foreground/70 flex items-center gap-1">
-                <CalendarDays className="h-3.5 w-3.5" />
-                до {new Date(deal.deadline).toLocaleDateString("ru-RU")}
-              </span>
+
+            {creatorCountered && (
+              <Badge variant="outline" className="text-[12px] border-muted-foreground/20 text-muted-foreground">
+                <Clock className="h-3 w-3 mr-1" />
+                Ожидание рекламодателя
+              </Badge>
             )}
-            {files.length > 0 && (
-              <span className="text-foreground/70 flex items-center gap-1">
-                <Paperclip className="h-3.5 w-3.5" />
-                {files.length} файлов
-              </span>
+
+            {canRespond && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-9 w-9">
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => { setShowCounterForm(true); setActiveTab("negotiation"); }}>
+                    <ArrowLeftRight className="h-4 w-4 mr-2" />
+                    Встречное предложение
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="text-destructive focus:text-destructive"
+                    onClick={() => setShowRejectDialog(true)}
+                  >
+                    <XCircle className="h-4 w-4 mr-2" />
+                    Отклонить
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
           </div>
         </div>
 
-        <Separator />
+        {/* Key meta line */}
+        <div className="flex items-center gap-4 text-[14px] flex-wrap">
+          {placement && (
+            <span className="flex items-center gap-1.5 text-foreground font-medium">
+              <PlacementIcon className="h-4 w-4 text-primary" />
+              {placement}
+            </span>
+          )}
+          {deal.budget ? (
+            <span className="font-bold text-foreground text-lg">{deal.budget.toLocaleString()} ₽</span>
+          ) : null}
+          {deal.deadline && (
+            <span className="text-foreground/70 flex items-center gap-1">
+              <CalendarDays className="h-3.5 w-3.5" />
+              до {new Date(deal.deadline).toLocaleDateString("ru-RU")}
+            </span>
+          )}
+          {files.length > 0 && (
+            <span className="text-foreground/70 flex items-center gap-1">
+              <Paperclip className="h-3.5 w-3.5" />
+              {files.length} файлов
+            </span>
+          )}
+        </div>
 
-        {/* ── Two-column content ── */}
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
-          {/* LEFT COLUMN: Proposal details */}
-          <div className="lg:col-span-3 space-y-6">
-            {/* Brief */}
-            <div className="space-y-3">
-              <h2 className="text-[15px] font-semibold text-foreground">Бриф</h2>
-              {hasBrief ? (
-                <div className="space-y-3">
-                  <p className="text-[14px] text-foreground/90 leading-relaxed whitespace-pre-wrap">
-                    {rawBrief}
-                  </p>
-                  {termsFields?.cta && (
-                    <div className="rounded-lg bg-primary/5 border border-primary/15 px-3 py-2">
-                      <span className="text-[12px] font-medium text-muted-foreground block mb-0.5">Призыв к действию (CTA)</span>
-                      <span className="text-[13px] text-foreground">{termsFields.cta}</span>
+        {/* ── Tabs ── */}
+        <div className="border-b border-border">
+          <div className="flex items-center gap-0">
+            {tabs.map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className={cn(
+                  "px-4 py-2.5 text-[14px] font-medium border-b-2 transition-colors",
+                  activeTab === tab.key
+                    ? "border-primary text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {tab.label}
+                {tab.count && tab.count > 0 && (
+                  <span className="ml-1.5 text-[11px] bg-muted px-1.5 py-0.5 rounded-full">{tab.count}</span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Tab content ── */}
+
+        {/* === OVERVIEW === */}
+        {activeTab === "overview" && (
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+            {/* LEFT: Brief + details */}
+            <div className="lg:col-span-3 space-y-6">
+              {/* Brief */}
+              <div className="space-y-3">
+                <h2 className="text-[15px] font-semibold text-foreground">Бриф</h2>
+                {hasBrief ? (
+                  <div className="space-y-3">
+                    <p className="text-[14px] text-foreground/90 leading-relaxed whitespace-pre-wrap">{rawBrief}</p>
+                    {termsFields?.cta && (
+                      <div className="rounded-lg bg-primary/5 border border-primary/15 px-3 py-2">
+                        <span className="text-[12px] font-medium text-muted-foreground block mb-0.5">Призыв к действию (CTA)</span>
+                        <span className="text-[13px] text-foreground">{termsFields.cta}</span>
+                      </div>
+                    )}
+                    {termsFields?.restrictions && (
+                      <div className="rounded-lg bg-destructive/5 border border-destructive/15 px-3 py-2">
+                        <span className="text-[12px] font-medium text-muted-foreground block mb-0.5">Ограничения</span>
+                        <span className="text-[13px] text-foreground">{termsFields.restrictions}</span>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-[13px] text-muted-foreground italic">Бриф не предоставлен</p>
+                )}
+              </div>
+
+              {/* Placement details — only show non-empty fields */}
+              {(termsFields?.revisions || termsFields?.acceptanceCriteria) && (
+                <>
+                  <Separator />
+                  <div className="space-y-2">
+                    <h2 className="text-[15px] font-semibold text-foreground">Детали размещения</h2>
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+                      {termsFields?.revisions && termsFields.revisions !== "Не указано" && (
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-[12px] text-muted-foreground">Правки</span>
+                          <span className="text-[14px] font-medium text-foreground">{termsFields.revisions}</span>
+                        </div>
+                      )}
+                      {termsFields?.acceptanceCriteria && termsFields.acceptanceCriteria !== "Не указано" && (
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-[12px] text-muted-foreground">Критерии приёмки</span>
+                          <span className="text-[14px] font-medium text-foreground">{termsFields.acceptanceCriteria}</span>
+                        </div>
+                      )}
                     </div>
-                  )}
-                  {termsFields?.restrictions && (
-                    <div className="rounded-lg bg-destructive/5 border border-destructive/15 px-3 py-2">
-                      <span className="text-[12px] font-medium text-muted-foreground block mb-0.5">Ограничения</span>
-                      <span className="text-[13px] text-foreground">{termsFields.restrictions}</span>
+                  </div>
+                </>
+              )}
+
+              {/* Marking (ORD) */}
+              <Separator />
+              <div className="flex items-center gap-2">
+                <Shield className="h-4 w-4 text-primary shrink-0" />
+                <span className="text-[13px] text-foreground/80">Маркировка обеспечивается платформой</span>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="text-muted-foreground cursor-help text-[11px] underline underline-offset-2 decoration-dotted">?</span>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-[220px]">
+                    <p className="text-xs">Платформа автоматически регистрирует креативы в ОРД и добавляет маркировку «Реклама» с ERID.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+
+              {/* Attachments preview (top 2) */}
+              {files.length > 0 && (
+                <>
+                  <Separator />
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <h2 className="text-[15px] font-semibold text-foreground">Вложения ({files.length})</h2>
+                      {files.length > 2 && (
+                        <button onClick={() => setActiveTab("files")} className="text-[12px] text-primary hover:underline">
+                          Все файлы →
+                        </button>
+                      )}
                     </div>
-                  )}
-                </div>
-              ) : (
-                <p className="text-[13px] text-muted-foreground italic">Бриф не предоставлен</p>
+                    <div className="space-y-1">
+                      {files.slice(0, 2).map((f) => (
+                        <div key={f.id} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/30 transition-colors">
+                          <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[13px] font-medium text-foreground truncate">{f.file_name}</p>
+                            <p className="text-[11px] text-muted-foreground">{((f.file_size || 0) / 1024).toFixed(0)} KB</p>
+                          </div>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => downloadFile.mutate(f.storage_path)}>
+                            <Download className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
               )}
             </div>
 
-            {/* Placement details — only show non-empty fields */}
-            {(termsFields?.revisions || termsFields?.acceptanceCriteria) && (
-              <>
-                <Separator />
-                <div className="space-y-2">
-                  <h2 className="text-[15px] font-semibold text-foreground">Детали размещения</h2>
-                  <div className="grid grid-cols-2 gap-x-6 gap-y-2">
-                    {termsFields?.revisions && termsFields.revisions !== "Не указано" && (
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-[12px] text-muted-foreground">Правки</span>
-                        <span className="text-[14px] font-medium text-foreground">{termsFields.revisions}</span>
-                      </div>
-                    )}
-                    {termsFields?.acceptanceCriteria && termsFields.acceptanceCriteria !== "Не указано" && (
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-[12px] text-muted-foreground">Критерии приёмки</span>
-                        <span className="text-[14px] font-medium text-foreground">{termsFields.acceptanceCriteria}</span>
-                      </div>
-                    )}
+            {/* RIGHT: Terms summary */}
+            <div className="lg:col-span-2 space-y-4">
+              <h2 className="text-[15px] font-semibold text-foreground">Условия</h2>
+              <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+                {placement && (
+                  <div className="flex justify-between text-[13px]">
+                    <span className="text-muted-foreground">Тип размещения</span>
+                    <span className="font-medium text-foreground">{placement}</span>
                   </div>
-                </div>
-              </>
-            )}
+                )}
+                {deal.budget ? (
+                  <div className="flex justify-between text-[13px]">
+                    <span className="text-muted-foreground">Бюджет</span>
+                    <span className="font-bold text-foreground">{deal.budget.toLocaleString()} ₽</span>
+                  </div>
+                ) : null}
+                {deal.deadline && (
+                  <div className="flex justify-between text-[13px]">
+                    <span className="text-muted-foreground">Дедлайн</span>
+                    <span className="font-medium text-foreground">{new Date(deal.deadline).toLocaleDateString("ru-RU")}</span>
+                  </div>
+                )}
+                {termsFields?.revisions && termsFields.revisions !== "Не указано" && (
+                  <div className="flex justify-between text-[13px]">
+                    <span className="text-muted-foreground">Правки</span>
+                    <span className="font-medium text-foreground">{termsFields.revisions}</span>
+                  </div>
+                )}
+                {allTermsSorted.length > 0 && (
+                  <div className="flex justify-between text-[13px]">
+                    <span className="text-muted-foreground">Версий переговоров</span>
+                    <span className="font-medium text-foreground">{allTermsSorted.length}</span>
+                  </div>
+                )}
+              </div>
 
-            {/* Marking (ORD) */}
-            <Separator />
-            <div className="flex items-center gap-2">
-              <Shield className="h-4 w-4 text-primary shrink-0" />
-              <span className="text-[13px] text-foreground/80">
-                Маркировка обеспечивается платформой
-              </span>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="text-muted-foreground cursor-help text-[11px] underline underline-offset-2 decoration-dotted">?</span>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-[220px]">
-                  <p className="text-xs">Платформа автоматически регистрирует креативы в ОРД и добавляет маркировку «Реклама» с ERID.</p>
-                </TooltipContent>
-              </Tooltip>
+              {/* Quick action */}
+              {canRespond && !showCounterForm && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full gap-1.5"
+                  onClick={() => { setShowCounterForm(true); setActiveTab("negotiation"); }}
+                >
+                  <ArrowLeftRight className="h-3.5 w-3.5" />
+                  Предложить свои условия
+                </Button>
+              )}
             </div>
-
-            {/* Attachments */}
-            {files.length > 0 && (
-              <>
-                <Separator />
-                <div className="space-y-2">
-                  <h2 className="text-[15px] font-semibold text-foreground">Файлы ({files.length})</h2>
-                  <div className="space-y-1">
-                    {files.map((f) => (
-                      <div key={f.id} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/30 transition-colors">
-                        <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[13px] font-medium text-foreground truncate">{f.file_name}</p>
-                          <p className="text-[11px] text-muted-foreground">
-                            {((f.file_size || 0) / 1024).toFixed(0)} KB
-                          </p>
-                        </div>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => downloadFile.mutate(f.storage_path)}>
-                          <Download className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </>
-            )}
           </div>
+        )}
 
-          {/* RIGHT COLUMN: Negotiation */}
-          <div className="lg:col-span-2 space-y-6">
+        {/* === NEGOTIATION === */}
+        {activeTab === "negotiation" && (
+          <div className="space-y-6 max-w-[800px]">
             {/* Version timeline */}
-            {allTermsSorted.length > 0 && (
+            {allTermsSorted.length > 0 ? (
               <div className="space-y-3">
-                <Collapsible open={historyOpen || allTermsSorted.length <= 3} onOpenChange={setHistoryOpen}>
-                  <CollapsibleTrigger className="flex items-center gap-2 w-full group">
-                    <History className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-[15px] font-semibold text-foreground">Версии ({allTermsSorted.length})</span>
-                    {allTermsSorted.length > 3 && (
-                      <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform ml-auto", historyOpen && "rotate-180")} />
-                    )}
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="mt-3">
-                    <div className="relative pl-4 space-y-0">
-                      {allTermsSorted.map((t: any, idx: number) => {
-                        const isLatest = idx === allTermsSorted.length - 1;
-                        const tFields = t.fields as Record<string, string>;
-                        const createdByCreator = t.created_by === deal.creator_id;
-                        const vDate = new Date(t.created_at).toLocaleDateString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
-                        const prevT = idx > 0 ? allTermsSorted[idx - 1] : null;
-                        const prevFields = prevT ? ((prevT as any).fields as Record<string, string>) : null;
+                <h2 className="text-[15px] font-semibold text-foreground flex items-center gap-2">
+                  <History className="h-4 w-4 text-muted-foreground" />
+                  Версии ({allTermsSorted.length})
+                </h2>
+                <div className="relative pl-4 space-y-0">
+                  {allTermsSorted.map((t: any, idx: number) => {
+                    const isLatest = idx === allTermsSorted.length - 1;
+                    const tFields = t.fields as Record<string, string>;
+                    const createdByCreator = t.created_by === deal.creator_id;
+                    const vDate = new Date(t.created_at).toLocaleDateString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+                    const prevT = idx > 0 ? allTermsSorted[idx - 1] : null;
+                    const prevFields = prevT ? ((prevT as any).fields as Record<string, string>) : null;
 
-                        const changes: string[] = [];
-                        if (prevFields) {
-                          if (tFields.budget && tFields.budget !== prevFields.budget)
-                            changes.push(`Бюджет: ${Number(prevFields.budget || 0).toLocaleString()} → ${Number(tFields.budget).toLocaleString()} ₽`);
-                          if (tFields.deadline && tFields.deadline !== prevFields.deadline)
-                            changes.push(`Дедлайн: ${prevFields.deadline || "—"} → ${tFields.deadline}`);
-                        }
+                    const changes: string[] = [];
+                    if (prevFields) {
+                      if (tFields.budget && tFields.budget !== prevFields.budget)
+                        changes.push(`Бюджет: ${Number(prevFields.budget || 0).toLocaleString()} → ${Number(tFields.budget).toLocaleString()} ₽`);
+                      if (tFields.deadline && tFields.deadline !== prevFields.deadline)
+                        changes.push(`Дедлайн: ${prevFields.deadline || "—"} → ${tFields.deadline}`);
+                    }
 
-                        return (
-                          <div key={t.id} className="relative pb-4 last:pb-0">
-                            {idx < allTermsSorted.length - 1 && (
-                              <div className="absolute left-0 top-3 bottom-0 w-px bg-border" />
-                            )}
-                            <div className={cn(
-                              "absolute left-0 top-1.5 w-2 h-2 rounded-full -translate-x-[3.5px] border-2",
-                              isLatest ? "bg-primary border-primary" : t.status === "accepted" ? "bg-green-500 border-green-500" : "bg-muted-foreground/40 border-muted-foreground/40"
-                            )} />
-                            <div className={cn("ml-4 rounded-lg p-2.5", isLatest ? "bg-primary/5 border border-primary/20" : "")}>
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className={cn("text-[13px] font-semibold", isLatest ? "text-primary" : "text-foreground")}>
-                                  v{t.version}
-                                </span>
-                                <Badge variant="outline" className={cn("text-[10px] h-5",
-                                  t.status === "accepted" ? "bg-green-500/10 text-green-500 border-green-500/30" :
-                                  isLatest ? "bg-primary/10 text-primary border-primary/30" :
-                                  "bg-muted text-muted-foreground border-muted-foreground/20"
-                                )}>
-                                  {t.status === "accepted" ? "Принято" : isLatest ? "Текущая" : "Заменена"}
-                                </Badge>
-                                <span className="text-[11px] text-muted-foreground">{vDate}</span>
-                                <span className="text-[11px] text-muted-foreground">
-                                  · {createdByCreator ? "Вы" : (advertiserProfile?.display_name || deal.advertiser_name)}
-                                </span>
-                              </div>
-                              {tFields.counterMessage && (
-                                <p className="text-[12px] text-foreground/70 mt-1 italic">«{tFields.counterMessage}»</p>
-                              )}
-                              {changes.length > 0 && (
-                                <div className="flex flex-wrap gap-2 mt-1">
-                                  {changes.map((c, ci) => (
-                                    <span key={ci} className="text-[11px] text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded">{c}</span>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
+                    return (
+                      <div key={t.id} className="relative pb-4 last:pb-0">
+                        {idx < allTermsSorted.length - 1 && (
+                          <div className="absolute left-0 top-3 bottom-0 w-px bg-border" />
+                        )}
+                        <div className={cn(
+                          "absolute left-0 top-1.5 w-2 h-2 rounded-full -translate-x-[3.5px] border-2",
+                          isLatest ? "bg-primary border-primary" : t.status === "accepted" ? "bg-green-500 border-green-500" : "bg-muted-foreground/40 border-muted-foreground/40"
+                        )} />
+                        <div className={cn("ml-4 rounded-lg p-3", isLatest ? "bg-primary/5 border border-primary/20" : "bg-muted/20 border border-border")}>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={cn("text-[13px] font-semibold", isLatest ? "text-primary" : "text-foreground")}>
+                              v{t.version}
+                            </span>
+                            <Badge variant="outline" className={cn("text-[10px] h-5",
+                              t.status === "accepted" ? "bg-green-500/10 text-green-500 border-green-500/30" :
+                              isLatest ? "bg-primary/10 text-primary border-primary/30" :
+                              "bg-muted text-muted-foreground border-muted-foreground/20"
+                            )}>
+                              {t.status === "accepted" ? "Принято" : isLatest ? "Текущая" : "Заменена"}
+                            </Badge>
+                            <span className="text-[11px] text-muted-foreground">{vDate}</span>
+                            <span className="text-[11px] text-muted-foreground">
+                              · {createdByCreator ? "Вы" : (advertiserProfile?.display_name || deal.advertiser_name)}
+                            </span>
                           </div>
-                        );
-                      })}
-                    </div>
-                  </CollapsibleContent>
-                </Collapsible>
+                          {/* Diff: show changed fields */}
+                          {changes.length > 0 && (
+                            <div className="flex flex-wrap gap-2 mt-2">
+                              {changes.map((c, ci) => (
+                                <span key={ci} className="text-[12px] text-foreground bg-muted/50 px-2 py-1 rounded font-medium">{c}</span>
+                              ))}
+                            </div>
+                          )}
+                          {tFields.counterMessage && (
+                            <p className="text-[13px] text-foreground/70 mt-2 italic border-l-2 border-muted-foreground/20 pl-3">«{tFields.counterMessage}»</p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <History className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                <p className="text-[14px]">Пока нет версий условий</p>
               </div>
             )}
 
@@ -579,9 +656,11 @@ export default function CreatorProposal() {
                 <div className="rounded-lg bg-background border border-border px-3 py-2 space-y-1">
                   <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Текущие условия</p>
                   <div className="flex items-center gap-4 text-[13px] flex-wrap">
-                    <span className="text-foreground/80">
-                      Бюджет: <span className="font-semibold text-foreground">{(deal.budget || 0).toLocaleString()} ₽</span>
-                    </span>
+                    {deal.budget ? (
+                      <span className="text-foreground/80">
+                        Бюджет: <span className="font-semibold text-foreground">{deal.budget.toLocaleString()} ₽</span>
+                      </span>
+                    ) : null}
                     {deal.deadline && (
                       <span className="text-foreground/80">
                         Дедлайн: <span className="font-semibold text-foreground">{new Date(deal.deadline).toLocaleDateString("ru-RU")}</span>
@@ -599,7 +678,7 @@ export default function CreatorProposal() {
                       type="number"
                       value={counterBudget}
                       onChange={(e) => setCounterBudget(e.target.value)}
-                      placeholder={(deal.budget || 0).toLocaleString()}
+                      placeholder={deal.budget ? deal.budget.toLocaleString() : "0"}
                       className="h-9 text-[13px]"
                     />
                   </div>
@@ -653,7 +732,52 @@ export default function CreatorProposal() {
               </div>
             )}
           </div>
-        </div>
+        )}
+
+        {/* === FILES === */}
+        {activeTab === "files" && (
+          <div className="space-y-4 max-w-[800px]">
+            <h2 className="text-[15px] font-semibold text-foreground">Файлы ({files.length})</h2>
+            {files.length > 0 ? (
+              <div className="rounded-xl border border-border overflow-hidden">
+                <table className="w-full text-[13px]">
+                  <thead>
+                    <tr className="border-b border-border bg-muted/30">
+                      <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Файл</th>
+                      <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Размер</th>
+                      <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Дата</th>
+                      <th className="text-right px-4 py-2.5 font-medium text-muted-foreground"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {files.map((f) => (
+                      <tr key={f.id} className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors">
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                            <span className="font-medium text-foreground truncate max-w-[240px]">{f.file_name}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground">{((f.file_size || 0) / 1024).toFixed(0)} KB</td>
+                        <td className="px-4 py-3 text-muted-foreground">{new Date(f.created_at).toLocaleDateString("ru-RU")}</td>
+                        <td className="px-4 py-3 text-right">
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => downloadFile.mutate(f.storage_path)}>
+                            <Download className="h-3.5 w-3.5" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <Paperclip className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                <p className="text-[14px]">Нет прикреплённых файлов</p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ── Reject dialog ── */}
