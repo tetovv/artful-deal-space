@@ -205,6 +205,108 @@ export function useLockEscrowDispute() {
   });
 }
 
+/* ── Refund escrow (Advertiser — only on decline or SLA timeout) ── */
+export function useRefundEscrow() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  const logEvent = useLogDealEvent();
+
+  return useMutation({
+    mutationFn: async (params: { escrowId: string; dealId: string; reason: string }) => {
+      if (!user) throw new Error("Not authenticated");
+
+      const { data: escrow, error: getErr } = await supabase
+        .from("deal_escrow")
+        .select("amount, deal_id")
+        .eq("id", params.escrowId)
+        .single();
+      if (getErr || !escrow) throw new Error("Запись эскроу не найдена");
+
+      // Get deal to find advertiser
+      const { data: deal } = await supabase
+        .from("deals")
+        .select("advertiser_id, creator_id")
+        .eq("id", params.dealId)
+        .single();
+
+      // Return funds to advertiser available balance
+      if (deal?.advertiser_id) {
+        const { data: advBalance } = await supabase
+          .from("user_balances")
+          .select("available, reserved")
+          .eq("user_id", deal.advertiser_id)
+          .single();
+        if (advBalance) {
+          await supabase
+            .from("user_balances")
+            .update({
+              available: advBalance.available + escrow.amount,
+              reserved: Math.max(0, advBalance.reserved - escrow.amount),
+            })
+            .eq("user_id", deal.advertiser_id);
+        }
+      }
+
+      // Update escrow record
+      const { data, error } = await supabase
+        .from("deal_escrow")
+        .update({
+          escrow_state: "REFUNDED",
+          status: "refunded",
+          refunded_at: new Date().toISOString(),
+          refund_reason: params.reason,
+        } as any)
+        .eq("id", params.escrowId)
+        .select()
+        .single();
+      if (error) throw error;
+
+      // Record refund transaction
+      if (deal?.advertiser_id) {
+        await supabase.from("transactions").insert({
+          user_id: deal.advertiser_id,
+          amount: escrow.amount,
+          type: "refund",
+          status: "completed",
+          description: `Возврат резерва: ${params.reason}`,
+          reference_id: params.dealId,
+          reference_type: "deal",
+        });
+      }
+
+      // System message
+      await supabase.from("messages").insert({
+        deal_id: params.dealId,
+        sender_id: user.id,
+        sender_name: "Система",
+        content: `🔄 Резерв отменён: ${escrow.amount.toLocaleString("ru-RU")} ₽ возвращены. Причина: ${params.reason}`,
+      });
+
+      return data;
+    },
+    onSuccess: (data: any, vars) => {
+      qc.invalidateQueries({ queryKey: ["deal_escrow", vars.dealId] });
+      qc.invalidateQueries({ queryKey: ["user_balance"] });
+      qc.invalidateQueries({ queryKey: ["deal-chat", vars.dealId] });
+      logEvent.mutate({
+        dealId: vars.dealId,
+        action: `Резерв отменён: ${vars.reason}`,
+        category: "payments",
+      });
+      if (user) {
+        notifyDealCounterparty({
+          dealId: vars.dealId,
+          currentUserId: user.id,
+          title: "Резерв отменён",
+          message: `Резерв отменён: ${vars.reason}`,
+        });
+      }
+      toast.success("Резерв отменён, средства возвращены");
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+}
+
 /* ── Execute payout (Platform / auto) ── */
 export function useExecutePayout() {
   const { user } = useAuth();
