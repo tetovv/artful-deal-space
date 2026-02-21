@@ -182,14 +182,7 @@ export default function CreatorProposal() {
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
   const [rejecting, setRejecting] = useState(false);
-  const [showCounterModal, setShowCounterModal] = useState(false);
-  const [counterBudget, setCounterBudget] = useState("");
-  const [counterDeadline, setCounterDeadline] = useState<Date | undefined>(undefined);
-  const [counterRevisions, setCounterRevisions] = useState("");
-  const [counterAcceptance, setCounterAcceptance] = useState("");
-  const [counterMessage, setCounterMessage] = useState("");
-  const [submittingCounter, setSubmittingCounter] = useState(false);
-  const [showCounterPreview, setShowCounterPreview] = useState(false);
+  const [counterOfferOpen, setCounterOfferOpen] = useState(false);
   const [showFileRequestModal, setShowFileRequestModal] = useState(false);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [invoiceAmount, setInvoiceAmount] = useState("");
@@ -320,39 +313,7 @@ export default function CreatorProposal() {
     }
   };
 
-  const handleCounterOffer = async () => {
-    if (!user || !deal || !counterMessage.trim() || !counterBudget.trim()) return;
-    setSubmittingCounter(true);
-    try {
-      const currentVersion = latestTerms ? (latestTerms as any).version : 0;
-      const newFields: Record<string, string> = {
-        ...(termsFields || {}),
-        budget: counterBudget || termsFields?.budget || String(deal.budget || 0),
-        counterMessage: counterMessage,
-      };
-      if (counterDeadline) newFields.deadline = counterDeadline.toISOString();
-      if (counterRevisions.trim()) newFields.revisions = counterRevisions.trim();
-      if (counterAcceptance.trim()) newFields.acceptanceCriteria = counterAcceptance.trim();
-      await supabase.from("deal_terms").insert({ deal_id: deal.id, created_by: user.id, version: currentVersion + 1, status: "draft", fields: newFields } as any);
-      await supabase.from("deals").update({ status: "needs_changes" }).eq("id", deal.id);
-      await supabase.from("deal_audit_log").insert({ deal_id: deal.id, user_id: user.id, action: `Автор предложил изменения (v${currentVersion + 1})`, category: "terms", metadata: { counterBudget, counterDeadline: counterDeadline?.toISOString() } } as any);
-      if (deal.advertiser_id) {
-        await supabase.from("notifications").insert({ user_id: deal.advertiser_id, title: "Предложены изменения", message: `${profile?.display_name || "Автор"} предложил(а) изменения к «${deal.title}»`, type: "deal", link: "/ad-studio" });
-      }
-      toast.success("Встречное предложение отправлено.");
-      qc.invalidateQueries({ queryKey: ["proposal-deal", proposalId] });
-      qc.invalidateQueries({ queryKey: ["deal_terms", deal.id] });
-      qc.invalidateQueries({ queryKey: ["creator-incoming-deals"] });
-      setShowCounterModal(false);
-      setShowCounterPreview(false);
-      setCounterBudget(""); setCounterDeadline(undefined); setCounterRevisions(""); setCounterAcceptance(""); setCounterMessage("");
-    } catch (err) {
-      console.error(err);
-      toast.error("Ошибка при отправке изменений");
-    } finally {
-      setSubmittingCounter(false);
-    }
-  };
+  /* handleCounterOffer moved into TermsTabContent */
 
   const handleSendChat = async () => {
     if (!user || !deal || !chatInput.trim()) return;
@@ -533,7 +494,7 @@ export default function CreatorProposal() {
                         {accepting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4 text-green-500" />}
                         Принять предложение
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setShowCounterModal(true)} className="gap-2">
+                      <DropdownMenuItem onClick={() => { setActiveTab("terms"); setCounterOfferOpen(true); }} className="gap-2">
                         <ArrowLeftRight className="h-4 w-4" /> Встречное предложение
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
@@ -738,8 +699,14 @@ export default function CreatorProposal() {
             <TermsTabContent
               deal={deal}
               latestTerms={latestTerms}
+              allTermsSorted={allTermsSorted}
               termsFields={termsFields}
               placement={placement}
+              canRespond={canRespond}
+              isAccepted={isAccepted}
+              counterOfferOpen={counterOfferOpen}
+              setCounterOfferOpen={setCounterOfferOpen}
+              proposalId={proposalId}
             />
           )}
 
@@ -783,10 +750,8 @@ export default function CreatorProposal() {
               allTermsSorted={allTermsSorted}
               isAccepted={isAccepted}
               isRejected={isRejected}
-              canRespond={canRespond}
               userId={user?.id}
               getDiffFields={getDiffFields}
-              onCounterOffer={() => setShowCounterModal(true)}
             />
           )}
         </div>
@@ -813,84 +778,7 @@ export default function CreatorProposal() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Counter-offer modal */}
-      <Dialog open={showCounterModal} onOpenChange={(open) => { setShowCounterModal(open); if (!open) setShowCounterPreview(false); }}>
-        <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-[17px]">
-              <ArrowLeftRight className="h-5 w-5 text-primary" /> Встречное предложение
-            </DialogTitle>
-            <DialogDescription>Предложите свои условия рекламодателю</DialogDescription>
-          </DialogHeader>
-
-          {!showCounterPreview ? (
-            <div className="space-y-5 pt-2">
-              <div className="rounded-lg bg-muted/30 border border-border px-4 py-3 space-y-2">
-                <p className="text-[12px] font-semibold text-muted-foreground uppercase tracking-wide">Текущие условия</p>
-                <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-[13px]">
-                  {deal?.budget ? <div className="flex justify-between"><span className="text-muted-foreground">Бюджет</span><span className="font-semibold text-foreground">{fmtBudget(deal.budget)}</span></div> : null}
-                  {deal?.deadline ? <div className="flex justify-between"><span className="text-muted-foreground">Дедлайн</span><span className="font-medium text-foreground">{fmtDate(deal.deadline)}</span></div> : null}
-                  {termsFields?.revisions && !isBriefEmpty(termsFields.revisions) ? <div className="flex justify-between"><span className="text-muted-foreground">Правки</span><span className="font-medium text-foreground">{termsFields.revisions}</span></div> : null}
-                </div>
-              </div>
-              <Separator />
-              <div className="space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-[13px] font-medium text-foreground">Новый бюджет <span className="text-destructive">*</span></label>
-                  <CurrencyInput value={counterBudget} onChange={setCounterBudget} placeholder={deal?.budget ? deal.budget.toLocaleString("ru-RU") : "0"} min={1} />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[13px] font-medium text-foreground">Новый дедлайн</label>
-                  <DatePickerField value={counterDeadline} onChange={setCounterDeadline} placeholder="Выберите дату" minDate={new Date()} />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-[13px] font-medium text-foreground">Кол-во правок</label>
-                    <Input inputMode="numeric" value={counterRevisions} onChange={(e) => setCounterRevisions(e.target.value.replace(/[^0-9]/g, ""))} placeholder={termsFields?.revisions || "2"} className="h-10 text-[14px]" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[13px] font-medium text-foreground">Критерии приёмки</label>
-                    <Input value={counterAcceptance} onChange={(e) => setCounterAcceptance(e.target.value)} placeholder={termsFields?.acceptanceCriteria || "Не указаны"} className="h-10 text-[14px]" />
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[13px] font-medium text-foreground">Комментарий <span className="text-destructive">*</span></label>
-                  <Textarea value={counterMessage} onChange={(e) => setCounterMessage(e.target.value)} placeholder="Объясните предлагаемые изменения (мин. 10 символов)…" rows={3} className="text-[14px]" />
-                  {counterMessage.trim().length > 0 && counterMessage.trim().length < 10 && <p className="text-[11px] text-destructive">Минимум 10 символов</p>}
-                </div>
-              </div>
-              <div className="flex items-center gap-2 justify-end pt-2">
-                <Button variant="ghost" size="sm" onClick={() => setShowCounterModal(false)}>Отмена</Button>
-                <Button size="sm" className="gap-1.5 h-10 px-5 text-[14px]" disabled={!counterBudget.trim() || !counterMessage.trim() || counterMessage.trim().length < 10} onClick={() => setShowCounterPreview(true)}>
-                  <Eye className="h-4 w-4" /> Предпросмотр
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-5 pt-2">
-              <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 space-y-3">
-                <p className="text-[13px] font-semibold text-foreground flex items-center gap-2"><Eye className="h-4 w-4 text-primary" /> Предпросмотр изменений</p>
-                <div className="space-y-2">
-                  <CounterDiffRow label="Бюджет" oldVal={fmtBudget(termsFields?.budget || deal?.budget)} newVal={counterBudget ? fmtBudget(counterBudget) : null} />
-                  <CounterDiffRow label="Дедлайн" oldVal={fmtDate(termsFields?.deadline || deal?.deadline)} newVal={counterDeadline ? fmtDate(counterDeadline.toISOString()) : null} />
-                  <CounterDiffRow label="Правки" oldVal={termsFields?.revisions || "—"} newVal={counterRevisions || null} />
-                  <CounterDiffRow label="Приёмка" oldVal={termsFields?.acceptanceCriteria || "—"} newVal={counterAcceptance || null} />
-                </div>
-              </div>
-              <div className="rounded-lg bg-muted/30 border border-border px-4 py-3">
-                <p className="text-[12px] font-medium text-muted-foreground mb-1">Ваш комментарий</p>
-                <p className="text-[14px] text-foreground whitespace-pre-wrap">{counterMessage}</p>
-              </div>
-              <div className="flex items-center gap-2 justify-end pt-2">
-                <Button variant="ghost" size="sm" onClick={() => setShowCounterPreview(false)}>← Редактировать</Button>
-                <Button size="sm" className="gap-1.5 h-10 px-5 text-[14px]" disabled={submittingCounter} onClick={handleCounterOffer}>
-                  {submittingCounter ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Отправить
-                </Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* Counter-offer modal removed — now inline in Terms tab */}
 
       {/* File request modal */}
       <RequestFilesModal open={showFileRequestModal} onClose={() => setShowFileRequestModal(false)} dealId={deal.id} />
@@ -1059,12 +947,58 @@ function ChatTabContent({ dealId, messages, userId, chatInput, setChatInput, sen
 }
 
 /* ─── TERMS TAB ─── */
-function TermsTabContent({ deal, latestTerms, termsFields, placement }: {
-  deal: any; latestTerms: any; termsFields: Record<string, string> | null;
-  placement: string | null;
+function TermsTabContent({ deal, latestTerms, allTermsSorted, termsFields, placement, canRespond, isAccepted, counterOfferOpen, setCounterOfferOpen, proposalId }: {
+  deal: any; latestTerms: any; allTermsSorted: any[]; termsFields: Record<string, string> | null;
+  placement: string | null; canRespond: boolean; isAccepted: boolean;
+  counterOfferOpen: boolean; setCounterOfferOpen: (v: boolean) => void;
+  proposalId?: string;
 }) {
+  const { user, profile } = useAuth();
+  const qc = useQueryClient();
   const PlacementIcon = placement ? placementIcons[placement] || placementIcons[placement?.toLowerCase()] || FileText : FileText;
   const isLatestAccepted = latestTerms && (latestTerms as any).status === "accepted";
+
+  const [counterBudget, setCounterBudget] = useState("");
+  const [counterDeadline, setCounterDeadline] = useState<Date | undefined>(undefined);
+  const [counterRevisions, setCounterRevisions] = useState("");
+  const [counterAcceptance, setCounterAcceptance] = useState("");
+  const [counterMessage, setCounterMessage] = useState("");
+  const [submittingCounter, setSubmittingCounter] = useState(false);
+  const [showCounterPreview, setShowCounterPreview] = useState(false);
+
+  const handleCounterOffer = async () => {
+    if (!user || !deal || !counterMessage.trim() || !counterBudget.trim()) return;
+    setSubmittingCounter(true);
+    try {
+      const currentVersion = latestTerms ? (latestTerms as any).version : 0;
+      const newFields: Record<string, string> = {
+        ...(termsFields || {}),
+        budget: counterBudget || termsFields?.budget || String(deal.budget || 0),
+        counterMessage: counterMessage,
+      };
+      if (counterDeadline) newFields.deadline = counterDeadline.toISOString();
+      if (counterRevisions.trim()) newFields.revisions = counterRevisions.trim();
+      if (counterAcceptance.trim()) newFields.acceptanceCriteria = counterAcceptance.trim();
+      await supabase.from("deal_terms").insert({ deal_id: deal.id, created_by: user.id, version: currentVersion + 1, status: "draft", fields: newFields } as any);
+      await supabase.from("deals").update({ status: "needs_changes" }).eq("id", deal.id);
+      await supabase.from("deal_audit_log").insert({ deal_id: deal.id, user_id: user.id, action: `Автор предложил изменения (v${currentVersion + 1})`, category: "terms", metadata: { counterBudget, counterDeadline: counterDeadline?.toISOString() } } as any);
+      if (deal.advertiser_id) {
+        await supabase.from("notifications").insert({ user_id: deal.advertiser_id, title: "Предложены изменения", message: `${profile?.display_name || "Автор"} предложил(а) изменения к «${deal.title}»`, type: "deal", link: "/ad-studio" });
+      }
+      toast.success("Встречное предложение отправлено.");
+      qc.invalidateQueries({ queryKey: ["proposal-deal", proposalId] });
+      qc.invalidateQueries({ queryKey: ["deal_terms", deal.id] });
+      qc.invalidateQueries({ queryKey: ["creator-incoming-deals"] });
+      setCounterOfferOpen(false);
+      setShowCounterPreview(false);
+      setCounterBudget(""); setCounterDeadline(undefined); setCounterRevisions(""); setCounterAcceptance(""); setCounterMessage("");
+    } catch (err) {
+      console.error(err);
+      toast.error("Ошибка при отправке изменений");
+    } finally {
+      setSubmittingCounter(false);
+    }
+  };
 
   return (
     <div className="p-5 space-y-5 max-w-[820px] mx-auto">
@@ -1112,6 +1046,95 @@ function TermsTabContent({ deal, latestTerms, termsFields, placement }: {
           <span className="text-[13px] text-foreground/80">Маркировка обеспечивается платформой</span>
         </div>
       </div>
+
+      {/* ── Inline counter-offer section ── */}
+      {canRespond && !isAccepted && (
+        <Collapsible open={counterOfferOpen} onOpenChange={setCounterOfferOpen}>
+          <CollapsibleTrigger asChild>
+            <button className={cn(
+              "w-full flex items-center justify-between rounded-xl border px-4 py-3 transition-colors",
+              counterOfferOpen
+                ? "border-primary/30 bg-primary/5"
+                : "border-border bg-card hover:bg-muted/50"
+            )}>
+              <span className="flex items-center gap-2 text-[14px] font-semibold text-foreground">
+                <ArrowLeftRight className="h-4 w-4 text-primary" /> Предложить встречные условия
+              </span>
+              <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", counterOfferOpen && "rotate-180")} />
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="rounded-b-xl border border-t-0 border-border bg-card px-4 py-4 space-y-5">
+              {!showCounterPreview ? (
+                <>
+                  <div className="rounded-lg bg-muted/30 border border-border px-4 py-3 space-y-2">
+                    <p className="text-[12px] font-semibold text-muted-foreground uppercase tracking-wide">Текущие условия</p>
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-[13px]">
+                      {deal?.budget ? <div className="flex justify-between"><span className="text-muted-foreground">Бюджет</span><span className="font-semibold text-foreground">{fmtBudget(deal.budget)}</span></div> : null}
+                      {deal?.deadline ? <div className="flex justify-between"><span className="text-muted-foreground">Дедлайн</span><span className="font-medium text-foreground">{fmtDate(deal.deadline)}</span></div> : null}
+                      {termsFields?.revisions && !isBriefEmpty(termsFields.revisions) ? <div className="flex justify-between"><span className="text-muted-foreground">Правки</span><span className="font-medium text-foreground">{termsFields.revisions}</span></div> : null}
+                    </div>
+                  </div>
+                  <Separator />
+                  <div className="space-y-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[13px] font-medium text-foreground">Новый бюджет <span className="text-destructive">*</span></label>
+                      <CurrencyInput value={counterBudget} onChange={setCounterBudget} placeholder={deal?.budget ? deal.budget.toLocaleString("ru-RU") : "0"} min={1} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[13px] font-medium text-foreground">Новый дедлайн</label>
+                      <DatePickerField value={counterDeadline} onChange={setCounterDeadline} placeholder="Выберите дату" minDate={new Date()} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="text-[13px] font-medium text-foreground">Кол-во правок</label>
+                        <Input inputMode="numeric" value={counterRevisions} onChange={(e) => setCounterRevisions(e.target.value.replace(/[^0-9]/g, ""))} placeholder={termsFields?.revisions || "2"} className="h-10 text-[14px]" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[13px] font-medium text-foreground">Критерии приёмки</label>
+                        <Input value={counterAcceptance} onChange={(e) => setCounterAcceptance(e.target.value)} placeholder={termsFields?.acceptanceCriteria || "Не указаны"} className="h-10 text-[14px]" />
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[13px] font-medium text-foreground">Комментарий <span className="text-destructive">*</span></label>
+                      <Textarea value={counterMessage} onChange={(e) => setCounterMessage(e.target.value)} placeholder="Объясните предлагаемые изменения (мин. 10 символов)…" rows={3} className="text-[14px]" />
+                      {counterMessage.trim().length > 0 && counterMessage.trim().length < 10 && <p className="text-[11px] text-destructive">Минимум 10 символов</p>}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 justify-end pt-2">
+                    <Button variant="ghost" size="sm" onClick={() => setCounterOfferOpen(false)}>Отмена</Button>
+                    <Button size="sm" className="gap-1.5 h-10 px-5 text-[14px]" disabled={!counterBudget.trim() || !counterMessage.trim() || counterMessage.trim().length < 10} onClick={() => setShowCounterPreview(true)}>
+                      <Eye className="h-4 w-4" /> Предпросмотр
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 space-y-3">
+                    <p className="text-[13px] font-semibold text-foreground flex items-center gap-2"><Eye className="h-4 w-4 text-primary" /> Предпросмотр изменений</p>
+                    <div className="space-y-2">
+                      <CounterDiffRow label="Бюджет" oldVal={fmtBudget(termsFields?.budget || deal?.budget)} newVal={counterBudget ? fmtBudget(counterBudget) : null} />
+                      <CounterDiffRow label="Дедлайн" oldVal={fmtDate(termsFields?.deadline || deal?.deadline)} newVal={counterDeadline ? fmtDate(counterDeadline.toISOString()) : null} />
+                      <CounterDiffRow label="Правки" oldVal={termsFields?.revisions || "—"} newVal={counterRevisions || null} />
+                      <CounterDiffRow label="Приёмка" oldVal={termsFields?.acceptanceCriteria || "—"} newVal={counterAcceptance || null} />
+                    </div>
+                  </div>
+                  <div className="rounded-lg bg-muted/30 border border-border px-4 py-3">
+                    <p className="text-[12px] font-medium text-muted-foreground mb-1">Ваш комментарий</p>
+                    <p className="text-[14px] text-foreground whitespace-pre-wrap safe-text">{counterMessage}</p>
+                  </div>
+                  <div className="flex items-center gap-2 justify-end pt-2">
+                    <Button variant="ghost" size="sm" onClick={() => setShowCounterPreview(false)}>← Редактировать</Button>
+                    <Button size="sm" className="gap-1.5 h-10 px-5 text-[14px]" disabled={submittingCounter} onClick={handleCounterOffer}>
+                      {submittingCounter ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Отправить
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+      )}
 
     </div>
   );
@@ -1325,12 +1348,11 @@ function PaymentsTabContent({ escrowItems, invoices, isInvoiceNeeded, isWaitingP
   );
 }
 
-/* ─── MORE TAB (Negotiations + Audit) ─── */
-function MoreTabContent({ deal, auditLog, advertiserDisplayName, allTermsSorted, isAccepted, isRejected, canRespond, userId, getDiffFields, onCounterOffer }: {
+/* ─── MORE TAB (History + Audit) ─── */
+function MoreTabContent({ deal, auditLog, advertiserDisplayName, allTermsSorted, isAccepted, isRejected, userId, getDiffFields }: {
   deal: any; auditLog: any[]; advertiserDisplayName: string;
-  allTermsSorted: any[]; isAccepted: boolean; isRejected: boolean; canRespond: boolean; userId?: string;
+  allTermsSorted: any[]; isAccepted: boolean; isRejected: boolean; userId?: string;
   getDiffFields: (cur: Record<string, string> | null, prev: Record<string, string> | null) => { key: string; label: string; from: string; to: string }[];
-  onCounterOffer?: () => void;
 }) {
   const [showAll, setShowAll] = useState(false);
   const display = showAll ? auditLog : auditLog.slice(0, 10);
@@ -1344,23 +1366,16 @@ function MoreTabContent({ deal, auditLog, advertiserDisplayName, allTermsSorted,
 
   return (
     <div className="p-5 space-y-6 max-w-[820px] mx-auto">
-      {/* ── Negotiations / Version history ── */}
+      {/* ── Version history (read-only) ── */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="text-[15px] font-semibold text-foreground flex items-center gap-2">
             <History className="h-4 w-4 text-muted-foreground" /> Версии условий
             {allTermsSorted.length > 0 && <span className="text-[12px] text-muted-foreground font-normal">({allTermsSorted.length})</span>}
           </h3>
-          <div className="flex items-center gap-2">
-            {isAccepted && (
-              <Badge variant="outline" className="text-[11px] bg-muted text-muted-foreground border-muted-foreground/20">Только чтение</Badge>
-            )}
-            {canRespond && !isAccepted && onCounterOffer && (
-              <Button variant="outline" size="sm" className="text-[13px] h-8 gap-1.5" onClick={onCounterOffer}>
-                <ArrowLeftRight className="h-3.5 w-3.5" /> Встречное предложение
-              </Button>
-            )}
-          </div>
+          {isAccepted && (
+            <Badge variant="outline" className="text-[11px] bg-muted text-muted-foreground border-muted-foreground/20">Только чтение</Badge>
+          )}
         </div>
 
         {isAccepted && (
