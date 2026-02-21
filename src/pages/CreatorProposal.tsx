@@ -644,6 +644,26 @@ export default function CreatorProposal() {
           </div>
         )}
 
+        {/* ════════ INVOICE NEEDED BANNER (creator accepted, needs to send invoice) ════════ */}
+        {isInvoiceNeeded && (
+          <div className="border-b border-primary/20 bg-primary/5">
+            <div className="max-w-[1100px] mx-auto px-6 py-3 flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                <FileText className="h-5 w-5 text-primary shrink-0" />
+                <span className="text-[14px] font-semibold text-foreground">
+                  Предложение принято. Следующий шаг — отправить счёт рекламодателю.
+                </span>
+              </div>
+              <Button size="sm" className="text-[14px] h-9 shrink-0" onClick={() => {
+                setInvoiceAmount(String(deal.budget || ""));
+                setShowInvoiceModal(true);
+              }}>
+                <FileText className="h-4 w-4 mr-1.5" /> Отправить счёт
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* ════════ TAB CONTENT ════════ */}
         <div className="flex-1 overflow-y-auto">
           {/* ═══ CHAT TAB ═══ */}
