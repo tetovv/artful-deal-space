@@ -690,35 +690,62 @@ function TermsTab({ dealId }: { dealId: string }) {
         <div className="bg-muted/20 border border-border rounded-xl p-4 space-y-3">
           <h3 className="text-[14px] font-semibold text-foreground flex items-center gap-2">
             <ArrowLeftRight className="h-4 w-4 text-primary" />
-            Предложить изменения (v{(latestVer?.version || 0) + 1})
+            Встречное предложение (v{(latestVer?.version || 0) + 1})
           </h3>
+
+          {/* Current terms summary */}
+          <div className="rounded-lg bg-background border border-border px-3 py-2 space-y-1">
+            <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Текущие условия</p>
+            <div className="flex items-center gap-4 text-[13px] flex-wrap">
+              {(ver.fields as any).budget && (
+                <span className="text-foreground/80">Бюджет: <span className="font-semibold text-foreground">{Number((ver.fields as any).budget).toLocaleString()} ₽</span></span>
+              )}
+              {ver.fields.deadline && (
+                <span className="text-foreground/80">Дедлайн: <span className="font-semibold text-foreground">{ver.fields.deadline}</span></span>
+              )}
+              {(ver.fields as any).placementType && (
+                <span className="text-foreground/80">Тип: <span className="font-semibold text-foreground">{(ver.fields as any).placementType}</span></span>
+              )}
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <label className="text-[12px] font-medium text-muted-foreground">Бюджет (₽)</label>
-              <Input type="number" value={counterBudget} onChange={(e) => setCounterBudget(e.target.value)} placeholder="Оставить текущий" className="h-8 text-[13px]" />
+              <label className="text-[12px] font-medium text-muted-foreground">
+                Новый бюджет (₽)
+                {counterBudget && (ver.fields as any).budget && counterBudget !== (ver.fields as any).budget && (
+                  <span className="ml-1 text-primary">{Number((ver.fields as any).budget).toLocaleString()} → {Number(counterBudget).toLocaleString()}</span>
+                )}
+              </label>
+              <Input type="number" value={counterBudget} onChange={(e) => setCounterBudget(e.target.value)} placeholder="Оставить текущий" className="h-9 text-[13px]" />
             </div>
             <div className="space-y-1">
-              <label className="text-[12px] font-medium text-muted-foreground">Дедлайн</label>
-              <Input type="date" value={counterDeadline} onChange={(e) => setCounterDeadline(e.target.value)} className="h-8 text-[13px]" />
+              <label className="text-[12px] font-medium text-muted-foreground">
+                Новый дедлайн
+                {counterDeadline && ver.fields.deadline && counterDeadline !== ver.fields.deadline && (
+                  <span className="ml-1 text-primary">→ {new Date(counterDeadline).toLocaleDateString("ru-RU")}</span>
+                )}
+              </label>
+              <Input type="date" value={counterDeadline} onChange={(e) => setCounterDeadline(e.target.value)} className="h-9 text-[13px]" />
             </div>
             <div className="space-y-1">
               <label className="text-[12px] font-medium text-muted-foreground">Кол-во правок</label>
-              <Input value={counterRevisions} onChange={(e) => setCounterRevisions(e.target.value)} placeholder="напр. 2 правки" className="h-8 text-[13px]" />
+              <Input value={counterRevisions} onChange={(e) => setCounterRevisions(e.target.value)} placeholder="напр. 2 правки" className="h-9 text-[13px]" />
             </div>
             <div className="space-y-1">
               <label className="text-[12px] font-medium text-muted-foreground">Критерии приёмки</label>
-              <Input value={counterAcceptance} onChange={(e) => setCounterAcceptance(e.target.value)} placeholder="Оставить текущий" className="h-8 text-[13px]" />
+              <Input value={counterAcceptance} onChange={(e) => setCounterAcceptance(e.target.value)} placeholder="Оставить текущий" className="h-9 text-[13px]" />
             </div>
           </div>
           <div className="space-y-1">
-            <label className="text-[12px] font-medium text-muted-foreground">Комментарий к изменениям <span className="text-destructive">*</span></label>
-            <Textarea value={counterMessage} onChange={(e) => setCounterMessage(e.target.value)} placeholder="Объясните предлагаемые изменения..." rows={3} className="text-[13px]" />
+            <label className="text-[12px] font-medium text-muted-foreground">Почему предлагаете изменения? <span className="text-destructive">*</span></label>
+            <Textarea value={counterMessage} onChange={(e) => setCounterMessage(e.target.value)} placeholder="Например: скорректировал бюджет с учётом охвата и сроков…" rows={2} className="text-[13px]" />
           </div>
           <div className="flex items-center gap-2 justify-end">
             <Button variant="ghost" size="sm" className="h-8 text-[13px]" onClick={() => setShowCounterForm(false)}>Отмена</Button>
-            <Button size="sm" className="h-8 text-[13px] gap-1.5" disabled={!counterMessage.trim() || submittingCounter} onClick={handleSubmitCounterOffer}>
+            <Button size="sm" className="h-9 text-[13px] gap-1.5" disabled={!counterMessage.trim() || submittingCounter} onClick={handleSubmitCounterOffer}>
               {submittingCounter ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-              Отправить
+              Отправить встречное
             </Button>
           </div>
         </div>
