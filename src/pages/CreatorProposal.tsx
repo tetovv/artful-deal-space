@@ -280,7 +280,11 @@ export default function CreatorProposal() {
       const { error: updateErr } = await supabase.from("deals").update({ status: "invoice_needed" }).eq("id", deal.id);
       if (updateErr) throw updateErr;
       if (latestTerms) {
-        await supabase.from("deal_terms_acceptance").insert({ terms_id: (latestTerms as any).id, user_id: user.id });
+        // upsert to avoid duplicate key error on repeated clicks
+        await supabase.from("deal_terms_acceptance").upsert(
+          { terms_id: (latestTerms as any).id, user_id: user.id },
+          { onConflict: "terms_id,user_id" }
+        );
         await supabase.from("deal_terms").update({ status: "accepted" }).eq("id", (latestTerms as any).id);
       }
       const creatorName = profile?.display_name || "Автор";
