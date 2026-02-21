@@ -336,88 +336,205 @@ const timeAgo = (dateStr: string): string => {
 };
 
 /* ═══════════════════════════════════════════════════
-   Quick Preview Modal (lightweight, no actions)
+   Quick Preview Modal — decision-focused, enriched
    ═══════════════════════════════════════════════════ */
 function QuickPreviewModal({ deal, onClose, advProfile, brand }: {
   deal: { id: string; title: string; status: string; budget: number | null; deadline: string | null; description: string | null; advertiser_id: string | null; advertiser_name: string; created_at: string };
   onClose: () => void;
   advProfile: { display_name: string; avatar_url: string | null } | null;
-  brand: { brand_name: string; business_verified: boolean; business_category: string } | null;
+  brand: { brand_name: string; business_verified: boolean; business_category: string; brand_logo_url?: string } | null;
 }) {
   const navigate = useNavigate();
   const pStatus = getProposalStatus(deal.status);
   const statusCfg = proposalStatusConfig[pStatus];
   const placement = placementFromTitle(deal.title);
+  const [briefExpanded, setBriefExpanded] = useState(false);
 
-  const rawBrief = deal.description;
+  /* Fetch enriched proposal data from deal_proposals */
+  const { data: proposal } = useQuery({
+    queryKey: ["quick-preview-proposal", deal.id, deal.advertiser_id],
+    queryFn: async () => {
+      if (!deal.advertiser_id) return null;
+      const { data } = await supabase
+        .from("deal_proposals" as any)
+        .select("*")
+        .eq("advertiser_id", deal.advertiser_id)
+        .eq("status", "sent")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      return data as any | null;
+    },
+    enabled: !!deal.advertiser_id,
+    staleTime: 30_000,
+  });
+
+  /* Brief — prefer proposal.brief_text, fall back to deal.description */
+  const rawBrief = proposal?.brief_text || deal.description;
   const hasBrief = rawBrief && rawBrief !== "0" && rawBrief.trim().length > 0;
-  const briefSnippet = hasBrief
-    ? (rawBrief!.length > 160 ? rawBrief!.slice(0, 160).trimEnd() + "…" : rawBrief)
-    : null;
+  const briefText = hasBrief ? rawBrief!.trim() : null;
+  const briefIsLong = briefText && briefText.length > 200;
+
+  /* Budget formatting */
+  const budgetVal = proposal?.budget_value || deal.budget;
+  const budgetMin = proposal?.budget_min;
+  const budgetMax = proposal?.budget_max;
+  const fmtCurrency = (n: number) => n.toLocaleString("ru-RU") + " ₽";
+  const budgetDisplay = budgetVal && budgetVal > 0
+    ? fmtCurrency(budgetVal)
+    : budgetMin && budgetMax
+      ? `${fmtCurrency(budgetMin)} – ${fmtCurrency(budgetMax)}`
+      : null;
+
+  /* Dates */
+  const fmtDate = (d: string) => new Date(d).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" });
+  const publishStart = proposal?.publish_start;
+  const publishEnd = proposal?.publish_end;
+  const deadlineStr = deal.deadline ? fmtDate(deal.deadline) : null;
+  const publishWindow = publishStart && publishEnd
+    ? `${fmtDate(publishStart)} – ${fmtDate(publishEnd)}`
+    : publishStart ? `с ${fmtDate(publishStart)}` : publishEnd ? `до ${fmtDate(publishEnd)}` : null;
+
+  /* Enriched fields */
+  const revisions = proposal?.revisions_count;
+  const hasRevisions = revisions !== null && revisions !== undefined && revisions > 0;
+  const criteria = proposal?.acceptance_criteria;
+  const hasCriteria = criteria && criteria.trim().length > 0 && criteria !== "0";
+  const attachments = Array.isArray(proposal?.attachments) ? proposal.attachments : [];
+  const hasAttachments = attachments.length > 0;
+  const placementType = proposal?.placement_type || placement;
+
+  /* Warning: missing critical fields */
+  const missingFields: string[] = [];
+  if (!hasBrief) missingFields.push("бриф");
+  if (!budgetDisplay) missingFields.push("бюджет");
+  if (!deadlineStr && !publishWindow) missingFields.push("сроки");
+  const hasMissing = missingFields.length > 0;
+
+  /* Advertiser display name */
+  const advertiserName = brand?.brand_name || advProfile?.display_name || deal.advertiser_name;
 
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-[480px] p-0 gap-0">
-        <DialogHeader className="px-5 pt-5 pb-0">
-          <DialogTitle className="text-[15px] font-semibold text-foreground">Быстрый просмотр предложения</DialogTitle>
-        </DialogHeader>
-
-        <div className="px-5 py-4 space-y-4">
-          {/* Header: advertiser + status + budget + deadline */}
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden border border-border shrink-0">
-              {advProfile?.avatar_url
-                ? <img src={advProfile.avatar_url} alt="" className="h-full w-full object-cover" />
-                : <span className="text-sm font-bold text-primary">{(advProfile?.display_name || deal.advertiser_name).charAt(0)}</span>}
+      <DialogContent className="max-w-[500px] p-0 gap-0 overflow-hidden">
+        {/* ── Header ── */}
+        <div className="px-5 pt-5 pb-4 space-y-3">
+          <div className="flex items-start gap-3">
+            <div className="h-11 w-11 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden border border-border shrink-0">
+              {brand?.brand_logo_url
+                ? <img src={brand.brand_logo_url} alt="" className="h-full w-full object-cover" />
+                : advProfile?.avatar_url
+                  ? <img src={advProfile.avatar_url} alt="" className="h-full w-full object-cover" />
+                  : <span className="text-[15px] font-bold text-primary">{advertiserName.charAt(0)}</span>}
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1.5">
-                <span className="text-[15px] font-semibold text-foreground truncate">
-                  {brand?.brand_name || advProfile?.display_name || deal.advertiser_name}
-                </span>
+            <div className="flex-1 min-w-0 space-y-1">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <h2 className="text-[16px] font-semibold text-foreground leading-tight truncate">{advertiserName}</h2>
                 {brand?.business_verified && <CheckCircle className="h-3.5 w-3.5 text-primary shrink-0" />}
+                <Badge variant="outline" className={cn("text-[11px] border font-medium ml-auto shrink-0", statusCfg.cls)}>{statusCfg.label}</Badge>
               </div>
-              <div className="flex items-center gap-2 mt-0.5">
-                <Badge variant="outline" className={cn("text-[10px] border font-medium", statusCfg.cls)}>{statusCfg.label}</Badge>
-                <span className="text-[13px] font-bold text-foreground">{(deal.budget || 0).toLocaleString()} ₽</span>
-                {deal.deadline && (
-                  <span className="text-[12px] text-muted-foreground flex items-center gap-1">
-                    <CalendarDays className="h-3 w-3" />
-                    до {new Date(deal.deadline).toLocaleDateString("ru-RU")}
+              {/* Subtitle: placement + budget + deadline */}
+              <div className="flex items-center gap-2 flex-wrap text-[14px]">
+                {placementType && <span className="font-medium text-foreground">{placementType}</span>}
+                {placementType && budgetDisplay && <span className="text-muted-foreground">·</span>}
+                {budgetDisplay && <span className="font-bold text-foreground">{budgetDisplay}</span>}
+                {(publishWindow || deadlineStr) && <span className="text-muted-foreground">·</span>}
+                {publishWindow ? (
+                  <span className="text-muted-foreground text-[13px] flex items-center gap-1">
+                    <CalendarDays className="h-3 w-3" /> {publishWindow}
                   </span>
-                )}
+                ) : deadlineStr ? (
+                  <span className="text-muted-foreground text-[13px] flex items-center gap-1">
+                    <CalendarDays className="h-3 w-3" /> до {deadlineStr}
+                  </span>
+                ) : null}
               </div>
             </div>
           </div>
+        </div>
 
-          {/* Brief snippet */}
-          {briefSnippet ? (
-            <p className="text-[14px] text-foreground/80 leading-relaxed">«{briefSnippet}»</p>
+        {/* ── Body ── */}
+        <div className="px-5 pb-4 space-y-3">
+          {/* Warning banner */}
+          {hasMissing && (
+            <div className="flex items-center gap-2 rounded-lg bg-warning/10 border border-warning/25 px-3 py-2">
+              <AlertTriangle className="h-4 w-4 text-warning shrink-0" />
+              <span className="text-[13px] text-foreground">
+                Не указаны: {missingFields.join(", ")}
+              </span>
+            </div>
+          )}
+
+          {/* Brief */}
+          {briefText ? (
+            <div className="space-y-1">
+              <p className={cn(
+                "text-[14px] text-foreground/85 leading-relaxed break-words whitespace-pre-line",
+                !briefExpanded && "line-clamp-4"
+              )}>
+                {briefText}
+              </p>
+              {briefIsLong && (
+                <button
+                  onClick={() => setBriefExpanded(!briefExpanded)}
+                  className="text-[13px] text-primary hover:underline font-medium"
+                >
+                  {briefExpanded ? "Свернуть" : "Показать полностью"}
+                </button>
+              )}
+            </div>
           ) : (
             <p className="text-[13px] text-muted-foreground italic">Бриф не предоставлен</p>
           )}
 
-          {/* Placement */}
-          {placement && (
-            <div className="flex items-center gap-1.5 text-[13px]">
-              <span className="text-muted-foreground">Тип:</span>
-              <span className="font-medium text-foreground">{placement}</span>
+          {/* Key fields chips */}
+          {(hasRevisions || hasCriteria) && (
+            <div className="flex items-center gap-2 flex-wrap">
+              {hasRevisions && (
+                <Badge variant="secondary" className="text-[12px] font-normal gap-1">
+                  <RefreshCw className="h-3 w-3" /> Правок: {revisions}
+                </Badge>
+              )}
+              {hasCriteria && (
+                <Badge variant="secondary" className="text-[12px] font-normal gap-1 max-w-[220px] truncate">
+                  <Check className="h-3 w-3 shrink-0" /> {criteria}
+                </Badge>
+              )}
+              <Badge variant="secondary" className="text-[12px] font-normal gap-1">
+                <ShieldCheck className="h-3 w-3" /> Маркировка через платформу
+              </Badge>
             </div>
           )}
 
-          {/* Marking */}
-          <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
-            <ShieldCheck className="h-3.5 w-3.5" />
-            <span>Маркировка через платформу</span>
-          </div>
+          {/* If no chips shown, still show marking */}
+          {!hasRevisions && !hasCriteria && (
+            <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
+              <ShieldCheck className="h-3.5 w-3.5" />
+              <span>Маркировка через платформу</span>
+            </div>
+          )}
+
+          {/* Attachments */}
+          {hasAttachments && (
+            <div className="flex items-center gap-2 text-[13px]">
+              <Paperclip className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <span className="text-muted-foreground">Файлы: {attachments.length}</span>
+              <span className="text-foreground/70 truncate">
+                {attachments.slice(0, 2).map((a: any) => typeof a === "string" ? a : a?.name || "файл").join(", ")}
+                {attachments.length > 2 && ` +${attachments.length - 2}`}
+              </span>
+            </div>
+          )}
         </div>
 
-        {/* Footer */}
+        {/* ── Footer ── */}
         <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-border">
-          <Button variant="ghost" size="sm" onClick={onClose}>Закрыть</Button>
-          <Button size="sm" className="gap-1.5" onClick={() => { onClose(); navigate(`/creator/proposals/${deal.id}`); }}>
-            Открыть переговоры
-            <ChevronRight className="h-3 w-3" />
+          <Button variant="ghost" size="sm" className="h-9 text-[14px]" onClick={onClose}>
+            Закрыть
+          </Button>
+          <Button size="sm" className="h-9 text-[14px] gap-1.5" onClick={() => { onClose(); navigate(`/creator/proposals/${deal.id}`); }}>
+            Открыть предложение
+            <ChevronRight className="h-3.5 w-3.5" />
           </Button>
         </div>
       </DialogContent>
