@@ -60,7 +60,13 @@ export function loadDrafts(): CampaignDraft[] {
 export function saveDraft(draft: CampaignDraft) {
   const drafts = loadDrafts().filter((d) => d.id !== draft.id);
   drafts.unshift({ ...draft, updatedAt: new Date().toISOString() });
-  localStorage.setItem(DRAFTS_KEY, JSON.stringify(drafts));
+  try {
+    localStorage.setItem(DRAFTS_KEY, JSON.stringify(drafts));
+  } catch {
+    // Quota exceeded — try without file data
+    const lite = drafts.map((d) => ({ ...d, creativeDataUrl: null }));
+    localStorage.setItem(DRAFTS_KEY, JSON.stringify(lite));
+  }
 }
 
 export function deleteDraft(id: string) {

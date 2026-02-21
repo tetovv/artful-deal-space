@@ -100,9 +100,9 @@ export function ManualCampaignWizard({ isVerified, ordConnected, onBack, onCompl
   // Convert file to data URL when creative changes
   useEffect(() => {
     if (creativeFile && !creativeDataUrl) {
-      fileToDataUrl(creativeFile).then((url) => {
-        if (url) setCreativeDataUrl(url);
-      });
+      fileToDataUrl(creativeFile)
+        .then((url) => { if (url) setCreativeDataUrl(url); })
+        .catch(() => { /* file too large or unreadable — skip persisting */ });
     }
   }, [creativeFile]);
 
@@ -127,7 +127,16 @@ export function ManualCampaignWizard({ isVerified, ordConnected, onBack, onCompl
       creativeType,
       creativeDataUrl,
     };
-    saveDraft(draft);
+    try {
+      saveDraft(draft);
+    } catch {
+      // localStorage quota exceeded — try saving without the file data
+      try {
+        saveDraft({ ...draft, creativeDataUrl: null });
+      } catch {
+        // localStorage completely full — silently skip
+      }
+    }
   }, [step, placement, destinationUrl, utmParams, creativeTitle, creativeText, totalBudget, startDateVal, endDateVal, noEndDate, dailyCap, creativeFile, creativeType, creativeDataUrl]);
 
   const addAudit = (action: string) => {
