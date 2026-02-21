@@ -10,10 +10,11 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   useDealAuditLog, useLogDealEvent,
   useDealEscrow, useReserveEscrow, useReleaseEscrow,
-  useDealFiles, useUploadDealFile, useDownloadDealFile,
+  useDealFiles, useUploadDealFile, useDownloadDealFile, useTogglePinFile,
   useDealTerms, useAcceptTerms,
   useRealtimeAuditLog, useRealtimeEscrow,
 } from "@/hooks/useDealData";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useDealInvoices, usePayInvoice, useRealtimeInvoices } from "@/hooks/useDealInvoices";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -935,6 +936,7 @@ function FilesTab({ dealId }: { dealId: string }) {
   const { data: dbFiles = [], isLoading } = useDealFiles(dealId);
   const uploadFile = useUploadDealFile();
   const downloadFile = useDownloadDealFile();
+  const togglePin = useTogglePinFile();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadCategory, setUploadCategory] = useState("draft");
 
@@ -953,9 +955,11 @@ function FilesTab({ dealId }: { dealId: string }) {
     for (const f of displayFiles) {
       seen.set(f.name, f);
     }
-    const arr = Array.from(seen.values());
-    return arr.sort((a, b) => (a.pinned && !b.pinned ? -1 : !a.pinned && b.pinned ? 1 : 0));
+    return Array.from(seen.values());
   }, [displayFiles]);
+
+  const pinnedFiles = deduped.filter((f) => f.pinned);
+  const unpinnedFiles = deduped.filter((f) => !f.pinned);
 
   const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -963,6 +967,68 @@ function FilesTab({ dealId }: { dealId: string }) {
     uploadFile.mutate({ dealId, file, category: uploadCategory });
     e.target.value = "";
   };
+
+  const handleTogglePin = (file: typeof deduped[0]) => {
+    if (!file.storagePath) return; // mock files can't be pinned
+    togglePin.mutate({ fileId: file.id, dealId, pinned: !file.pinned, fileName: file.name });
+  };
+
+  const renderFileRow = (file: typeof deduped[0]) => (
+    <div
+      key={file.id}
+      className={cn(
+        "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors hover:bg-muted/30",
+        file.pinned && "bg-primary/5 border border-primary/20"
+      )}
+    >
+      <div className="flex-1 min-w-0">
+        <span className="text-[15px] font-medium text-card-foreground truncate block safe-text">
+          {file.storagePath ? (
+            <button
+              onClick={() => downloadFile.mutate(file.storagePath)}
+              className="hover:underline text-left"
+            >
+              {file.name}
+            </button>
+          ) : (
+            file.name
+          )}
+        </span>
+        <span className="text-[13px] text-muted-foreground">
+          {fileTypeLabels[file.type] || file.type} · {file.sizeMeta} · {file.uploader} · {file.date}
+        </span>
+      </div>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            onClick={() => handleTogglePin(file)}
+            aria-label={file.pinned ? "Открепить" : "Закрепить"}
+            className={cn(
+              "shrink-0 p-1 rounded transition-colors",
+              file.pinned
+                ? "text-primary hover:text-primary/70"
+                : "text-muted-foreground/40 hover:text-foreground"
+            )}
+            disabled={!file.storagePath}
+          >
+            <Pin className="h-4 w-4" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="text-[12px]">{file.pinned ? "Открепить" : "Закрепить"}</TooltipContent>
+      </Tooltip>
+      <button
+        onClick={() => file.storagePath && downloadFile.mutate(file.storagePath)}
+        title="Скачать"
+        className={cn(
+          "shrink-0 transition-colors",
+          file.storagePath ? "text-muted-foreground hover:text-foreground" : "text-muted-foreground/30"
+        )}
+        disabled={!file.storagePath}
+      >
+        <Download className="h-4 w-4" />
+      </button>
+    </div>
+  );
 
   return (
     <div className="p-5 space-y-4 max-w-[820px] mx-auto">
@@ -991,46 +1057,21 @@ function FilesTab({ dealId }: { dealId: string }) {
       ) : deduped.length === 0 ? (
         <div className="text-center py-12 text-[14px] text-muted-foreground">Нет файлов</div>
       ) : (
-        <div className="space-y-1">
-          {deduped.map((file) => (
-            <div
-              key={file.id}
-              className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors hover:bg-muted/30",
-                file.pinned && "bg-primary/5 border border-primary/20"
-              )}
-            >
-              {file.pinned && <Pin className="h-3.5 w-3.5 text-primary shrink-0" />}
-              <div className="flex-1 min-w-0">
-                <span className="text-[15px] font-medium text-card-foreground truncate block">
-                  {file.storagePath ? (
-                    <button
-                      onClick={() => downloadFile.mutate(file.storagePath)}
-                      className="hover:underline text-left"
-                    >
-                      {file.name}
-                    </button>
-                  ) : (
-                    file.name
-                  )}
-                </span>
-                <span className="text-[13px] text-muted-foreground">
-                  {fileTypeLabels[file.type] || file.type} · {file.sizeMeta} · {file.uploader} · {file.date}
-                </span>
-              </div>
-              <button
-                onClick={() => file.storagePath && downloadFile.mutate(file.storagePath)}
-                title="Скачать"
-                className={cn(
-                  "shrink-0 transition-colors",
-                  file.storagePath ? "text-muted-foreground hover:text-foreground" : "text-muted-foreground/30"
-                )}
-                disabled={!file.storagePath}
-              >
-                <Download className="h-4 w-4" />
-              </button>
+        <div className="space-y-4">
+          {pinnedFiles.length > 0 && (
+            <div>
+              <p className="text-[13px] font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                <Pin className="h-3.5 w-3.5" /> Закреплённые
+              </p>
+              <div className="space-y-1">{pinnedFiles.map(renderFileRow)}</div>
             </div>
-          ))}
+          )}
+          <div>
+            {pinnedFiles.length > 0 && (
+              <p className="text-[13px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Все файлы</p>
+            )}
+            <div className="space-y-1">{unpinnedFiles.map(renderFileRow)}</div>
+          </div>
         </div>
       )}
     </div>

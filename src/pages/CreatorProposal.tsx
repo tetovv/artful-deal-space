@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useDealTerms, useDealFiles, useDownloadDealFile, useUploadDealFile, useDealAuditLog, useDealEscrow, useLogDealEvent } from "@/hooks/useDealData";
+import { useDealTerms, useDealFiles, useDownloadDealFile, useUploadDealFile, useDealAuditLog, useDealEscrow, useLogDealEvent, useTogglePinFile } from "@/hooks/useDealData";
 import { useDealInvoices, useCreateInvoice, useRealtimeInvoices } from "@/hooks/useDealInvoices";
 import { useRealtimeMessages } from "@/hooks/useRealtimeMessages";
 import { Button } from "@/components/ui/button";
@@ -1180,6 +1180,7 @@ function FilesTabContent({ dealId, deal }: { dealId: string; deal: any }) {
   const { data: dbFiles = [], isLoading } = useDealFiles(dealId);
   const uploadFile = useUploadDealFile();
   const downloadFile = useDownloadDealFile();
+  const togglePin = useTogglePinFile();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadCategory, setUploadCategory] = useState<"material" | "result">("material");
   const [showUploadChoice, setShowUploadChoice] = useState(false);
@@ -1280,6 +1281,23 @@ function FilesTabContent({ dealId, deal }: { dealId: string; deal: any }) {
         </div>
       ) : (
         <div className="space-y-5">
+          {/* Pinned section */}
+          {(() => {
+            const pinnedFiles = dbFiles.filter((f: any) => f.pinned);
+            if (pinnedFiles.length === 0) return null;
+            return (
+              <div>
+                <p className="text-[13px] font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                  <Pin className="h-3.5 w-3.5" /> Закреплённые
+                </p>
+                <div className="space-y-1">
+                  {pinnedFiles.map((f: any) => (
+                    <FileRow key={`pin-${f.id}`} f={f} dealId={dealId} downloadFile={downloadFile} togglePin={togglePin} />
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
           {sections.map(([cat, files]) => (
             <div key={cat}>
               <p className="text-[13px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">
@@ -1287,27 +1305,44 @@ function FilesTabContent({ dealId, deal }: { dealId: string; deal: any }) {
               </p>
               <div className="space-y-1">
                 {files.map((f: any) => (
-                  <div key={f.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-muted/30 transition-colors">
-                    {f.pinned && <Pin className="h-3.5 w-3.5 text-primary shrink-0" />}
-                    {f.category === "result" && <CheckCircle2 className="h-3.5 w-3.5 text-warning shrink-0" />}
-                    <div className="flex-1 min-w-0">
-                      <button onClick={() => downloadFile.mutate(f.storage_path)} className="text-[15px] font-medium text-foreground hover:underline truncate block text-left safe-text">
-                        {f.file_name}
-                      </button>
-                      <span className="text-[13px] text-muted-foreground">
-                        {((f.file_size || 0) / 1024).toFixed(0)} KB · {fmtDate(f.created_at)}
-                      </span>
-                    </div>
-                    <button onClick={() => downloadFile.mutate(f.storage_path)} className="text-muted-foreground hover:text-foreground shrink-0">
-                      <Download className="h-4 w-4" />
-                    </button>
-                  </div>
+                  <FileRow key={f.id} f={f} dealId={dealId} downloadFile={downloadFile} togglePin={togglePin} />
                 ))}
               </div>
             </div>
           ))}
         </div>
       )}
+    </div>
+  );
+}
+/* ─── File Row helper ─── */
+function FileRow({ f, dealId, downloadFile, togglePin }: { f: any; dealId: string; downloadFile: any; togglePin: any }) {
+  return (
+    <div className={cn("flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-muted/30 transition-colors", f.pinned && "bg-primary/5 border border-primary/20")}>
+      {f.category === "result" && <CheckCircle2 className="h-3.5 w-3.5 text-warning shrink-0" />}
+      <div className="flex-1 min-w-0">
+        <button onClick={() => downloadFile.mutate(f.storage_path)} className="text-[15px] font-medium text-foreground hover:underline truncate block text-left safe-text">
+          {f.file_name}
+        </button>
+        <span className="text-[13px] text-muted-foreground">
+          {((f.file_size || 0) / 1024).toFixed(0)} KB · {fmtDate(f.created_at)}
+        </span>
+      </div>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            onClick={() => togglePin.mutate({ fileId: f.id, dealId, pinned: !f.pinned, fileName: f.file_name })}
+            aria-label={f.pinned ? "Открепить" : "Закрепить"}
+            className={cn("shrink-0 p-1 rounded transition-colors", f.pinned ? "text-primary hover:text-primary/70" : "text-muted-foreground/40 hover:text-foreground")}
+          >
+            <Pin className="h-4 w-4" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="text-[12px]">{f.pinned ? "Открепить" : "Закрепить"}</TooltipContent>
+      </Tooltip>
+      <button onClick={() => downloadFile.mutate(f.storage_path)} className="text-muted-foreground hover:text-foreground shrink-0">
+        <Download className="h-4 w-4" />
+      </button>
     </div>
   );
 }
