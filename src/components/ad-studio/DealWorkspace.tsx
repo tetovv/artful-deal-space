@@ -62,7 +62,7 @@ const statusLabels: Record<string, string> = {
   review: "На проверке",
   completed: "Завершено",
   disputed: "Спор",
-  needs_changes: "Требует правок",
+  needs_changes: "Встречное от автора",
   accepted: "Принято",
   rejected: "Отклонено",
 };
@@ -87,7 +87,7 @@ const placementTypeFromTitle = (title: string): string | null => {
 function getPrimaryAction(status: string, _role?: string): { label: string; icon: any } | null {
   switch (status) {
     case "pending": return null;
-    case "needs_changes": return { label: "Просмотреть правки", icon: ScrollText };
+    case "needs_changes": return { label: "Смотреть изменения", icon: ScrollText };
     case "accepted": return { label: "Зарезервировать средства", icon: CreditCard };
     case "invoice_needed": return null; // waiting for creator to send invoice
     case "waiting_payment": return { label: "Оплатить / Зарезервировать", icon: CreditCard };
@@ -102,7 +102,7 @@ function getPrimaryAction(status: string, _role?: string): { label: string; icon
 function getNextStepHint(status: string): string | null {
   switch (status) {
     case "pending": return "Ожидаем ответа автора на ваше предложение";
-    case "needs_changes": return "Автор предложил изменения — проверьте условия";
+    case "needs_changes": return "Автор предложил встречные условия — проверьте и примите решение";
     case "accepted": return "Предложение принято — зарезервируйте средства для начала работы";
     case "invoice_needed": return "Автор принял предложение. Ожидайте счёт.";
     case "waiting_payment": return "Получен счёт — оплатите или зарезервируйте средства для начала работы";
@@ -120,7 +120,7 @@ function getNextStepHint(status: string): string | null {
 function getNextStepShort(status: string): string | null {
   switch (status) {
     case "pending": return "Ожидание автора";
-    case "needs_changes": return "Проверить правки";
+    case "needs_changes": return "Встречное — решите";
     case "accepted": return "Зарезервировать";
     case "invoice_needed": return "Ожидание счёта";
     case "waiting_payment": return "Оплатить";
@@ -1353,6 +1353,20 @@ export function DealWorkspace() {
   useRealtimeAuditLog(activeDeal?.id);
   useRealtimeEscrow(activeDeal?.id);
 
+  // Fetch latest terms for counter-offer banner
+  const { data: latestTermsForBanner } = useDealTerms(activeDeal?.id || "");
+  const latestTermVersion = useMemo(() => {
+    if (!latestTermsForBanner || latestTermsForBanner.length === 0) return null;
+    const sorted = [...latestTermsForBanner].sort((a: any, b: any) => a.version - b.version);
+    return sorted[sorted.length - 1] as any;
+  }, [latestTermsForBanner]);
+
+  const isCounterFromCreator = activeDeal &&
+    (activeDeal.status as string) === "needs_changes" &&
+    latestTermVersion &&
+    latestTermVersion.created_by === activeDeal.creatorId &&
+    activeDeal.advertiserId === user?.id;
+
   // Stats for empty state
   const dealStats = useMemo(() => {
     const stats: Record<string, number> = {};
@@ -1583,6 +1597,28 @@ export function DealWorkspace() {
             )}
           </div>
         </div>
+
+        {/* ── Counter-offer from creator — prominent banner (advertiser side) ── */}
+        {isCounterFromCreator && latestTermVersion && (
+          <div className="border-b border-warning/30 bg-warning/10">
+            <div className="max-w-[1100px] mx-auto px-6 py-3">
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <ArrowLeftRight className="h-5 w-5 text-warning shrink-0" />
+                  <span className="text-[14px] font-semibold text-foreground">
+                    Автор предложил встречные условия (v{latestTermVersion.version}). Посмотрите изменения и примите решение.
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Button size="sm" className="text-[14px] h-9" onClick={() => setActiveSubTab("terms")}>
+                    <ScrollText className="h-4 w-4 mr-1.5" />
+                    Смотреть изменения
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ── Tab content ── */}
         <div className="flex-1 overflow-y-auto">
