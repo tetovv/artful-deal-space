@@ -169,7 +169,7 @@ export function IncomingProposalDetail({ open, onClose, deal, advertiserProfile,
       qc.invalidateQueries({ queryKey: ["my_deals"] });
       onClose();
       // Redirect to creator deal workspace (role-aware AdStudio)
-      navigate("/ad-studio", { state: { openDealId: deal.id } });
+      navigate("/marketplace", { state: { openDealId: deal.id } });
     } catch (err) {
       console.error(err);
       toast.error("Не удалось принять предложение");
