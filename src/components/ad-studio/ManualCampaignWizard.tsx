@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import type { Campaign, Placement } from "./CampaignManageView";
+import { saveDraft, deleteDraft, createDraftId, type CampaignDraft } from "./campaignDrafts";
 
 interface ManualCampaignWizardProps {
   isVerified: boolean;
@@ -24,6 +25,7 @@ interface ManualCampaignWizardProps {
   onBack: () => void;
   onComplete: (campaign: Campaign) => void;
   onGoToSettings: () => void;
+  initialDraft?: CampaignDraft;
 }
 
 type WizardStep = 1 | 2 | 3 | 4 | 5;
@@ -54,27 +56,28 @@ const ACCEPTED_IMAGE = ".jpg,.jpeg,.png,.webp";
 const ACCEPTED_VIDEO = ".mp4,.webm";
 const MAX_FILE_MB = 10;
 
-export function ManualCampaignWizard({ isVerified, ordConnected, onBack, onComplete, onGoToSettings }: ManualCampaignWizardProps) {
-  const [step, setStep] = useState<WizardStep>(1);
+export function ManualCampaignWizard({ isVerified, ordConnected, onBack, onComplete, onGoToSettings, initialDraft }: ManualCampaignWizardProps) {
+  const draftIdRef = useRef(initialDraft?.id ?? createDraftId());
+  const [step, setStep] = useState<WizardStep>((initialDraft?.step ?? 1) as WizardStep);
 
   // Step 1 - Placement
-  const [placement, setPlacement] = useState<Placement | null>(null);
+  const [placement, setPlacement] = useState<Placement | null>(initialDraft?.placement ?? null);
 
   // Step 2 - Creative
   const [creativeFile, setCreativeFile] = useState<File | null>(null);
   const [creativePreview, setCreativePreview] = useState<string | null>(null);
-  const [creativeType, setCreativeType] = useState<"image" | "video" | null>(null);
-  const [destinationUrl, setDestinationUrl] = useState("");
-  const [utmParams, setUtmParams] = useState("");
-  const [creativeTitle, setCreativeTitle] = useState("");
-  const [creativeText, setCreativeText] = useState("");
+  const [creativeType, setCreativeType] = useState<"image" | "video" | null>(initialDraft?.creativeType ?? null);
+  const [destinationUrl, setDestinationUrl] = useState(initialDraft?.destinationUrl ?? "");
+  const [utmParams, setUtmParams] = useState(initialDraft?.utmParams ?? "");
+  const [creativeTitle, setCreativeTitle] = useState(initialDraft?.creativeTitle ?? "");
+  const [creativeText, setCreativeText] = useState(initialDraft?.creativeText ?? "");
 
   // Step 3 - Budget & schedule
-  const [totalBudget, setTotalBudget] = useState("");
-  const [startDateVal, setStartDateVal] = useState<Date | undefined>();
-  const [endDateVal, setEndDateVal] = useState<Date | undefined>();
-  const [noEndDate, setNoEndDate] = useState(false);
-  const [dailyCap, setDailyCap] = useState("");
+  const [totalBudget, setTotalBudget] = useState(initialDraft?.totalBudget ?? "");
+  const [startDateVal, setStartDateVal] = useState<Date | undefined>(initialDraft?.startDate ? new Date(initialDraft.startDate) : undefined);
+  const [endDateVal, setEndDateVal] = useState<Date | undefined>(initialDraft?.endDate ? new Date(initialDraft.endDate) : undefined);
+  const [noEndDate, setNoEndDate] = useState(initialDraft?.noEndDate ?? false);
+  const [dailyCap, setDailyCap] = useState(initialDraft?.dailyCap ?? "");
 
   // Step 4 - ORD
   const [eridStatus, setEridStatus] = useState<"idle" | "pending" | "issued">("idle");
@@ -85,6 +88,29 @@ export function ManualCampaignWizard({ isVerified, ordConnected, onBack, onCompl
 
   // Audit log
   const [auditLog, setAuditLog] = useState<{ timestamp: string; action: string; user: string }[]>([]);
+
+  // ── Auto-save draft ──
+  useEffect(() => {
+    const draft: CampaignDraft = {
+      id: draftIdRef.current,
+      updatedAt: new Date().toISOString(),
+      step,
+      placement,
+      destinationUrl,
+      utmParams,
+      creativeTitle,
+      creativeText,
+      totalBudget,
+      startDate: startDateVal?.toISOString() ?? null,
+      endDate: endDateVal?.toISOString() ?? null,
+      noEndDate,
+      dailyCap,
+      creativeFileName: creativeFile?.name ?? initialDraft?.creativeFileName ?? null,
+      creativeFileSize: creativeFile?.size ?? initialDraft?.creativeFileSize ?? null,
+      creativeType,
+    };
+    saveDraft(draft);
+  }, [step, placement, destinationUrl, utmParams, creativeTitle, creativeText, totalBudget, startDateVal, endDateVal, noEndDate, dailyCap, creativeFile, creativeType]);
 
   const addAudit = (action: string) => {
     setAuditLog((prev) => [...prev, { timestamp: new Date().toISOString(), action, user: "Вы" }]);
@@ -166,6 +192,7 @@ export function ManualCampaignWizard({ isVerified, ordConnected, onBack, onCompl
         ordStatus: "connected",
         auditLog: [...auditLog, { timestamp: new Date().toISOString(), action: "Кампания запущена", user: "Вы" }],
       };
+      deleteDraft(draftIdRef.current);
       onComplete(newCampaign);
       toast.success("Кампания запущена!");
     }, 1200);
