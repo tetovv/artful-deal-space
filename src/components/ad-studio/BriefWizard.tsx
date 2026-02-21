@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Slider } from "@/components/ui/slider";
 import { Separator } from "@/components/ui/separator";
@@ -11,13 +10,11 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  ArrowLeft, ArrowRight, Video, FileText, Mic, Check, Lock, Calendar,
+  ArrowLeft, ArrowRight, Video, FileText, Mic, Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NICHES = ["Образование", "Технологии", "Дизайн", "Фото", "Музыка", "Подкасты", "Бизнес", "Видео", "Motion"];
-const GEOS = ["Россия", "Беларусь", "Казахстан", "Украина"];
-const PLATFORMS_LIST = ["Telegram", "YouTube", "Instagram", "VK", "TikTok"];
 
 const PLACEMENT_TYPES = [
   { value: "video", label: "Видео-интеграция", icon: Video, desc: "Рекламная вставка в видео" },
@@ -27,40 +24,34 @@ const PLACEMENT_TYPES = [
 
 export interface BriefData {
   placementType: string;
-  platform: string;
   budgetMin: number;
   budgetMax: number;
   deadline: string;
   turnaroundDays: number;
   niches: string[];
-  geos: string[];
   audienceMin: number;
   audienceMax: number;
   excludeNoAnalytics: boolean;
   briefText: string;
-  platformCompliance: boolean;
 }
 
 const defaultBrief: BriefData = {
   placementType: "",
-  platform: "",
   budgetMin: 0,
   budgetMax: 200000,
   deadline: "",
   turnaroundDays: 14,
   niches: [],
-  geos: [],
   audienceMin: 0,
   audienceMax: 1000000,
   excludeNoAnalytics: false,
   briefText: "",
-  platformCompliance: false,
 };
 
 const STEPS = [
   { title: "Тип размещения", subtitle: "Выберите формат" },
   { title: "Бюджет и сроки", subtitle: "Укажите рамки" },
-  { title: "Аудитория и ниша", subtitle: "Целевые параметры" },
+  { title: "Ниша и аудитория", subtitle: "Целевые параметры" },
   { title: "Требования", subtitle: "Бриф и условия" },
 ];
 
@@ -77,16 +68,15 @@ export function BriefWizard({ open, onClose, onSubmit }: BriefWizardProps) {
   const update = <K extends keyof BriefData>(key: K, val: BriefData[K]) =>
     setBrief((prev) => ({ ...prev, [key]: val }));
 
-  const toggleArray = (key: "niches" | "geos", val: string) => {
+  const toggleNiche = (val: string) => {
     setBrief((prev) => ({
       ...prev,
-      [key]: prev[key].includes(val) ? prev[key].filter((v) => v !== val) : [...prev[key], val],
+      niches: prev.niches.includes(val) ? prev.niches.filter((v) => v !== val) : [...prev.niches, val],
     }));
   };
 
   const canNext = () => {
     if (step === 0) return brief.placementType !== "";
-    if (step === 3) return brief.platformCompliance;
     return true;
   };
 
@@ -160,7 +150,7 @@ export function BriefWizard({ open, onClose, onSubmit }: BriefWizardProps) {
                       >
                         <Icon className={cn("h-5 w-5 shrink-0", selected ? "text-primary" : "text-muted-foreground")} />
                         <div className="flex-1 min-w-0">
-                          <p className={cn("text-[15px] font-medium", selected ? "text-foreground" : "text-foreground")}>{pt.label}</p>
+                          <p className="text-[15px] font-medium text-foreground">{pt.label}</p>
                           <p className="text-[13px] text-muted-foreground">{pt.desc}</p>
                         </div>
                         {selected && <Check className="h-4 w-4 text-primary shrink-0" />}
@@ -168,22 +158,7 @@ export function BriefWizard({ open, onClose, onSubmit }: BriefWizardProps) {
                     );
                   })}
                 </div>
-
-                <SectionLabel>Платформа (опционально)</SectionLabel>
-                <div className="flex flex-wrap gap-2">
-                  {PLATFORMS_LIST.map((p) => (
-                    <button
-                      key={p}
-                      onClick={() => update("platform", brief.platform === p ? "" : p)}
-                      className={cn(
-                        "px-3 py-1.5 rounded-md text-[13px] border transition-colors",
-                        brief.platform === p
-                          ? "border-primary bg-primary/10 text-primary font-medium"
-                          : "border-border text-muted-foreground hover:border-primary/30"
-                      )}
-                    >{p}</button>
-                  ))}
-                </div>
+                <p className="text-[12px] text-muted-foreground">Все сделки проходят только внутри платформы</p>
               </>
             )}
 
@@ -237,7 +212,7 @@ export function BriefWizard({ open, onClose, onSubmit }: BriefWizardProps) {
                   {NICHES.map((n) => (
                     <button
                       key={n}
-                      onClick={() => toggleArray("niches", n)}
+                      onClick={() => toggleNiche(n)}
                       className={cn(
                         "px-3 py-1.5 rounded-md text-[13px] border transition-colors",
                         brief.niches.includes(n)
@@ -245,22 +220,6 @@ export function BriefWizard({ open, onClose, onSubmit }: BriefWizardProps) {
                           : "border-border text-muted-foreground hover:border-primary/30"
                       )}
                     >{n}</button>
-                  ))}
-                </div>
-
-                <SectionLabel>Регион</SectionLabel>
-                <div className="flex flex-wrap gap-2">
-                  {GEOS.map((g) => (
-                    <button
-                      key={g}
-                      onClick={() => toggleArray("geos", g)}
-                      className={cn(
-                        "px-3 py-1.5 rounded-md text-[13px] border transition-colors",
-                        brief.geos.includes(g)
-                          ? "border-primary bg-primary/10 text-primary font-medium"
-                          : "border-border text-muted-foreground hover:border-primary/30"
-                      )}
-                    >{g}</button>
                   ))}
                 </div>
 
@@ -294,34 +253,15 @@ export function BriefWizard({ open, onClose, onSubmit }: BriefWizardProps) {
             {/* ── Step 3: Requirements ── */}
             {step === 3 && (
               <>
-                <SectionLabel>Бриф (ключевое сообщение, CTA, ограничения)</SectionLabel>
+                <SectionLabel>Бриф</SectionLabel>
                 <Textarea
                   value={brief.briefText}
                   onChange={(e) => update("briefText", e.target.value)}
-                  placeholder="Опишите ключевое сообщение, призыв к действию и любые ограничения..."
+                  placeholder={"• Ключевое сообщение: …\n• Призыв к действию (CTA): …\n• Ограничения: …"}
                   className="min-h-[120px] text-[14px] bg-background resize-none"
                   maxLength={2000}
                 />
                 <p className="text-[12px] text-muted-foreground text-right">{brief.briefText.length} / 2000</p>
-
-                <Separator />
-
-                <label className="flex items-start gap-2.5 cursor-pointer">
-                  <Checkbox
-                    checked={brief.platformCompliance}
-                    onCheckedChange={(v) => update("platformCompliance", !!v)}
-                    className="mt-0.5"
-                  />
-                  <div>
-                    <span className="text-[14px] text-foreground flex items-center gap-1.5">
-                      <Lock className="h-3.5 w-3.5 text-primary" />
-                      Вся коммуникация и сдача работ происходят внутри платформы
-                    </span>
-                    <p className="text-[12px] text-muted-foreground mt-0.5">
-                      Обязательное условие для Safe Deal и защиты сторон
-                    </p>
-                  </div>
-                </label>
               </>
             )}
           </div>
