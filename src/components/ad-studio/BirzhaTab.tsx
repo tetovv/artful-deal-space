@@ -345,7 +345,7 @@ function QuickViewModal({ creator, meta, open, onClose, isVerified, categoryLabe
   );
 }
 
-/* ── Creator Card ── */
+/* ── Creator Card (polished v1) ── */
 function CreatorCard({ creator, meta, isVerified, categoryLabel, matchReasons, avgViews, isFollowing, onToggleFollow }: {
   creator: ProfileRow; meta: CreatorMeta; isVerified: boolean; categoryLabel?: string; matchReasons?: string[];
   avgViews?: { avgViews: number; videoCount: number } | null;
@@ -353,128 +353,139 @@ function CreatorCard({ creator, meta, isVerified, categoryLabel, matchReasons, a
 }) {
   const [quickView, setQuickView] = useState(false);
   const [proposalOpen, setProposalOpen] = useState(false);
-  const hasNiche = (creator.niche || []).length > 0;
+  const niches = (creator.niche || []).slice(0, 2);
+
+  /* ── 2) Metrics row data ── */
+  const metricsItems: { icon: React.ReactNode; value: string; label: string }[] = [];
+  const tgP = meta.platforms.find((p) => p.name === "TG" || p.name === "Telegram");
+  if (tgP) metricsItems.push({ icon: <Users className="h-3.5 w-3.5" />, value: tgP.metric, label: "TG" });
+  if (avgViews && avgViews.videoCount >= 3) metricsItems.push({ icon: <Eye className="h-3.5 w-3.5" />, value: fmt(avgViews.avgViews) || "—", label: "Avg views 30%" });
+  if (meta.dealsCount > 0) metricsItems.push({ icon: <Handshake className="h-3.5 w-3.5" />, value: String(meta.dealsCount), label: "Сделки" });
+
+  /* ── 3) Commercial row ── */
+  const commercialParts = meta.offers.map((o) => `${o.type} от ${o.price.toLocaleString("ru-RU")} ₽`);
+
+  /* ── 4) Analytics status ── */
+  const hasAnalytics = meta.platforms.length > 0;
 
   return (
     <>
       <Card className="overflow-hidden hover:border-primary/30 transition-colors group">
-        <CardContent className="p-3.5 space-y-2.5">
+        <CardContent className="p-4 space-y-3">
+          {/* ═══ 1) Header ═══ */}
           <div className="flex items-start gap-3">
             <img
               src={creator.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${creator.user_id}`}
               alt={creator.display_name}
-              className="h-10 w-10 rounded-full bg-muted shrink-0 object-cover"
+              className="h-11 w-11 rounded-full bg-muted shrink-0 object-cover"
             />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5">
-                <p className="text-[16px] font-semibold text-foreground truncate leading-tight">{creator.display_name}</p>
+                <p className="text-[16px] font-semibold text-foreground truncate leading-snug">{creator.display_name}</p>
                 {creator.verified && <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />}
+                <Badge variant="outline" className="text-[9px] px-1 py-0 h-[18px] gap-0.5 border-primary/30 text-primary/80 ml-0.5">
+                  <Lock className="h-2.5 w-2.5" />Platform
+                </Badge>
               </div>
-              {creator.bio && (
-                <p className="text-[13px] text-muted-foreground line-clamp-1">{creator.bio}</p>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                {niches.map((n) => (
+                  <Badge key={n} variant="secondary" className="text-[11px] px-1.5 py-0 h-[18px]">{n}</Badge>
+                ))}
+              </div>
+            </div>
+            {/* Right side: response time + follow icon */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              {meta.responseHours > 0 && (
+                <span className="text-[12px] text-muted-foreground/80 whitespace-nowrap flex items-center gap-0.5">
+                  <Clock className="h-3 w-3" />~{meta.responseHours}ч
+                </span>
+              )}
+              {onToggleFollow && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={cn("h-7 w-7 shrink-0", isFollowing && "text-primary")}
+                      onClick={(e) => { e.stopPropagation(); onToggleFollow(); }}
+                    >
+                      {isFollowing ? (
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                      ) : (
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent><p className="text-xs">{isFollowing ? "Отписаться" : "Подписаться"}</p></TooltipContent>
+                </Tooltip>
               )}
             </div>
-            {/* Follow button */}
-            {onToggleFollow && (
-              <Button
-                variant={isFollowing ? "secondary" : "ghost"}
-                size="sm"
-                className="h-7 px-2 text-[11px] shrink-0"
-                onClick={(e) => { e.stopPropagation(); onToggleFollow(); }}
-              >
-                {isFollowing ? <UserCheck className="h-3 w-3 mr-1" /> : <UserPlus className="h-3 w-3 mr-1" />}
-                {isFollowing ? "Подписан" : "Следить"}
-              </Button>
-            )}
-            {meta.responseHours > 0 && (
-              <span className="text-[11px] text-muted-foreground whitespace-nowrap flex items-center gap-1 shrink-0">
-                <Clock className="h-3 w-3" />~{meta.responseHours}ч
-              </span>
-            )}
           </div>
 
-          <div className="flex flex-wrap gap-1">
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 gap-0.5 border-primary/40 text-primary">
-              <Lock className="h-2.5 w-2.5" />Platform-only
-            </Badge>
-            {meta.safeDeal && (
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 gap-0.5 border-green-500/40 text-green-400">
-                <ShieldCheck className="h-2.5 w-2.5" />Safe deal
-              </Badge>
-            )}
-            {hasNiche && (creator.niche || []).slice(0, 3).map((n) => (
-              <Badge key={n} variant="secondary" className="text-[11px] px-1.5 py-0 h-5">{n}</Badge>
-            ))}
-            {categoryLabel && <Badge variant="outline" className="text-[11px] px-1.5 py-0 h-5">{categoryLabel}</Badge>}
-          </div>
-
-          {meta.platforms.length > 0 ? (
-            <div className="flex gap-2">
-              {meta.platforms.map((p) => (
-                <span key={p.name} className="inline-flex items-center gap-1 text-[12px] bg-muted/50 rounded px-1.5 py-0.5">
-                  <span className="font-semibold text-foreground">{p.name}</span>
-                  <span className="text-muted-foreground">{p.metric}</span>
+          {/* ═══ 2) Metrics row ═══ */}
+          {metricsItems.length > 0 && (
+            <div className="flex items-center gap-3">
+              {metricsItems.map((m, i) => (
+                <span key={i} className="inline-flex items-center gap-1.5 text-[13px]">
+                  <span className="text-muted-foreground/70">{m.icon}</span>
+                  <span className="font-semibold text-foreground">{m.value}</span>
+                  <span className="text-muted-foreground/70">{m.label}</span>
                 </span>
               ))}
             </div>
-          ) : (
-            <p className="text-[12px] text-muted-foreground/60 italic">Аналитика не подключена</p>
           )}
 
-          {meta.offers.length > 0 ? (
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
-              {meta.offers.map((o) => (
-                <span key={o.type} className="text-foreground">
-                  <span className="text-muted-foreground">{o.type}:</span>{" "}
-                  <span className="font-medium">от {o.price.toLocaleString("ru-RU")} ₽</span>
-                </span>
-              ))}
-            </div>
-          ) : (
-            <p className="text-[13px] text-muted-foreground">Цена по запросу</p>
-          )}
-
-          {/* Metrics row: deals + avg views */}
-          <div className="flex items-center gap-3 text-[12px] text-muted-foreground">
-            {meta.dealsCount > 0 && (
-              <span className="flex items-center gap-1"><Handshake className="h-3 w-3" />Сделки: {meta.dealsCount}</span>
-            )}
-            {avgViews && avgViews.videoCount >= 3 && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="flex items-center gap-1 cursor-help">
-                    <Eye className="h-3 w-3" />Avg views: {fmt(avgViews.avgViews) || "—"}
+          {/* ═══ 3) Commercial row ═══ */}
+          <div className="text-[14px] leading-snug">
+            {commercialParts.length > 0 ? (
+              <p className="text-foreground/90">
+                {commercialParts.map((part, i) => (
+                  <span key={i}>
+                    {i > 0 && <span className="text-muted-foreground/50 mx-1.5">|</span>}
+                    <span className="font-medium">{part}</span>
                   </span>
-                </TooltipTrigger>
-                <TooltipContent><p className="text-xs">Средние просмотры (≥30% просмотрено) по последним {avgViews.videoCount} видео</p></TooltipContent>
-              </Tooltip>
+                ))}
+              </p>
+            ) : (
+              <p className="text-muted-foreground italic">Цена по запросу</p>
             )}
           </div>
 
+          {/* ═══ 4) Analytics status (subtle) ═══ */}
+          <p className={cn("text-[12px] flex items-center gap-1", hasAnalytics ? "text-muted-foreground/70" : "text-muted-foreground/50")}>
+            {hasAnalytics ? (
+              <><CheckCircle2 className="h-3 w-3 text-green-500/70" />Аналитика подключена</>
+            ) : (
+              <><AlertTriangle className="h-3 w-3" />Аналитика не подключена</>
+            )}
+          </p>
+
+          {/* Match reasons */}
           {matchReasons && matchReasons.length > 0 && (
             <div className="bg-primary/5 border border-primary/20 rounded-md px-3 py-2 space-y-0.5">
               {matchReasons.map((reason, i) => (
                 <p key={i} className="text-[12px] text-primary flex items-center gap-1.5">
-                  <CheckCircle2 className="h-3 w-3 shrink-0" />{reason}
+                  <Sparkles className="h-3 w-3 shrink-0" />{reason}
                 </p>
               ))}
             </div>
           )}
 
-          <div className="flex items-center justify-between pt-1.5 border-t border-border/50">
-            <div className="flex items-center gap-1.5">
-              <Button size="sm" variant="ghost" className="text-[12px] h-7 px-2" asChild>
-                <a href={`/creator/${creator.user_id}`}>Профиль</a>
-              </Button>
-              <Button size="sm" variant="ghost" className="text-[12px] h-7 px-2" onClick={() => setQuickView(true)}>
-                <Eye className="h-3 w-3 mr-1" />Быстрый просмотр
-              </Button>
+          {/* ═══ 5) Footer ═══ */}
+          <div className="flex items-center justify-between pt-2 border-t border-border/50">
+            <div className="flex items-center gap-2">
+              <a href={`/creator/${creator.user_id}`} className="text-[13px] text-muted-foreground hover:text-foreground transition-colors">
+                Профиль
+              </a>
+              <button onClick={() => setQuickView(true)} className="text-[13px] text-muted-foreground hover:text-foreground transition-colors">
+                Quick view
+              </button>
             </div>
             <Tooltip>
               <TooltipTrigger asChild>
                 <span>
-                  <Button size="sm" className="text-[12px] h-7" disabled={!isVerified} onClick={() => setProposalOpen(true)}>
-                    <MessageSquarePlus className="h-3.5 w-3.5 mr-1" />Предложить сделку
+                  <Button size="sm" className="text-[13px] h-8 px-3" disabled={!isVerified} onClick={() => setProposalOpen(true)}>
+                    <MessageSquarePlus className="h-3.5 w-3.5 mr-1.5" />Предложить сделку
                   </Button>
                 </span>
               </TooltipTrigger>
