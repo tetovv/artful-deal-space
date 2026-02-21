@@ -17,6 +17,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useDealInvoices, usePayInvoice, useRealtimeInvoices } from "@/hooks/useDealInvoices";
 import { EscrowPayoutSection } from "@/components/ad-studio/EscrowPayoutSection";
+import { MarkingTab } from "@/components/ad-studio/MarkingTab";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -1405,6 +1406,7 @@ export function DealWorkspace() {
       milestones: [],
       rejection_reason: d.rejection_reason || null,
       rejected_at: d.rejected_at || null,
+      marking_required: d.marking_required || false,
     }));
     const dbIds = new Set(dbMapped.map((d) => d.id));
     const mock = mockDeals.filter((d) => !dbIds.has(d.id));
@@ -1477,11 +1479,14 @@ export function DealWorkspace() {
 
   const navigate = useNavigate();
 
+  const showMarkingTab = activeDeal && (activeDeal as any).marking_required === true;
+
   const coreTabs = activeDeal ? [
     { value: "chat", label: "Чат", icon: MessageCircle },
     { value: "terms", label: "Условия", icon: ScrollText },
     { value: "files", label: "Файлы", icon: Files },
     { value: "payment", label: "Оплата", icon: CreditCard },
+    ...(showMarkingTab ? [{ value: "marking", label: "Маркировка", icon: Radio }] : []),
   ] : [];
 
   // Escrow state for header CTA
@@ -1772,6 +1777,7 @@ export function DealWorkspace() {
           {activeSubTab === "terms" && <TermsTab dealId={activeDeal.id} />}
           {activeSubTab === "files" && <FilesTab dealId={activeDeal.id} />}
           {activeSubTab === "payment" && <PaymentTab dealId={activeDeal.id} />}
+          {activeSubTab === "marking" && showMarkingTab && <MarkingTab dealId={activeDeal.id} />}
           {activeSubTab === "more" && <MoreTab dealId={activeDeal.id} />}
         </div>
       </div>
