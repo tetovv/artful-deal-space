@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -120,7 +121,7 @@ export function CreatorOffersSection() {
               </div>
               <div className="space-y-1">
                 <label className="text-xs text-muted-foreground">Цена, ₽</label>
-                <Input type="number" placeholder="10000" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} className="h-9" />
+                <CurrencyInput value={form.price} onChange={(v) => setForm({ ...form, price: v })} placeholder="10 000" min={100} className="h-9" />
               </div>
               <div className="space-y-1">
                 <label className="text-xs text-muted-foreground">Срок, дней</label>
@@ -128,7 +129,7 @@ export function CreatorOffersSection() {
               </div>
             </div>
             <div className="flex gap-2">
-              <Button size="sm" onClick={() => addOffer.mutate()} disabled={addOffer.isPending || !form.price}>
+              <Button size="sm" onClick={() => addOffer.mutate()} disabled={addOffer.isPending || !form.price || parseInt(form.price) < 100}>
                 <Save className="h-3.5 w-3.5 mr-1" /> {addOffer.isPending ? "Сохранение…" : "Сохранить"}
               </Button>
               <Button size="sm" variant="ghost" onClick={() => setShowAdd(false)}>
