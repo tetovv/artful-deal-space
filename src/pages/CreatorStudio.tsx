@@ -20,6 +20,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { useVideoViewCounts } from "@/hooks/useVideoViews";
 import { usePostImpressionCounts } from "@/hooks/usePostImpressions";
+import { useVideoViewsTrend } from "@/hooks/useCreatorAnalytics";
 import { Tooltip as UiTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useMemo, useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -135,6 +136,10 @@ const CreatorStudio = () => {
   const [revenueChartType, setRevenueChartType] = useState<ChartType>("bar");
   const [engagementChartType, setEngagementChartType] = useState<ChartType>("line");
   const [analyticsPeriod, setAnalyticsPeriod] = useState<"week" | "month" | "year">("month");
+  const [viewsTrendPeriod, setViewsTrendPeriod] = useState<7 | 30>(30);
+
+  // Fetch 30%-views trend data
+  const { data: viewsTrendData = [] } = useVideoViewsTrend(user?.id, viewsTrendPeriod);
 
   // Auto-open editor when navigated with state
   useEffect(() => {
@@ -693,7 +698,56 @@ const CreatorStudio = () => {
                   </CardContent>
                 </Card>
 
-                {/* Revenue + Engagement side by side */}
+                {/* Views (30%) Trend Chart */}
+                <Card className="overflow-hidden border-0 shadow-md">
+                  <CardHeader className="pb-1 pt-5 px-6 flex flex-row items-center justify-between">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                      <div className="h-7 w-7 rounded-lg bg-accent/10 flex items-center justify-center">
+                        <Activity className="h-3.5 w-3.5 text-accent-foreground" />
+                      </div>
+                      Просмотры (30%) — тренд
+                    </CardTitle>
+                    <div className="flex items-center gap-1.5">
+                      {([7, 30] as const).map((d) => (
+                        <button
+                          key={d}
+                          onClick={() => setViewsTrendPeriod(d)}
+                          className={cn(
+                            "px-2.5 py-1 rounded-md text-xs font-medium transition-colors",
+                            viewsTrendPeriod === d
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-secondary text-secondary-foreground hover:bg-accent"
+                          )}
+                        >
+                          {d}д
+                        </button>
+                      ))}
+                    </div>
+                  </CardHeader>
+                  <CardContent className="px-6 pb-5 pt-2">
+                    {viewsTrendData.length === 0 ? (
+                      <div className="text-center py-12 text-sm text-muted-foreground">Нет данных о просмотрах за выбранный период</div>
+                    ) : (
+                      <ResponsiveContainer width="100%" height={220}>
+                        <AreaChart data={viewsTrendData.map(d => ({ name: new Date(d.day).toLocaleDateString("ru-RU", { day: "numeric", month: "short" }), views: Number(d.view_count) }))}>
+                          <defs>
+                            <linearGradient id="vt30" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.4} />
+                              <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5} />
+                          <XAxis dataKey="name" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                          <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                          <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }} />
+                          <Area type="monotone" dataKey="views" stroke="hsl(var(--primary))" fill="url(#vt30)" strokeWidth={2.5} dot={{ r: 3, fill: "hsl(var(--primary))", strokeWidth: 2, stroke: "hsl(var(--background))" }} name="Просмотры (30%)" />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    )}
+                  </CardContent>
+                </Card>
+
+
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                   <Card className="overflow-hidden border-0 shadow-md">
                   <CardHeader className="pb-1 pt-5 px-6 flex flex-row items-center justify-between">
