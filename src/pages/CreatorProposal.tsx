@@ -363,6 +363,18 @@ export default function CreatorProposal() {
     setActiveTab("chat");
   };
 
+  const handlePaymentReminder = async () => {
+    if (!user || !deal) return;
+    const msg = "Добрый день! Напоминаю о выставленном счёте. Пожалуйста, подтвердите оплату для начала работы.";
+    await supabase.from("messages").insert({ deal_id: deal.id, sender_id: user.id, sender_name: "Система", content: `🔔 ${msg}` });
+    logEvent.mutate({ dealId: deal.id, action: "Автор напомнил об оплате", category: "payments" });
+    if (deal.advertiser_id) {
+      await supabase.from("notifications").insert({ user_id: deal.advertiser_id, title: "Напоминание об оплате", message: `Автор напоминает об оплате по сделке «${deal.title}»`, type: "deal", link: "/ad-studio" });
+    }
+    toast.success("Напоминание отправлено");
+    qc.invalidateQueries({ queryKey: ["deal-chat", deal.id] });
+  };
+
   /* ── Diff helper ── */
   function getDiffFields(cur: Record<string, string> | null, prev: Record<string, string> | null): { key: string; label: string; from: string; to: string }[] {
     if (!cur || !prev) return [];
@@ -530,6 +542,14 @@ export default function CreatorProposal() {
                     <DropdownMenuItem onClick={handleRequestBrandGuidelines} className="text-[14px]">
                       <Palette className="h-4 w-4 mr-2" /> Запросить гайдлайны
                     </DropdownMenuItem>
+                    {isWaitingPayment && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={handlePaymentReminder} className="text-[14px]">
+                          <Clock className="h-4 w-4 mr-2" /> Напомнить об оплате
+                        </DropdownMenuItem>
+                      </>
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
 
