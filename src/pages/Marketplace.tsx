@@ -12,7 +12,7 @@ import {
   ChevronDown, ChevronUp, ChevronRight, Send, RefreshCw, FileText, MessageSquare, Handshake, Filter,
   CalendarDays, ShieldCheck, Paperclip,
 } from "lucide-react";
-import { IncomingProposalDetail } from "@/components/ad-studio/IncomingProposalDetail";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -334,6 +334,96 @@ const timeAgo = (dateStr: string): string => {
   if (days < 7) return `${days} дн назад`;
   return new Date(dateStr).toLocaleDateString("ru-RU");
 };
+
+/* ═══════════════════════════════════════════════════
+   Quick Preview Modal (lightweight, no actions)
+   ═══════════════════════════════════════════════════ */
+function QuickPreviewModal({ deal, onClose, advProfile, brand }: {
+  deal: { id: string; title: string; status: string; budget: number | null; deadline: string | null; description: string | null; advertiser_id: string | null; advertiser_name: string; created_at: string };
+  onClose: () => void;
+  advProfile: { display_name: string; avatar_url: string | null } | null;
+  brand: { brand_name: string; business_verified: boolean; business_category: string } | null;
+}) {
+  const navigate = useNavigate();
+  const pStatus = getProposalStatus(deal.status);
+  const statusCfg = proposalStatusConfig[pStatus];
+  const placement = placementFromTitle(deal.title);
+
+  const rawBrief = deal.description;
+  const hasBrief = rawBrief && rawBrief !== "0" && rawBrief.trim().length > 0;
+  const briefSnippet = hasBrief
+    ? (rawBrief!.length > 160 ? rawBrief!.slice(0, 160).trimEnd() + "…" : rawBrief)
+    : null;
+
+  return (
+    <Dialog open onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-[480px] p-0 gap-0">
+        <DialogHeader className="px-5 pt-5 pb-0">
+          <DialogTitle className="text-[15px] font-semibold text-foreground">Быстрый просмотр предложения</DialogTitle>
+        </DialogHeader>
+
+        <div className="px-5 py-4 space-y-4">
+          {/* Header: advertiser + status + budget + deadline */}
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden border border-border shrink-0">
+              {advProfile?.avatar_url
+                ? <img src={advProfile.avatar_url} alt="" className="h-full w-full object-cover" />
+                : <span className="text-sm font-bold text-primary">{(advProfile?.display_name || deal.advertiser_name).charAt(0)}</span>}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[15px] font-semibold text-foreground truncate">
+                  {brand?.brand_name || advProfile?.display_name || deal.advertiser_name}
+                </span>
+                {brand?.business_verified && <CheckCircle className="h-3.5 w-3.5 text-primary shrink-0" />}
+              </div>
+              <div className="flex items-center gap-2 mt-0.5">
+                <Badge variant="outline" className={cn("text-[10px] border font-medium", statusCfg.cls)}>{statusCfg.label}</Badge>
+                <span className="text-[13px] font-bold text-foreground">{(deal.budget || 0).toLocaleString()} ₽</span>
+                {deal.deadline && (
+                  <span className="text-[12px] text-muted-foreground flex items-center gap-1">
+                    <CalendarDays className="h-3 w-3" />
+                    до {new Date(deal.deadline).toLocaleDateString("ru-RU")}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Brief snippet */}
+          {briefSnippet ? (
+            <p className="text-[14px] text-foreground/80 leading-relaxed">«{briefSnippet}»</p>
+          ) : (
+            <p className="text-[13px] text-muted-foreground italic">Бриф не предоставлен</p>
+          )}
+
+          {/* Placement */}
+          {placement && (
+            <div className="flex items-center gap-1.5 text-[13px]">
+              <span className="text-muted-foreground">Тип:</span>
+              <span className="font-medium text-foreground">{placement}</span>
+            </div>
+          )}
+
+          {/* Marking */}
+          <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
+            <ShieldCheck className="h-3.5 w-3.5" />
+            <span>Маркировка через платформу</span>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-border">
+          <Button variant="ghost" size="sm" onClick={onClose}>Закрыть</Button>
+          <Button size="sm" className="gap-1.5" onClick={() => { onClose(); navigate(`/creator/proposals/${deal.id}`); }}>
+            Открыть переговоры
+            <ChevronRight className="h-3 w-3" />
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 function CreatorOffers() {
   const { user, profile } = useAuth();
@@ -663,17 +753,16 @@ function CreatorOffers() {
               const placement = placementFromTitle(deal.title);
               const isNew = pStatus === "new";
 
-              const briefHook = deal.description
-                ? deal.description.length > 80
-                  ? deal.description.slice(0, 80).trimEnd() + "…"
-                  : deal.description
+              const rawBrief = deal.description;
+              const briefHook = rawBrief && rawBrief !== "0" && rawBrief.trim().length > 0
+                ? rawBrief.length > 80 ? rawBrief.slice(0, 80).trimEnd() + "…" : rawBrief
                 : null;
 
               return (
                 <Card
                   key={deal.id}
                   className={`overflow-hidden transition-all cursor-pointer ${isLow ? "opacity-60 border-destructive/20" : isNew ? "border-primary/25 hover:border-primary/50 hover:shadow-md" : "hover:border-border hover:shadow-sm"}`}
-                  onClick={() => setSelectedDeal(deal)}
+                  onClick={() => navigate(`/creator/proposals/${deal.id}`)}
                 >
                   <CardContent className="p-4 space-y-2.5">
                     {/* Row 1: Brand/name + status pill */}
@@ -703,9 +792,20 @@ function CreatorOffers() {
                           )}
                         </div>
                       </div>
-                      <Badge variant="outline" className={`text-[11px] shrink-0 border font-medium ${statusCfg.cls}`}>
-                        {statusCfg.label}
-                      </Badge>
+                      <div className="flex items-center gap-1.5">
+                        <Badge variant="outline" className={`text-[11px] shrink-0 border font-medium ${statusCfg.cls}`}>
+                          {statusCfg.label}
+                        </Badge>
+                        {/* Quick preview eye icon */}
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={(e) => { e.stopPropagation(); setSelectedDeal(deal); }}>
+                              <Eye className="h-3.5 w-3.5 text-muted-foreground" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent><p className="text-xs">Быстрый просмотр</p></TooltipContent>
+                        </Tooltip>
+                      </div>
                     </div>
 
                     {/* Row 2: Summary — placement + budget + deadline */}
@@ -763,7 +863,7 @@ function CreatorOffers() {
                         <Button
                           size="sm"
                           className="h-8 text-[13px] font-medium"
-                          onClick={(e) => { e.stopPropagation(); setSelectedDeal(deal); }}
+                          onClick={(e) => { e.stopPropagation(); navigate(`/creator/proposals/${deal.id}`); }}
                         >
                           Открыть предложение
                         </Button>
@@ -772,7 +872,7 @@ function CreatorOffers() {
                           size="sm"
                           variant="secondary"
                           className="h-8 text-[13px] font-medium"
-                          onClick={(e) => { e.stopPropagation(); setSelectedDeal(deal); }}
+                          onClick={(e) => { e.stopPropagation(); navigate(`/creator/proposals/${deal.id}`); }}
                         >
                           Продолжить
                           <ChevronRight className="h-3 w-3 ml-1" />
@@ -786,13 +886,12 @@ function CreatorOffers() {
           </div>
         )}
 
-        {/* Detail view modal */}
+        {/* Quick Preview modal */}
         {selectedDeal && (
-          <IncomingProposalDetail
-            open={!!selectedDeal}
-            onClose={() => setSelectedDeal(null)}
+          <QuickPreviewModal
             deal={selectedDeal}
-            advertiserProfile={offerProfileMap.get(selectedDeal.advertiser_id || "") || null}
+            onClose={() => setSelectedDeal(null)}
+            advProfile={offerProfileMap.get(selectedDeal.advertiser_id || "") || null}
             brand={brandMap.get(selectedDeal.advertiser_id || "") || null}
           />
         )}
