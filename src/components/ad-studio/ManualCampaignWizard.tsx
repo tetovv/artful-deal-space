@@ -13,7 +13,7 @@ import { DatePickerField } from "@/components/ui/date-picker-field";
 import {
   ArrowLeft, ArrowRight, CheckCircle2, Image, Video, Link2, Type,
   CalendarDays, Wallet, ShieldCheck, AlertTriangle, Loader2, Lock,
-  MonitorPlay, Rss, LayoutGrid, Upload, Eye, Rocket,
+  MonitorPlay, Rss, LayoutGrid, Upload, Eye, Rocket, Save,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { Campaign, Placement } from "./CampaignManageView";
@@ -96,17 +96,24 @@ export function ManualCampaignWizard({ isVerified, ordConnected, onBack, onCompl
 
   // Track creative data URL for draft persistence
   const [creativeDataUrl, setCreativeDataUrl] = useState<string | null>(initialDraft?.creativeDataUrl ?? null);
-  // Flag: true while base64 conversion is in progress — prevents auto-save from overwriting with null
   const [convertingFile, setConvertingFile] = useState(false);
+  const [draftSavedToast, setDraftSavedToast] = useState(false);
 
   // Convert file to data URL when creative changes
+  const prevFileRef = useRef<File | null>(creativeFile);
   useEffect(() => {
-    if (creativeFile && !creativeDataUrl) {
+    // Only convert when the file actually changed
+    if (creativeFile && creativeFile !== prevFileRef.current) {
+      prevFileRef.current = creativeFile;
       setConvertingFile(true);
       fileToDataUrl(creativeFile)
         .then((url) => { if (url) setCreativeDataUrl(url); })
         .catch(() => { /* file too large or unreadable — skip persisting */ })
         .finally(() => setConvertingFile(false));
+    }
+    if (!creativeFile) {
+      prevFileRef.current = null;
+      setCreativeDataUrl(null);
     }
   }, [creativeFile]);
 
@@ -185,7 +192,7 @@ export function ManualCampaignWizard({ isVerified, ordConnected, onBack, onCompl
     setCreativeFile(file);
     setCreativeType(isVideo ? "video" : "image");
     setCreativePreview(URL.createObjectURL(file));
-    setCreativeDataUrl(null); // will be computed by useEffect
+    // creativeDataUrl will be set by the useEffect that watches creativeFile
     addAudit("Креатив загружен: " + file.name);
   };
 
@@ -649,10 +656,55 @@ export function ManualCampaignWizard({ isVerified, ordConnected, onBack, onCompl
               <ArrowLeft className="h-3.5 w-3.5" />
               {step === 1 ? "Отмена" : "Назад"}
             </Button>
-            <Button onClick={goNext} disabled={!canNext} className="text-[13px] gap-1.5">
-              Далее
-              <ArrowRight className="h-3.5 w-3.5" />
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  if (convertingFile) {
+                    toast.info("Файл ещё обрабатывается, подождите…");
+                    return;
+                  }
+                  const draft: CampaignDraft = {
+                    id: draftIdRef.current,
+                    updatedAt: new Date().toISOString(),
+                    step,
+                    placement,
+                    destinationUrl,
+                    utmParams,
+                    creativeTitle,
+                    creativeText,
+                    totalBudget,
+                    startDate: startDateVal?.toISOString() ?? null,
+                    endDate: endDateVal?.toISOString() ?? null,
+                    noEndDate,
+                    dailyCap,
+                    creativeFileName: creativeFile?.name ?? initialDraft?.creativeFileName ?? null,
+                    creativeFileSize: creativeFile?.size ?? initialDraft?.creativeFileSize ?? null,
+                    creativeType,
+                    creativeDataUrl,
+                  };
+                  try {
+                    saveDraft(draft);
+                    toast.success("Черновик сохранён");
+                  } catch {
+                    try {
+                      saveDraft({ ...draft, creativeDataUrl: null });
+                      toast.success("Черновик сохранён (без файла — недостаточно места)");
+                    } catch {
+                      toast.error("Не удалось сохранить черновик — хранилище переполнено");
+                    }
+                  }
+                }}
+                className="text-[13px] gap-1.5"
+              >
+                <Save className="h-3.5 w-3.5" />
+                Сохранить черновик
+              </Button>
+              <Button onClick={goNext} disabled={!canNext} className="text-[13px] gap-1.5">
+                Далее
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Button>
+            </div>
           </div>
         )}
       </div>
