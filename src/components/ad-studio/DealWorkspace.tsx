@@ -92,13 +92,26 @@ const placementTypeFromTitle = (title: string): string | null => {
 };
 
 /* ─── State-specific primary CTA — explicit next step, not generic ─── */
-function getPrimaryAction(status: string, _role?: string): { label: string; icon: any } | null {
+function getPrimaryAction(status: string, escrowState?: string): { label: string; icon: any; disabled?: boolean } | null {
+  // Escrow-state-aware overrides for payment states
+  if (status === "waiting_payment" || status === "accepted") {
+    if (!escrowState || escrowState === "WAITING_INVOICE") {
+      return { label: "Ожидаем счёт", icon: Clock, disabled: true };
+    }
+    if (escrowState === "INVOICE_SENT") {
+      return { label: "Зарезервировать средства", icon: CreditCard };
+    }
+    if (escrowState === "FUNDS_RESERVED" || escrowState === "ACTIVE_PERIOD") {
+      return { label: "Средства зарезервированы", icon: ShieldCheck, disabled: true };
+    }
+    if (escrowState === "PAYOUT_READY" || escrowState === "PAID_OUT") {
+      return null; // no header CTA needed
+    }
+  }
   switch (status) {
     case "pending": return null;
     case "needs_changes": return { label: "Смотреть изменения", icon: ScrollText };
-    case "accepted": return { label: "Зарезервировать средства", icon: CreditCard };
-    case "invoice_needed": return null; // waiting for creator to send invoice
-    case "waiting_payment": return { label: "Оплатить / Зарезервировать", icon: CreditCard };
+    case "invoice_needed": return { label: "Ожидаем счёт", icon: Clock, disabled: true };
     case "briefing": return { label: "Отправить черновик на проверку", icon: Send };
     case "in_progress": return { label: "Отправить черновик на проверку", icon: Upload };
     case "review": return { label: "Принять черновик", icon: CheckCircle2 };
@@ -125,7 +138,12 @@ function getNextStepHint(status: string): string | null {
 }
 
 /* ─── Short next-step hint for sidebar deal items ─── */
-function getNextStepShort(status: string): string | null {
+function getNextStepShort(status: string, escrowState?: string): string | null {
+  if ((status === "waiting_payment" || status === "accepted") && escrowState) {
+    if (escrowState === "FUNDS_RESERVED" || escrowState === "ACTIVE_PERIOD") return "Зарезервировано";
+    if (escrowState === "PAYOUT_READY") return "Готов к выплате";
+    if (escrowState === "PAID_OUT") return "Выплачено";
+  }
   switch (status) {
     case "pending": return "Ожидание автора";
     case "needs_changes": return "Встречное — решите";
@@ -1180,10 +1198,10 @@ function PaymentTab({ dealId }: { dealId: string }) {
                 </div>
               )}
             </div>
-            {latestInvoice.status === "pending" && (
+            {latestInvoice.status === "pending" && !payoutEscrow && (
               <Button className="w-full text-[14px] h-10 mt-1" onClick={() => payInvoice.mutate({ invoiceId: latestInvoice.id, dealId })} disabled={payInvoice.isPending}>
                 {payInvoice.isPending ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <CreditCard className="h-4 w-4 mr-1.5" />}
-                Оплатить / Зарезервировать средства
+                Зарезервировать средства
               </Button>
             )}
           </CardContent>
@@ -1466,9 +1484,16 @@ export function DealWorkspace() {
     { value: "payment", label: "Оплата", icon: CreditCard },
   ] : [];
 
+  // Escrow state for header CTA
+  const { data: headerEscrowItems = [] } = useDealEscrow(activeDeal?.id || "");
+  const headerEscrowState = useMemo(() => {
+    const item = headerEscrowItems.find((e: any) => e.escrow_state);
+    return item?.escrow_state as string | undefined;
+  }, [headerEscrowItems]);
+
   const dealStatus = activeDeal?.status as string | undefined;
   const isProposal = dealStatus ? ["pending", "needs_changes", "accepted", "rejected"].includes(dealStatus) : false;
-  const primaryAction = dealStatus ? getPrimaryAction(dealStatus) : null;
+  const primaryAction = dealStatus ? getPrimaryAction(dealStatus, headerEscrowState) : null;
   const nextStepHint = dealStatus ? getNextStepHint(dealStatus) : null;
   const completedMs = activeDeal?.milestones.filter((m) => m.completed).length || 0;
   const totalMs = activeDeal?.milestones.length || 0;
@@ -1548,13 +1573,20 @@ export function DealWorkspace() {
 
               <div className="flex items-center gap-1.5 shrink-0">
                 {primaryAction ? (
-                  <Button size="sm" className="text-[14px] h-9" onClick={() => {
-                    if ((activeDeal.status as string) === "needs_changes") setActiveSubTab("terms");
-                    if ((activeDeal.status as string) === "accepted" || (activeDeal.status as string) === "waiting_payment") setActiveSubTab("payment");
-                  }}>
-                    <primaryAction.icon className="h-4 w-4 mr-1.5" />
-                    {primaryAction.label}
-                  </Button>
+                  primaryAction.disabled ? (
+                    <Badge variant="outline" className="text-[13px] py-1 px-2.5 border-muted-foreground/20 text-muted-foreground">
+                      <primaryAction.icon className="h-3.5 w-3.5 mr-1" />
+                      {primaryAction.label}
+                    </Badge>
+                  ) : (
+                    <Button size="sm" className="text-[14px] h-9" onClick={() => {
+                      if ((activeDeal.status as string) === "needs_changes") setActiveSubTab("terms");
+                      if ((activeDeal.status as string) === "accepted" || (activeDeal.status as string) === "waiting_payment") setActiveSubTab("payment");
+                    }}>
+                      <primaryAction.icon className="h-4 w-4 mr-1.5" />
+                      {primaryAction.label}
+                    </Button>
+                  )
                 ) : isProposal ? (
                   <Badge variant="outline" className="text-[13px] py-1 px-2.5 border-warning/30 text-warning">
                     <Clock className="h-3.5 w-3.5 mr-1" />
