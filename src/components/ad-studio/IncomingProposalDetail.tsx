@@ -253,6 +253,12 @@ export function IncomingProposalDetail({ open, onClose, deal, advertiserProfile,
   };
 
   const isPending = deal.status === "pending";
+  const isNeedsChanges = deal.status === "needs_changes";
+
+  // Determine if this is a counter from advertiser (creator needs to respond)
+  const latestCreatedBy = latestTerms ? (latestTerms as any).created_by : null;
+  const advertiserCountered = isNeedsChanges && latestCreatedBy === deal.advertiser_id;
+  const canRespond = isPending || advertiserCountered;
 
   return (
     <>
@@ -264,6 +270,21 @@ export function IncomingProposalDetail({ open, onClose, deal, advertiserProfile,
 
           <ScrollArea className="max-h-[calc(90vh-80px)]">
             <div className="px-6 pb-6 space-y-5">
+
+              {/* ── Advertiser counter-offer banner ── */}
+              {advertiserCountered && (
+                <div className="bg-warning/10 border border-warning/30 rounded-lg p-4 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <ArrowLeftRight className="h-4 w-4 text-warning" />
+                    <span className="text-[14px] font-semibold text-foreground">
+                      Рекламодатель предложил изменения (v{(latestTerms as any)?.version || "?"})
+                    </span>
+                  </div>
+                  {termsFields?.counterMessage && (
+                    <p className="text-[13px] text-foreground/80 bg-background/50 rounded-md px-3 py-2">«{termsFields.counterMessage}»</p>
+                  )}
+                </div>
+              )}
 
               {/* ── Section 1: Header ── */}
               <div className="space-y-3">
@@ -288,7 +309,7 @@ export function IncomingProposalDetail({ open, onClose, deal, advertiserProfile,
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <Badge variant="outline" className={cn("text-[11px] border", st.cls)}>{st.label}</Badge>
-                    {isPending && (
+                    {canRespond && (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -463,7 +484,7 @@ export function IncomingProposalDetail({ open, onClose, deal, advertiserProfile,
           </ScrollArea>
 
           {/* ── Footer with max 2 actions ── */}
-          {isPending && !showCounterForm && (
+          {canRespond && !showCounterForm && (
             <div className="flex items-center justify-end gap-2.5 px-6 py-3.5 border-t border-border bg-card">
               <Button
                 variant="outline"
