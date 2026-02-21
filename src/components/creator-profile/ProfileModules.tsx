@@ -1,11 +1,13 @@
 import {
   Trophy, Briefcase, BarChart3, FileText, Handshake, Building2, Globe,
   ShieldCheck, Tag, Mail, Video, FileEdit, Mic, AlertCircle, Eye,
+  MapPin, Users,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ContentCard } from "@/components/content/ContentCard";
+import type { CreatorAnalyticsData } from "@/hooks/useCreatorAnalytics";
 
 const CATEGORY_LABELS: Record<string, string> = {
   ecommerce: "E-commerce", saas: "SaaS / IT", finance: "Финансы",
@@ -183,15 +185,55 @@ export const PortfolioSection = ({ items, videoViewCounts = {}, postImpressionCo
   );
 };
 
-/* ─── Audience Card ─── */
-export const AudienceCard = ({ connected = false }: { connected?: boolean }) => (
+/* ─── Audience Card (real analytics) ─── */
+export const AudienceCard = ({ connected = false, data }: { connected?: boolean; data?: CreatorAnalyticsData | null }) => (
   <section className="space-y-3">
     <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
       <BarChart3 className="h-4 w-4 text-muted-foreground" /> Аудитория
     </h2>
-    {connected ? (
-      <div className="rounded-xl border border-border bg-card p-5">
-        <p className="text-xs text-muted-foreground">Данные об аудитории будут здесь</p>
+    {connected && data ? (
+      <div className="rounded-xl border border-border bg-card p-5 space-y-4">
+        {/* Top Geo */}
+        {data.geo && data.geo.length > 0 && (
+          <div className="space-y-1.5">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Топ регионы</p>
+            <div className="flex flex-wrap gap-2">
+              {data.geo.slice(0, 3).map((g) => (
+                <span key={g.region} className="inline-flex items-center gap-1.5 text-[12px] bg-muted/40 rounded-md px-2 py-1">
+                  <MapPin className="h-3 w-3 text-muted-foreground" />
+                  <span className="text-foreground font-medium">{g.region}</span>
+                  <span className="text-muted-foreground">{g.percent}%</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+        {/* Age & Gender */}
+        {data.demographics?.age_buckets && data.demographics.age_buckets.length > 0 && (
+          <div className="space-y-1.5">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Возраст</p>
+            <div className="flex flex-wrap gap-2">
+              {data.demographics.age_buckets.slice(0, 3).map((a) => (
+                <span key={a.label} className="inline-flex items-center gap-1 text-[12px] bg-muted/40 rounded-md px-2 py-1">
+                  <Users className="h-3 w-3 text-muted-foreground" />
+                  <span className="text-foreground font-medium">{a.label}</span>
+                  <span className="text-muted-foreground">{a.percent}%</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+        {/* Interests */}
+        {data.demographics?.interests && data.demographics.interests.length > 0 && (
+          <div className="space-y-1.5">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Интересы</p>
+            <div className="flex flex-wrap gap-1.5">
+              {data.demographics.interests.slice(0, 6).map((i) => (
+                <Badge key={i} variant="secondary" className="text-[11px]">{i}</Badge>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     ) : (
       <div className="flex items-center gap-2 rounded-lg border border-border/50 bg-muted/20 px-4 py-3">

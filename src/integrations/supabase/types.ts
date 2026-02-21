@@ -468,11 +468,39 @@ export type Database = {
         }
         Relationships: []
       }
+      creator_analytics: {
+        Row: {
+          creator_id: string
+          demographics: Json | null
+          geo: Json | null
+          id: string
+          platform_distribution: Json | null
+          updated_at: string
+        }
+        Insert: {
+          creator_id: string
+          demographics?: Json | null
+          geo?: Json | null
+          id?: string
+          platform_distribution?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          creator_id?: string
+          demographics?: Json | null
+          geo?: Json | null
+          id?: string
+          platform_distribution?: Json | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       creator_offers: {
         Row: {
           created_at: string
           creator_id: string
           id: string
+          included_deliverables: string[] | null
           is_active: boolean
           offer_type: string
           price: number
@@ -483,6 +511,7 @@ export type Database = {
           created_at?: string
           creator_id: string
           id?: string
+          included_deliverables?: string[] | null
           is_active?: boolean
           offer_type: string
           price?: number
@@ -493,6 +522,7 @@ export type Database = {
           created_at?: string
           creator_id?: string
           id?: string
+          included_deliverables?: string[] | null
           is_active?: boolean
           offer_type?: string
           price?: number
@@ -675,6 +705,78 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      deal_proposals: {
+        Row: {
+          acceptance_criteria: string | null
+          advertiser_id: string
+          attachments: Json | null
+          brief_text: string | null
+          budget_max: number | null
+          budget_min: number | null
+          budget_value: number | null
+          created_at: string
+          creator_id: string
+          cta: string | null
+          id: string
+          last_opened_at: string | null
+          offer_id: string | null
+          ord_responsibility: string | null
+          placement_type: string
+          publish_end: string | null
+          publish_start: string | null
+          restrictions: string | null
+          revisions_count: number | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          acceptance_criteria?: string | null
+          advertiser_id: string
+          attachments?: Json | null
+          brief_text?: string | null
+          budget_max?: number | null
+          budget_min?: number | null
+          budget_value?: number | null
+          created_at?: string
+          creator_id: string
+          cta?: string | null
+          id?: string
+          last_opened_at?: string | null
+          offer_id?: string | null
+          ord_responsibility?: string | null
+          placement_type?: string
+          publish_end?: string | null
+          publish_start?: string | null
+          restrictions?: string | null
+          revisions_count?: number | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          acceptance_criteria?: string | null
+          advertiser_id?: string
+          attachments?: Json | null
+          brief_text?: string | null
+          budget_max?: number | null
+          budget_min?: number | null
+          budget_value?: number | null
+          created_at?: string
+          creator_id?: string
+          cta?: string | null
+          id?: string
+          last_opened_at?: string | null
+          offer_id?: string | null
+          ord_responsibility?: string | null
+          placement_type?: string
+          publish_end?: string | null
+          publish_start?: string | null
+          restrictions?: string | null
+          revisions_count?: number | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       deal_terms: {
         Row: {
@@ -1723,6 +1825,27 @@ export type Database = {
           },
         ]
       }
+      video_views_daily: {
+        Row: {
+          creator_id: string
+          date: string
+          id: string
+          views_30pct_count: number
+        }
+        Insert: {
+          creator_id: string
+          date?: string
+          id?: string
+          views_30pct_count?: number
+        }
+        Update: {
+          creator_id?: string
+          date?: string
+          id?: string
+          views_30pct_count?: number
+        }
+        Relationships: []
+      }
       view_history: {
         Row: {
           content_id: string
@@ -1787,6 +1910,18 @@ export type Database = {
           user_id: string
         }[]
       }
+      get_creator_avg_views_30pct: {
+        Args: { p_creator_id: string; p_limit?: number }
+        Returns: number
+      }
+      get_creators_avg_views_30pct: {
+        Args: { p_creator_ids: string[] }
+        Returns: {
+          avg_views: number
+          creator_id: string
+          video_count: number
+        }[]
+      }
       get_post_impressions_batch: {
         Args: { p_post_ids: string[] }
         Returns: {
@@ -1802,6 +1937,13 @@ export type Database = {
         Args: { p_video_ids: string[] }
         Returns: {
           video_id: string
+          view_count: number
+        }[]
+      }
+      get_video_views_trend: {
+        Args: { p_creator_id: string; p_days?: number }
+        Returns: {
+          day: string
           view_count: number
         }[]
       }
