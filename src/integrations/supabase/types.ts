@@ -1614,6 +1614,41 @@ export type Database = {
         }
         Relationships: []
       }
+      video_views: {
+        Row: {
+          created_at: string
+          date_bucket: string
+          id: string
+          video_id: string
+          viewer_user_id: string
+          watched_percent: number
+        }
+        Insert: {
+          created_at?: string
+          date_bucket?: string
+          id?: string
+          video_id: string
+          viewer_user_id: string
+          watched_percent?: number
+        }
+        Update: {
+          created_at?: string
+          date_bucket?: string
+          id?: string
+          video_id?: string
+          viewer_user_id?: string
+          watched_percent?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "video_views_video_id_fkey"
+            columns: ["video_id"]
+            isOneToOne: false
+            referencedRelation: "content_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       view_history: {
         Row: {
           content_id: string
@@ -1676,6 +1711,17 @@ export type Database = {
           contact_email: string
           ord_verified: boolean
           user_id: string
+        }[]
+      }
+      get_video_view_count_30pct: {
+        Args: { p_video_id: string }
+        Returns: number
+      }
+      get_video_views_batch: {
+        Args: { p_video_ids: string[] }
+        Returns: {
+          video_id: string
+          view_count: number
         }[]
       }
       has_role: {

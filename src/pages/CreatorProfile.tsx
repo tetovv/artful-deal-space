@@ -5,8 +5,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { creators, contentItems } from "@/data/mockData";
 import { ArrowLeft } from "lucide-react";
 import { PageTransition } from "@/components/layout/PageTransition";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { toast } from "sonner";
+import { useVideoViewCounts } from "@/hooks/useVideoViews";
 
 import { ProfileHero } from "@/components/creator-profile/ProfileHero";
 import { ProfileActionCard } from "@/components/creator-profile/ProfileActionCard";
@@ -157,11 +158,7 @@ const CreatorProfile = () => {
 
   /* ── Derived ── */
 
-  if (isLoading) {
-    return <div className="p-8 text-muted-foreground animate-pulse">Загрузка профиля...</div>;
-  }
-
-  const profileData = mockCreator
+  const profileData = isLoading ? null : mockCreator
     ? {
         avatar: mockCreator.avatar, name: mockCreator.displayName,
         verified: mockCreator.verified, bio: mockCreator.bio,
@@ -179,10 +176,6 @@ const CreatorProfile = () => {
       }
     : null;
 
-  if (!profileData) {
-    return <div className="p-8 text-muted-foreground">Автор не найден</div>;
-  }
-
   const contentToShow = mockCreator
     ? contentItems.filter((c) => c.creatorId === mockCreator.userId)
     : dbContent.map((item) => ({
@@ -198,6 +191,18 @@ const CreatorProfile = () => {
   const turnaroundDays = creatorOffers.length > 0
     ? Math.max(...creatorOffers.map((o) => o.turnaround_days))
     : null;
+
+  // 30% video view counts
+  const videoIds = useMemo(() => contentToShow.filter(c => c.type === "video").map(c => c.id), [contentToShow]);
+  const { data: videoViewCounts = {} } = useVideoViewCounts(videoIds);
+
+  if (isLoading) {
+    return <div className="p-8 text-muted-foreground animate-pulse">Загрузка профиля...</div>;
+  }
+
+  if (!profileData) {
+    return <div className="p-8 text-muted-foreground">Автор не найден</div>;
+  }
 
   return (
     <PageTransition>
@@ -224,7 +229,7 @@ const CreatorProfile = () => {
               onDeal={!isOwnProfile ? () => setDealSent(true) : undefined}
             />
 
-            <PortfolioSection items={contentToShow} />
+            <PortfolioSection items={contentToShow} videoViewCounts={videoViewCounts} />
 
             <AudienceCard connected={false} />
 

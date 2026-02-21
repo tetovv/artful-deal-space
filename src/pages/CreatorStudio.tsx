@@ -18,6 +18,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useContentItems } from "@/hooks/useDbData";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
+import { useVideoViewCounts } from "@/hooks/useVideoViews";
+import { Tooltip as UiTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useMemo, useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
@@ -148,6 +150,10 @@ const CreatorStudio = () => {
 
   const allItems = (dbItems && dbItems.length > 0 ? dbItems : contentItems).map(mapItem);
   const myItems = allItems.filter((i) => i.creatorId === user?.id || i.creatorId === "u1");
+
+  // Fetch 30%-watched view counts for video items
+  const videoIds = useMemo(() => myItems.filter(i => i.type === "video").map(i => i.id), [myItems]);
+  const { data: viewCounts30 = {} } = useVideoViewCounts(videoIds);
 
   /* deals */
   const { data: dbDeals = [] } = useQuery({
@@ -475,8 +481,18 @@ const CreatorStudio = () => {
                             </div>
                             <div className="flex items-center gap-3 text-xs text-muted-foreground">
                               <span className="flex items-center gap-1"><Eye className="h-3 w-3" />{fmtNum(item.views)}</span>
+                              {item.type === "video" && (
+                                <UiTooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="flex items-center gap-1 text-primary/80 cursor-help">
+                                      <Eye className="h-3 w-3" />{fmtNum(viewCounts30[item.id] || 0)}
+                                      <span className="text-[10px]">(30%)</span>
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent><p className="text-xs">Просмотры: пользователь посмотрел ≥30% видео</p></TooltipContent>
+                                </UiTooltip>
+                              )}
                               <span className="flex items-center gap-1"><Heart className="h-3 w-3" />{fmtNum(item.likes)}</span>
-                              <span className="flex items-center gap-1 text-destructive/70"><ThumbsDown className="h-3 w-3" />{fmtNum((item as any).dislikes)}</span>
                               {item.price ? <span className="font-medium text-primary">₽{item.price.toLocaleString()}</span> : <span className="text-success">Бесплатно</span>}
                               <span className="hidden sm:inline text-muted-foreground/60">{new Date(item.createdAt).toLocaleDateString("ru")}</span>
                             </div>
