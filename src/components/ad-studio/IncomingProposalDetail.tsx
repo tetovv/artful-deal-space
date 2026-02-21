@@ -20,9 +20,10 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   CheckCircle2, MoreVertical, Download, FileText, Shield, CalendarDays,
-  Video, FileEdit, Mic, Loader2, Send, ArrowLeftRight, XCircle,
+  Video, FileEdit, Mic, Loader2, Send, ArrowLeftRight, XCircle, Paperclip,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -263,15 +264,15 @@ export function IncomingProposalDetail({ open, onClose, deal, advertiserProfile,
   return (
     <>
       <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-        <DialogContent className="max-w-[720px] max-h-[90vh] p-0 gap-0">
+        <DialogContent className="max-w-[720px] max-h-[90vh] p-0 gap-0 flex flex-col">
           <DialogHeader className="px-6 pt-5 pb-0">
             <DialogTitle className="text-lg sr-only">Детали предложения</DialogTitle>
           </DialogHeader>
 
-          <ScrollArea className="max-h-[calc(90vh-80px)]">
+          <ScrollArea className="flex-1 min-h-0">
             <div className="px-6 pb-6 space-y-5">
 
-              {/* ── Advertiser counter-offer banner ── */}
+              {/* ── Counter-offer banner ── */}
               {advertiserCountered && (
                 <div className="bg-warning/10 border border-warning/30 rounded-lg p-4 space-y-2">
                   <div className="flex items-center gap-2">
@@ -286,7 +287,7 @@ export function IncomingProposalDetail({ open, onClose, deal, advertiserProfile,
                 </div>
               )}
 
-              {/* ── Section 1: Header ── */}
+              {/* ── 1. Header ── */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3 min-w-0">
@@ -297,7 +298,7 @@ export function IncomingProposalDetail({ open, onClose, deal, advertiserProfile,
                     </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-[15px] font-semibold text-foreground truncate">
+                        <span className="text-[16px] font-semibold text-foreground truncate">
                           {advertiserProfile?.display_name || deal.advertiser_name}
                         </span>
                         {brand?.business_verified && <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />}
@@ -308,7 +309,7 @@ export function IncomingProposalDetail({ open, onClose, deal, advertiserProfile,
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <Badge variant="outline" className={cn("text-[11px] border", st.cls)}>{st.label}</Badge>
+                    <Badge variant="outline" className={cn("text-[11px] border font-medium", st.cls)}>{st.label}</Badge>
                     {canRespond && (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -330,13 +331,19 @@ export function IncomingProposalDetail({ open, onClose, deal, advertiserProfile,
                   </div>
                 </div>
 
-                {/* Budget + deadline row */}
-                <div className="flex items-center gap-4 text-sm">
+                {/* Budget + deadline + attachments */}
+                <div className="flex items-center gap-4 text-sm flex-wrap">
                   <span className="font-bold text-foreground text-lg">{(deal.budget || 0).toLocaleString()} ₽</span>
                   {deal.deadline && (
-                    <span className="text-muted-foreground flex items-center gap-1">
+                    <span className="text-foreground/70 flex items-center gap-1">
                       <CalendarDays className="h-3.5 w-3.5" />
                       до {new Date(deal.deadline).toLocaleDateString("ru-RU")}
+                    </span>
+                  )}
+                  {files.length > 0 && (
+                    <span className="text-foreground/70 flex items-center gap-1">
+                      <Paperclip className="h-3.5 w-3.5" />
+                      {files.length}
                     </span>
                   )}
                 </div>
@@ -344,33 +351,91 @@ export function IncomingProposalDetail({ open, onClose, deal, advertiserProfile,
 
               <Separator />
 
-              {/* ── Section 2: Brief content ── */}
-              <div className="space-y-2">
-                <h3 className="text-[14px] font-semibold text-foreground">Бриф</h3>
-                <p className="text-[14px] text-foreground/90 leading-relaxed whitespace-pre-wrap">
-                  {deal.description || termsFields?.brief || "Нет описания"}
-                </p>
-              </div>
-
-              <Separator />
-
-              {/* ── Section 3: Placement details ── */}
+              {/* ── 2. Brief ── */}
               <div className="space-y-3">
-                <h3 className="text-[14px] font-semibold text-foreground">Детали размещения</h3>
-                <div className="grid grid-cols-2 gap-x-6 gap-y-2">
-                  <DetailRow label="Тип размещения" value={
-                    <span className="flex items-center gap-1.5">
-                      <PlacementIcon className="h-3.5 w-3.5 text-primary" />
-                      {placement || "—"}
-                    </span>
-                  } />
-                  <DetailRow label="Платформа" value={termsFields?.platform || "—"} />
-                  <DetailRow label="Кол-во правок" value={termsFields?.revisions || "Не указано"} />
-                  <DetailRow label="Критерии приёмки" value={termsFields?.acceptanceCriteria || "Не указано"} />
-                </div>
+                <h3 className="text-[14px] font-semibold text-foreground">Бриф</h3>
+                {(deal.description || termsFields?.brief) ? (
+                  <div className="space-y-2.5">
+                    <p className="text-[14px] text-foreground/90 leading-relaxed whitespace-pre-wrap">
+                      {deal.description || termsFields?.brief}
+                    </p>
+                    {termsFields?.cta && (
+                      <div className="rounded-lg bg-primary/5 border border-primary/15 px-3 py-2">
+                        <span className="text-[12px] font-medium text-muted-foreground block mb-0.5">CTA</span>
+                        <span className="text-[13px] text-foreground">{termsFields.cta}</span>
+                      </div>
+                    )}
+                    {termsFields?.restrictions && (
+                      <div className="rounded-lg bg-destructive/5 border border-destructive/15 px-3 py-2">
+                        <span className="text-[12px] font-medium text-muted-foreground block mb-0.5">Ограничения</span>
+                        <span className="text-[13px] text-foreground">{termsFields.restrictions}</span>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-[13px] text-muted-foreground italic">Текст брифа не предоставлен</p>
+                )}
               </div>
 
-              {/* ── Section 4: Files ── */}
+              {/* ── 3. Placement details (compact, hide empty) ── */}
+              {(placement || termsFields?.revisions || termsFields?.acceptanceCriteria) && (
+                <>
+                  <Separator />
+                  <div className="space-y-2">
+                    <h3 className="text-[14px] font-semibold text-foreground">Размещение</h3>
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+                      {placement && (
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-[12px] text-muted-foreground">Тип</span>
+                          <span className="text-[14px] font-medium text-foreground flex items-center gap-1.5">
+                            <PlacementIcon className="h-3.5 w-3.5 text-primary" />
+                            {placement}
+                          </span>
+                        </div>
+                      )}
+                      {termsFields?.platform && (
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-[12px] text-muted-foreground">Платформа</span>
+                          <span className="text-[14px] font-medium text-foreground">{termsFields.platform}</span>
+                        </div>
+                      )}
+                      {termsFields?.revisions && (
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-[12px] text-muted-foreground">Правки</span>
+                          <span className="text-[14px] font-medium text-foreground">{termsFields.revisions}</span>
+                        </div>
+                      )}
+                      {termsFields?.acceptanceCriteria && (
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-[12px] text-muted-foreground">Критерии приёмки</span>
+                          <span className="text-[14px] font-medium text-foreground">{termsFields.acceptanceCriteria}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* ── 4. Marking ── */}
+              <Separator />
+              <div className="flex items-center gap-2">
+                <Shield className="h-4 w-4 text-primary shrink-0" />
+                <span className="text-[13px] text-foreground/80">
+                  {termsFields?.markingResponsibility === "Рекламодатель"
+                    ? "Маркировку обеспечивает рекламодатель"
+                    : "Маркировка обеспечивается платформой"}
+                </span>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="text-muted-foreground cursor-help text-[11px] underline underline-offset-2 decoration-dotted">?</span>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-[220px]">
+                    <p className="text-xs">Платформа автоматически регистрирует креативы в ОРД и добавляет маркировку «Реклама» с ERID.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+
+              {/* ── 5. Attachments ── */}
               {files.length > 0 && (
                 <>
                   <Separator />
@@ -401,21 +466,6 @@ export function IncomingProposalDetail({ open, onClose, deal, advertiserProfile,
                 </>
               )}
 
-              <Separator />
-
-              {/* ── Section 5: Marking ── */}
-              <div className="space-y-2">
-                <h3 className="text-[14px] font-semibold text-foreground">Маркировка</h3>
-                <div className="flex items-center gap-2 bg-muted/40 rounded-lg px-3 py-2.5">
-                  <Shield className="h-4 w-4 text-primary shrink-0" />
-                  <span className="text-[13px] text-foreground">
-                    {termsFields?.markingResponsibility === "Рекламодатель"
-                      ? "Маркировку обеспечивает рекламодатель"
-                      : "Маркировка обеспечивается платформой"}
-                  </span>
-                </div>
-              </div>
-
               {/* ── Counter-offer form ── */}
               {showCounterForm && (
                 <>
@@ -423,7 +473,7 @@ export function IncomingProposalDetail({ open, onClose, deal, advertiserProfile,
                   <div className="space-y-3 bg-muted/20 rounded-xl p-4 border border-border">
                     <h3 className="text-[14px] font-semibold text-foreground flex items-center gap-2">
                       <ArrowLeftRight className="h-4 w-4 text-primary" />
-                      Предложить изменения
+                      Встречное предложение
                     </h3>
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1">
@@ -459,12 +509,7 @@ export function IncomingProposalDetail({ open, onClose, deal, advertiserProfile,
                       />
                     </div>
                     <div className="flex items-center gap-2 justify-end">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 text-[13px]"
-                        onClick={() => setShowCounterForm(false)}
-                      >
+                      <Button variant="ghost" size="sm" className="h-8 text-[13px]" onClick={() => setShowCounterForm(false)}>
                         Отмена
                       </Button>
                       <Button
@@ -483,7 +528,7 @@ export function IncomingProposalDetail({ open, onClose, deal, advertiserProfile,
             </div>
           </ScrollArea>
 
-          {/* ── Footer with max 2 actions ── */}
+          {/* ── Footer: max 2 visible actions ── */}
           {canRespond && !showCounterForm && (
             <div className="flex items-center justify-end gap-2.5 px-6 py-3.5 border-t border-border bg-card">
               <Button
@@ -493,7 +538,7 @@ export function IncomingProposalDetail({ open, onClose, deal, advertiserProfile,
                 onClick={() => setShowCounterForm(true)}
               >
                 <ArrowLeftRight className="h-4 w-4" />
-                Предложить изменения
+                Встречное предложение
               </Button>
               <Button
                 size="sm"
@@ -509,7 +554,7 @@ export function IncomingProposalDetail({ open, onClose, deal, advertiserProfile,
         </DialogContent>
       </Dialog>
 
-      {/* ── Reject confirmation dialog ── */}
+      {/* ── Reject confirmation ── */}
       <AlertDialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -541,15 +586,5 @@ export function IncomingProposalDetail({ open, onClose, deal, advertiserProfile,
         </AlertDialogContent>
       </AlertDialog>
     </>
-  );
-}
-
-/* ─── Small helper component ─── */
-function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-[12px] text-muted-foreground">{label}</span>
-      <span className="text-[14px] font-medium text-foreground">{typeof value === "string" ? value : value}</span>
-    </div>
   );
 }
