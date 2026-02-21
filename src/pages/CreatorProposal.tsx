@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useDealTerms, useDealFiles, useDownloadDealFile, useUploadDealFile, useDealAuditLog, useDealEscrow, useLogDealEvent } from "@/hooks/useDealData";
+import { useDealInvoices, useCreateInvoice, useRealtimeInvoices } from "@/hooks/useDealInvoices";
 import { useRealtimeMessages } from "@/hooks/useRealtimeMessages";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -50,6 +51,8 @@ import { DatePickerField } from "@/components/ui/date-picker-field";
 const statusConfig: Record<string, { label: string; cls: string }> = {
   pending: { label: "Новое", cls: "bg-warning/15 text-warning border-warning/30" },
   briefing: { label: "Принято", cls: "bg-green-500/10 text-green-500 border-green-500/30" },
+  invoice_needed: { label: "Ожидает счёта", cls: "bg-warning/15 text-warning border-warning/30" },
+  waiting_payment: { label: "Ожидает оплаты", cls: "bg-warning/15 text-warning border-warning/30" },
   in_progress: { label: "В работе", cls: "bg-primary/15 text-primary border-primary/30" },
   review: { label: "На проверке", cls: "bg-accent/15 text-accent-foreground border-accent/30" },
   needs_changes: { label: "Ожидает ответа", cls: "bg-accent/15 text-accent-foreground border-accent/30" },
@@ -154,9 +157,12 @@ export default function CreatorProposal() {
   const { data: files = [] } = useDealFiles(deal?.id || "");
   const { data: auditLog = [] } = useDealAuditLog(deal?.id || "");
   const { data: escrowItems = [] } = useDealEscrow(deal?.id || "");
+  const { data: invoices = [] } = useDealInvoices(deal?.id || "");
+  const createInvoice = useCreateInvoice();
   const downloadFile = useDownloadDealFile();
 
   useRealtimeMessages(deal?.id || "");
+  useRealtimeInvoices(deal?.id || "");
 
   const { data: chatMessages = [], refetch: refetchMessages } = useQuery({
     queryKey: ["deal-chat", deal?.id],
@@ -185,6 +191,10 @@ export default function CreatorProposal() {
   const [submittingCounter, setSubmittingCounter] = useState(false);
   const [showCounterPreview, setShowCounterPreview] = useState(false);
   const [showFileRequestModal, setShowFileRequestModal] = useState(false);
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [invoiceAmount, setInvoiceAmount] = useState("");
+  const [invoiceComment, setInvoiceComment] = useState("");
+  const [invoiceDueDate, setInvoiceDueDate] = useState<Date | undefined>(undefined);
 
   /* Chat state */
   const [chatInput, setChatInput] = useState("");
@@ -220,8 +230,11 @@ export default function CreatorProposal() {
 
   const isPending = deal?.status === "pending";
   const isNeedsChanges = deal?.status === "needs_changes";
-  const isAccepted = deal?.status === "briefing" || deal?.status === "in_progress" || deal?.status === "completed" || deal?.status === "review";
+  const isInvoiceNeeded = deal?.status === "invoice_needed";
+  const isWaitingPayment = deal?.status === "waiting_payment";
+  const isAccepted = deal?.status === "briefing" || deal?.status === "in_progress" || deal?.status === "completed" || deal?.status === "review" || isInvoiceNeeded || isWaitingPayment;
   const isRejected = deal?.status === "rejected" || deal?.status === "disputed";
+  const isPaid = escrowItems.some((e: any) => e.status === "reserved" || e.status === "released");
   const latestCreatedBy = latestTerms ? (latestTerms as any).created_by : null;
   const advertiserCountered = isNeedsChanges && latestCreatedBy === deal?.advertiser_id;
   const creatorCountered = isNeedsChanges && latestCreatedBy === user?.id;
@@ -251,16 +264,16 @@ export default function CreatorProposal() {
     if (!user || !deal) return;
     setAccepting(true);
     try {
-      await supabase.from("deals").update({ status: "briefing" }).eq("id", deal.id);
+      await supabase.from("deals").update({ status: "invoice_needed" }).eq("id", deal.id);
       if (latestTerms) {
         await supabase.from("deal_terms_acceptance").insert({ terms_id: (latestTerms as any).id, user_id: user.id });
         await supabase.from("deal_terms").update({ status: "accepted" }).eq("id", (latestTerms as any).id);
       }
       const creatorName = profile?.display_name || "Автор";
-      await supabase.from("messages").insert({ deal_id: deal.id, sender_id: user.id, sender_name: creatorName, content: "Предложение принято. Готов(а) к работе!" });
-      await supabase.from("deal_audit_log").insert({ deal_id: deal.id, user_id: user.id, action: "Автор принял предложение", category: "terms" });
+      await supabase.from("messages").insert({ deal_id: deal.id, sender_id: user.id, sender_name: creatorName, content: "Предложение принято. Ожидайте счёт на оплату." });
+      await supabase.from("deal_audit_log").insert({ deal_id: deal.id, user_id: user.id, action: "Автор принял предложение. Ожидание выставления счёта.", category: "terms" });
       if (deal.advertiser_id) {
-        await supabase.from("notifications").insert({ user_id: deal.advertiser_id, title: "Предложение принято", message: `${creatorName} принял(а) ваше предложение «${deal.title}»`, type: "deal", link: "/ad-studio" });
+        await supabase.from("notifications").insert({ user_id: deal.advertiser_id, title: "Предложение принято", message: `${creatorName} принял(а) ваше предложение «${deal.title}». Ожидайте счёт.`, type: "deal", link: "/ad-studio" });
       }
       toast.success("Предложение принято!");
       qc.invalidateQueries({ queryKey: ["creator-incoming-deals"] });
@@ -476,7 +489,8 @@ export default function CreatorProposal() {
     if (canRespond && advertiserCountered) return "Рекламодатель предложил новые условия — ответьте через «Принять решение»";
     if (canRespond) return "Рассмотрите условия и примите решение";
     if (creatorCountered) return "Ожидание ответа рекламодателя на ваше встречное предложение";
-    if (isWaitingInputs) return "Запросите у рекламодателя недостающие материалы или начните работу";
+    if (isInvoiceNeeded) return "Выставите счёт рекламодателю для начала работы";
+    if (isWaitingPayment) return "Ожидание оплаты рекламодателем";
     if (isInProgress) return "Загрузите черновик и отправьте на проверку";
     if (deal.status === "review") return "Черновик на проверке у рекламодателя";
     return null;
@@ -530,11 +544,21 @@ export default function CreatorProposal() {
                   </DropdownMenu>
                 )}
 
-                {/* Post-accept: Start work */}
-                {isWaitingInputs && !canRespond && (
-                  <Button size="sm" className="text-[14px] h-9" onClick={handleStartWork}>
-                    <PlayCircle className="h-4 w-4 mr-1.5" /> Начать работу
+                {/* Post-accept: Send invoice */}
+                {isInvoiceNeeded && (
+                  <Button size="sm" className="text-[14px] h-9" onClick={() => {
+                    setInvoiceAmount(String(deal.budget || ""));
+                    setShowInvoiceModal(true);
+                  }}>
+                    <FileText className="h-4 w-4 mr-1.5" /> Отправить счёт
                   </Button>
+                )}
+
+                {/* Waiting payment badge */}
+                {isWaitingPayment && (
+                  <Badge variant="outline" className="text-[13px] py-1 px-2.5 border-warning/30 text-warning">
+                    <Clock className="h-3.5 w-3.5 mr-1" /> Ожидание оплаты
+                  </Badge>
                 )}
 
                 {/* In progress: Submit draft */}
@@ -727,7 +751,18 @@ export default function CreatorProposal() {
           {/* ═══ PAYMENTS TAB ═══ */}
           {activeTab === "payments" && (
             isAccepted ? (
-              <PaymentsTabContent escrowItems={escrowItems} />
+              <PaymentsTabContent
+                escrowItems={escrowItems}
+                invoices={invoices}
+                isInvoiceNeeded={isInvoiceNeeded}
+                isWaitingPayment={isWaitingPayment}
+                isPaid={isPaid}
+                budget={deal.budget}
+                onSendInvoice={() => {
+                  setInvoiceAmount(String(deal.budget || ""));
+                  setShowInvoiceModal(true);
+                }}
+              />
             ) : (
               <div className="p-5 max-w-[820px] mx-auto">
                 <div className="text-center py-16 space-y-3">
@@ -860,7 +895,46 @@ export default function CreatorProposal() {
       {/* File request modal */}
       <RequestFilesModal open={showFileRequestModal} onClose={() => setShowFileRequestModal(false)} dealId={deal.id} />
 
-      {/* Details drawer */}
+      {/* Invoice modal */}
+      <Dialog open={showInvoiceModal} onOpenChange={(open) => { setShowInvoiceModal(open); if (!open) { setInvoiceComment(""); setInvoiceDueDate(undefined); } }}>
+        <DialogContent className="sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-[17px]">
+              <FileText className="h-5 w-5 text-primary" /> Отправить счёт
+            </DialogTitle>
+            <DialogDescription>Выставите счёт рекламодателю для резервирования средств</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-1.5">
+              <label className="text-[13px] font-medium text-foreground">Сумма <span className="text-destructive">*</span></label>
+              <CurrencyInput value={invoiceAmount} onChange={setInvoiceAmount} placeholder={String(deal.budget || 0)} min={1} />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[13px] font-medium text-foreground">Срок оплаты</label>
+              <DatePickerField value={invoiceDueDate} onChange={setInvoiceDueDate} placeholder="Выберите дату" minDate={new Date()} />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[13px] font-medium text-foreground">Комментарий</label>
+              <Textarea value={invoiceComment} onChange={(e) => setInvoiceComment(e.target.value)} placeholder="Дополнительная информация…" rows={2} className="text-[14px]" />
+            </div>
+            <div className="flex items-center gap-2 justify-end pt-2">
+              <Button variant="ghost" size="sm" onClick={() => setShowInvoiceModal(false)}>Отмена</Button>
+              <Button size="sm" className="gap-1.5 h-10 px-5 text-[14px]" disabled={!invoiceAmount.trim() || Number(invoiceAmount) <= 0 || createInvoice.isPending} onClick={() => {
+                createInvoice.mutate({
+                  dealId: deal.id,
+                  amount: Number(invoiceAmount),
+                  comment: invoiceComment.trim() || undefined,
+                  dueDate: invoiceDueDate?.toISOString(),
+                });
+                setShowInvoiceModal(false);
+              }}>
+                {createInvoice.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Отправить счёт
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Sheet open={detailsOpen} onOpenChange={setDetailsOpen}>
         <SheetContent className="w-[400px] sm:w-[440px] overflow-y-auto">
           <SheetHeader>
@@ -1131,49 +1205,121 @@ function FilesTabContent({ dealId }: { dealId: string }) {
 }
 
 /* ─── PAYMENTS TAB ─── */
-function PaymentsTabContent({ escrowItems }: { escrowItems: any[] }) {
+function PaymentsTabContent({ escrowItems, invoices, isInvoiceNeeded, isWaitingPayment, isPaid, budget, onSendInvoice }: {
+  escrowItems: any[]; invoices: any[]; isInvoiceNeeded: boolean; isWaitingPayment: boolean; isPaid: boolean; budget: number; onSendInvoice: () => void;
+}) {
   const total = escrowItems.reduce((s: number, m: any) => s + m.amount, 0);
   const released = escrowItems.filter((m: any) => m.status === "released").reduce((s: number, m: any) => s + m.amount, 0);
   const reserved = escrowItems.filter((m: any) => m.status === "reserved").reduce((s: number, m: any) => s + m.amount, 0);
   const commission = Math.round(total * 0.1);
+  const latestInvoice = invoices.length > 0 ? invoices[0] : null;
 
   return (
     <div className="p-5 space-y-4 max-w-[820px] mx-auto">
-      <div className="flex items-center gap-3 flex-wrap text-[15px]">
-        <span className="text-muted-foreground">Итого: <span className="font-semibold text-foreground">{total.toLocaleString()} ₽</span></span>
-        <span className="text-border">·</span>
-        <span className="text-muted-foreground">Резерв: <span className="font-semibold text-foreground">{reserved.toLocaleString()} ₽</span></span>
-        <span className="text-border">·</span>
-        <span className="text-muted-foreground">Выплачено: <span className="font-semibold text-green-500">{released.toLocaleString()} ₽</span></span>
-      </div>
+      {/* Invoice needed — empty state with CTA */}
+      {isInvoiceNeeded && !latestInvoice && (
+        <div className="text-center py-12 space-y-3">
+          <FileText className="h-10 w-10 mx-auto text-muted-foreground/30" />
+          <p className="text-[15px] font-medium text-foreground">Выставите счёт рекламодателю</p>
+          <p className="text-[13px] text-muted-foreground/60">Предложение принято. Отправьте счёт для начала работы.</p>
+          <Button size="sm" className="text-[14px] h-9 mt-2" onClick={onSendInvoice}>
+            <FileText className="h-4 w-4 mr-1.5" /> Отправить счёт
+          </Button>
+        </div>
+      )}
 
-      {escrowItems.length === 0 ? (
+      {/* Invoice card — waiting payment */}
+      {latestInvoice && (
+        <Card>
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <FileText className="h-4 w-4 text-primary" />
+                <span className="text-[15px] font-semibold">Счёт {latestInvoice.invoice_number}</span>
+              </div>
+              <Badge variant="outline" className={cn("text-[11px]",
+                latestInvoice.status === "paid"
+                  ? "bg-green-500/10 text-green-500 border-green-500/30"
+                  : "bg-warning/15 text-warning border-warning/30"
+              )}>
+                {latestInvoice.status === "paid" ? "Оплачено" : "Ожидает оплаты"}
+              </Badge>
+            </div>
+            <div className="space-y-1.5 text-[14px]">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Сумма</span>
+                <span className="font-bold text-foreground">{Number(latestInvoice.amount).toLocaleString("ru-RU")} ₽</span>
+              </div>
+              {latestInvoice.due_date && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Срок оплаты</span>
+                  <span className="text-foreground">{fmtDate(latestInvoice.due_date)}</span>
+                </div>
+              )}
+              {latestInvoice.comment && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Комментарий</span>
+                  <span className="text-foreground/80 text-right max-w-[60%] safe-text">{latestInvoice.comment}</span>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Создан</span>
+                <span className="text-foreground/80">{fmtDate(latestInvoice.created_at)}</span>
+              </div>
+              {latestInvoice.paid_at && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Оплачен</span>
+                  <span className="text-green-500 font-medium">{fmtDate(latestInvoice.paid_at)}</span>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Escrow summary */}
+      {isPaid && (
+        <>
+          <div className="flex items-center gap-3 flex-wrap text-[15px]">
+            <span className="text-muted-foreground">Итого: <span className="font-semibold text-foreground">{total.toLocaleString()} ₽</span></span>
+            <span className="text-border">·</span>
+            <span className="text-muted-foreground">Резерв: <span className="font-semibold text-foreground">{reserved.toLocaleString()} ₽</span></span>
+            <span className="text-border">·</span>
+            <span className="text-muted-foreground">Выплачено: <span className="font-semibold text-green-500">{released.toLocaleString()} ₽</span></span>
+          </div>
+
+          {escrowItems.length > 0 && (
+            <Card>
+              <CardContent className="p-4 space-y-0">
+                <p className="text-[15px] font-semibold mb-2">Этапы оплаты</p>
+                {escrowItems.map((ms: any, i: number) => (
+                  <div key={ms.id} className={cn("flex items-center justify-between py-2", i > 0 && "border-t border-border/50")}>
+                    <div className="flex items-center gap-2.5">
+                      <span className={cn("text-[12px] font-medium px-1.5 py-0.5 rounded", paymentStatusColors[ms.status] || "bg-muted text-muted-foreground")}>
+                        {paymentStatusLabels[ms.status] || ms.status}
+                      </span>
+                      <span className="text-[15px]">{ms.label}</span>
+                    </div>
+                    <span className="text-[15px] font-medium">{ms.amount.toLocaleString()} ₽</span>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between pt-2 mt-1 border-t border-border/30">
+                  <span className="text-[13px] text-muted-foreground/60">Комиссия платформы (10%)</span>
+                  <span className="text-[13px] text-muted-foreground/60">{commission.toLocaleString()} ₽</span>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </>
+      )}
+
+      {/* Fallback: no invoice, no escrow, not invoice_needed */}
+      {!isInvoiceNeeded && !latestInvoice && escrowItems.length === 0 && (
         <div className="text-center py-12 space-y-2">
           <CreditCard className="h-8 w-8 mx-auto text-muted-foreground/40" />
           <p className="text-[14px] text-muted-foreground">Платежи ещё не зарезервированы</p>
           <p className="text-[13px] text-muted-foreground/60">Рекламодатель зарезервирует средства для начала работы</p>
         </div>
-      ) : (
-        <Card>
-          <CardContent className="p-4 space-y-0">
-            <p className="text-[15px] font-semibold mb-2">Этапы оплаты</p>
-            {escrowItems.map((ms: any, i: number) => (
-              <div key={ms.id} className={cn("flex items-center justify-between py-2", i > 0 && "border-t border-border/50")}>
-                <div className="flex items-center gap-2.5">
-                  <span className={cn("text-[12px] font-medium px-1.5 py-0.5 rounded", paymentStatusColors[ms.status] || "bg-muted text-muted-foreground")}>
-                    {paymentStatusLabels[ms.status] || ms.status}
-                  </span>
-                  <span className="text-[15px]">{ms.label}</span>
-                </div>
-                <span className="text-[15px] font-medium">{ms.amount.toLocaleString()} ₽</span>
-              </div>
-            ))}
-            <div className="flex items-center justify-between pt-2 mt-1 border-t border-border/30">
-              <span className="text-[13px] text-muted-foreground/60">Комиссия платформы (10%)</span>
-              <span className="text-[13px] text-muted-foreground/60">{commission.toLocaleString()} ₽</span>
-            </div>
-          </CardContent>
-        </Card>
       )}
     </div>
   );

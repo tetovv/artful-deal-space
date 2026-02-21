@@ -706,6 +706,59 @@ export type Database = {
           },
         ]
       }
+      deal_invoices: {
+        Row: {
+          amount: number
+          comment: string | null
+          created_at: string
+          created_by: string
+          deal_id: string
+          due_date: string | null
+          id: string
+          invoice_number: string
+          paid_at: string | null
+          paid_by: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          comment?: string | null
+          created_at?: string
+          created_by: string
+          deal_id: string
+          due_date?: string | null
+          id?: string
+          invoice_number: string
+          paid_at?: string | null
+          paid_by?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          comment?: string | null
+          created_at?: string
+          created_by?: string
+          deal_id?: string
+          due_date?: string | null
+          id?: string
+          invoice_number?: string
+          paid_at?: string | null
+          paid_by?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deal_invoices_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "deals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       deal_proposals: {
         Row: {
           acceptance_criteria: string | null
