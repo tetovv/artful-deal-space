@@ -6,8 +6,13 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
   Plus, BarChart3, Eye, MousePointerClick, TrendingUp, AlertTriangle, Search,
   ChevronDown, CheckCircle2, ShieldCheck, Landmark, MoreVertical, Pause, Play,
@@ -87,6 +92,8 @@ function formatTimeAgo(date: Date): string {
   const days = Math.floor(hours / 24);
   return `${days} дн. назад`;
 }
+
+const STEP_LABELS_SHORT = ["Размещение", "Креатив", "Бюджет", "ОРД", "Обзор"];
 
 // ─── KPI Card ───
 function KpiCard({ label, value, icon: Icon, colorClass, trend }: {
@@ -404,6 +411,93 @@ export function BuiltInAds({ isVerified, onGoToSettings }: BuiltInAdsProps) {
               </Tooltip>
             )}
 
+            {/* Drafts popover */}
+            {drafts.length > 0 && (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button size="sm" variant="outline" className="h-9 text-sm gap-1.5">
+                    <FileEdit className="h-3.5 w-3.5" />
+                    Черновики
+                    <Badge variant="secondary" className="text-[10px] h-5 min-w-5 px-1.5 ml-0.5">
+                      {drafts.length}
+                    </Badge>
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-80 p-0 z-50 bg-popover border border-border shadow-lg">
+                  <div className="px-4 py-3 border-b border-border">
+                    <p className="text-sm font-semibold text-popover-foreground">Черновики</p>
+                  </div>
+                  <div className="divide-y divide-border max-h-[320px] overflow-y-auto">
+                    {drafts.slice(0, 5).map((d) => {
+                      const stepLabel = d.step <= 5 ? STEP_LABELS_SHORT[d.step - 1] : "";
+                      const name = d.creativeTitle || (d.placement ? placementLabels[d.placement] : "Без названия");
+                      const timeAgo = formatTimeAgo(new Date(d.updatedAt));
+                      return (
+                        <div key={d.id} className="flex items-center gap-2.5 px-4 py-2.5 hover:bg-muted/30 transition-colors">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[13px] font-medium text-popover-foreground truncate">{name}</p>
+                            <p className="text-[11px] text-muted-foreground">
+                              Шаг {d.step}: {stepLabel} · {timeAgo}
+                            </p>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-[11px] px-2.5 shrink-0"
+                            onClick={() => {
+                              setActiveDraft(d);
+                              setShowManualWizard(true);
+                            }}
+                          >
+                            Продолжить
+                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 w-7 p-0 shrink-0 text-muted-foreground hover:text-destructive"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Удалить черновик?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Черновик «{name}» будет удалён без возможности восстановления.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Отмена</AlertDialogCancel>
+                                <AlertDialogAction
+                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                  onClick={() => {
+                                    deleteDraft(d.id);
+                                    refreshDrafts();
+                                    toast.success("Черновик удалён");
+                                  }}
+                                >
+                                  Удалить
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {drafts.length > 5 && (
+                    <div className="px-4 py-2.5 border-t border-border">
+                      <p className="text-[12px] text-muted-foreground text-center">
+                        Ещё {drafts.length - 5} черновиков
+                      </p>
+                    </div>
+                  )}
+                </PopoverContent>
+              </Popover>
+            )}
+
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button size="sm" variant="ghost" className="h-9 w-9 p-0">
@@ -479,64 +573,6 @@ export function BuiltInAds({ isVerified, onGoToSettings }: BuiltInAdsProps) {
           )}
         </div>
 
-        {/* Drafts */}
-        {drafts.length > 0 && (
-          <Collapsible defaultOpen={drafts.length <= 3}>
-            <div className="rounded-xl border border-border bg-card overflow-hidden">
-              <CollapsibleTrigger className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors cursor-pointer">
-                <div className="flex items-center gap-2">
-                  <FileEdit className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm font-semibold text-card-foreground">Черновики</span>
-                  <Badge variant="outline" className="text-[10px]">{drafts.length}</Badge>
-                </div>
-                <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 [[data-state=open]>&]:rotate-180" />
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <div className="border-t border-border divide-y divide-border">
-                  {drafts.map((d) => {
-                    const stepLabel = d.step <= 5 ? ["Размещение", "Креатив", "Бюджет", "ОРД", "Обзор"][d.step - 1] : "";
-                    const name = d.creativeTitle || (d.placement ? placementLabels[d.placement] : "Без названия");
-                    const updated = new Date(d.updatedAt);
-                    const timeAgo = formatTimeAgo(updated);
-                    return (
-                      <div key={d.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted/20 transition-colors">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[13px] font-medium text-card-foreground truncate">{name}</p>
-                          <p className="text-[11px] text-muted-foreground">
-                            Шаг {d.step}: {stepLabel} · {timeAgo}
-                          </p>
-                        </div>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 text-[11px] px-2.5"
-                          onClick={() => {
-                            setActiveDraft(d);
-                            setShowManualWizard(true);
-                          }}
-                        >
-                          Продолжить
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-                          onClick={() => {
-                            deleteDraft(d.id);
-                            refreshDrafts();
-                            toast.success("Черновик удалён");
-                          }}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    );
-                  })}
-                </div>
-              </CollapsibleContent>
-            </div>
-          </Collapsible>
-        )}
 
         <div className="space-y-3">
           {filtered.map((c) => (
