@@ -764,15 +764,16 @@ export default function CreatorProposal() {
                 <>
                   {/* Version list */}
                   <div className="flex flex-wrap gap-2">
-                    {allTermsSorted.map((t: any, idx: number) => {
+                     {allTermsSorted.map((t: any, idx: number) => {
                       const isSelected = idx === effectiveSelectedIdx;
                       const createdByCreator = t.created_by === deal.creator_id;
+                      const isCurrent = idx === allTermsSorted.length - 1;
                       return (
                         <button
                           key={t.id}
                           onClick={() => setSelectedVersionIdx(idx)}
                           className={cn(
-                            "px-3 py-1.5 rounded-lg text-[13px] font-medium border transition-colors",
+                            "px-3 py-2 rounded-lg text-[13px] font-medium border transition-colors flex flex-col items-start gap-0.5",
                             isSelected
                               ? "bg-primary text-primary-foreground border-primary"
                               : t.status === "accepted"
@@ -780,7 +781,14 @@ export default function CreatorProposal() {
                                 : "bg-muted/50 text-muted-foreground border-border hover:bg-muted"
                           )}
                         >
-                          v{t.version} · {createdByCreator ? "Вы" : "Рекл."}
+                          <span className="flex items-center gap-1.5">
+                            v{t.version}
+                            {isCurrent && <Badge variant="outline" className="text-[9px] h-4 px-1 border-primary/30 bg-primary/10 text-primary">Текущая</Badge>}
+                            {t.status === "accepted" && <Badge variant="outline" className="text-[9px] h-4 px-1 border-green-500/30 bg-green-500/10 text-green-500">Принято</Badge>}
+                          </span>
+                          <span className={cn("text-[10px]", isSelected ? "text-primary-foreground/70" : "text-muted-foreground")}>
+                            {createdByCreator ? "Вы" : "Рекламодатель"} · {fmtDateTime(t.created_at)}
+                          </span>
                         </button>
                       );
                     })}
@@ -818,7 +826,7 @@ export default function CreatorProposal() {
                       )}
 
                       {selectedFields?.counterMessage && (
-                        <p className="text-[13px] text-foreground/70 italic border-l-2 border-muted-foreground/20 pl-3">
+                        <p className="text-[13px] text-foreground/70 italic border-l-2 border-muted-foreground/20 pl-3 safe-text">
                           «{selectedFields.counterMessage}»
                         </p>
                       )}
@@ -851,13 +859,13 @@ export default function CreatorProposal() {
                 </div>
               )}
 
-              {/* Counter-offer button — only pre-accept */}
-              {!isAccepted && canRespond && (
+              {/* Counter-offer button — only pre-accept, uses same modal as header */}
+              {!isAccepted && !isRejected && canRespond && (
                 <Button
                   variant="outline" size="sm" className="w-full gap-1.5 text-[13px]"
                   onClick={() => setShowCounterModal(true)}
                 >
-                  <ArrowLeftRight className="h-4 w-4" /> Предложить свои условия
+                  <ArrowLeftRight className="h-4 w-4" /> Сделать встречное предложение
                 </Button>
               )}
 
