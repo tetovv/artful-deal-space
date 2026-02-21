@@ -656,7 +656,7 @@ function TermsTab({ dealId }: { dealId: string }) {
           title: "Предложены изменения",
           message: `${myRole} предложил изменения к условиям (v${currentVersion + 1})`,
           type: "deal",
-          link: isAdvertiser ? "/marketplace" : "/ad-studio",
+          link: "/ad-studio",
         });
       }
 
