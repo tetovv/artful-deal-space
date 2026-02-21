@@ -33,20 +33,20 @@ import { toast } from "sonner";
 
 const queryClient = new QueryClient();
 
-/** Soft redirect for creators hitting /marketplace */
+/** Soft redirect for advertisers hitting /marketplace — it's creator-only */
 function MarketplaceGuard() {
-  const { isCreator, isLoading } = useUserRole();
+  const { isAdvertiser, isLoading } = useUserRole();
 
   useEffect(() => {
-    if (!isLoading && isCreator) {
-      toast.info("Биржа авторов доступна только рекламодателям. Перенаправлено в вашу студию.");
+    if (!isLoading && isAdvertiser) {
+      toast.info("Раздел «Предложения» доступен только авторам. Перенаправлено в рекламную студию.");
     }
-  }, [isLoading, isCreator]);
+  }, [isLoading, isAdvertiser]);
 
   if (isLoading) {
     return <div className="min-h-[60vh] flex items-center justify-center"><div className="animate-pulse text-muted-foreground">Загрузка...</div></div>;
   }
-  if (isCreator) {
+  if (isAdvertiser) {
     return <Navigate to="/ad-studio" replace />;
   }
   return <Marketplace />;
