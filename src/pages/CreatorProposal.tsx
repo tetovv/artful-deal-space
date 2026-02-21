@@ -964,6 +964,21 @@ function TermsTabContent({ deal, latestTerms, allTermsSorted, termsFields, place
   const [submittingCounter, setSubmittingCounter] = useState(false);
   const [showCounterPreview, setShowCounterPreview] = useState(false);
 
+  const counterFormRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (counterOfferOpen) {
+      const timer = setTimeout(() => {
+        counterFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        setTimeout(() => {
+          const firstInput = counterFormRef.current?.querySelector("input");
+          firstInput?.focus();
+        }, 300);
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [counterOfferOpen]);
+
   const handleCounterOffer = async () => {
     if (!user || !deal || !counterMessage.trim() || !counterBudget.trim()) return;
     setSubmittingCounter(true);
@@ -1047,6 +1062,7 @@ function TermsTabContent({ deal, latestTerms, allTermsSorted, termsFields, place
 
       {/* ── Inline counter-offer section ── */}
       {canRespond && !isAccepted && (
+        <div ref={counterFormRef} id="counter-offer-form" style={{ scrollMarginTop: "96px" }}>
         <Collapsible open={counterOfferOpen} onOpenChange={setCounterOfferOpen}>
           <CollapsibleTrigger asChild>
             <button className={cn(
@@ -1132,6 +1148,7 @@ function TermsTabContent({ deal, latestTerms, allTermsSorted, termsFields, place
             </div>
           </CollapsibleContent>
         </Collapsible>
+        </div>
       )}
 
     </div>
