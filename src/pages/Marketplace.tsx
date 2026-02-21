@@ -10,7 +10,7 @@ import {
   Search, MapPin, Users, Star, CheckCircle, Clock, Briefcase, ShieldAlert,
   Check, X, SlidersHorizontal, Shield, AlertTriangle, Eye, EyeOff,
   ChevronDown, ChevronUp, ChevronRight, Send, RefreshCw, FileText, MessageSquare, Handshake, Filter,
-  CalendarDays,
+  CalendarDays, ShieldCheck,
 } from "lucide-react";
 import { IncomingProposalDetail } from "@/components/ad-studio/IncomingProposalDetail";
 import { Input } from "@/components/ui/input";
@@ -510,7 +510,7 @@ function CreatorOffers() {
                 </CardContent>
               </Card>
             ) : (
-              <div className="space-y-2.5">
+              <div className="space-y-3">
                 {filteredDeals.map((deal) => {
                   const advScore = advScoresMap.get(deal.advertiser_id || "");
                   const isLow = advScore?.isLowScore;
@@ -519,19 +519,25 @@ function CreatorOffers() {
                   const pStatus = getProposalStatus(deal.status);
                   const statusCfg = proposalStatusConfig[pStatus];
                   const placement = placementFromTitle(deal.title);
-                  const isActioning = actionLoading === deal.id;
+                  const isNew = pStatus === "new";
+
+                  const briefHook = deal.description
+                    ? deal.description.length > 80
+                      ? deal.description.slice(0, 80).trimEnd() + "…"
+                      : deal.description
+                    : null;
 
                   return (
                     <Card
                       key={deal.id}
-                      className={`overflow-hidden transition-all hover:shadow-md cursor-pointer ${isLow ? "opacity-60 border-destructive/20" : "hover:border-primary/30"}`}
+                      className={`overflow-hidden transition-all cursor-pointer ${isLow ? "opacity-60 border-destructive/20" : isNew ? "border-primary/25 hover:border-primary/50 hover:shadow-md" : "hover:border-border hover:shadow-sm"}`}
                       onClick={() => setSelectedDeal(deal)}
                     >
-                      <CardContent className="p-4">
-                        {/* Row 1: Advertiser + status pill */}
+                      <CardContent className="p-4 space-y-2.5">
+                        {/* Row 1: Brand/name + status pill */}
                         <div className="flex items-center justify-between gap-3">
                           <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                            <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden border border-border shrink-0">
+                            <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden border border-border shrink-0">
                               {brand?.brand_logo_url
                                 ? <img src={brand.brand_logo_url} alt="" className="h-full w-full object-cover" />
                                 : advProfile?.avatar_url
@@ -540,8 +546,8 @@ function CreatorOffers() {
                             </div>
                             <div className="min-w-0">
                               <div className="flex items-center gap-1.5">
-                                <span className="text-sm font-semibold text-card-foreground truncate">
-                                  {advProfile?.display_name || deal.advertiser_name}
+                                <span className="text-[15px] font-semibold text-card-foreground truncate leading-tight">
+                                  {brand?.brand_name || advProfile?.display_name || deal.advertiser_name}
                                 </span>
                                 {brand?.business_verified && (
                                   <CheckCircle className="h-3.5 w-3.5 text-primary shrink-0" />
@@ -550,26 +556,27 @@ function CreatorOffers() {
                                   <Tooltip><TooltipTrigger><ShieldAlert className="h-3.5 w-3.5 text-destructive shrink-0" /></TooltipTrigger><TooltipContent><p className="text-xs">Низкий Partner Score: {advScore!.partnerScore.toFixed(1)}</p></TooltipContent></Tooltip>
                                 )}
                               </div>
-                              {brand?.brand_name && (
-                                <p className="text-[11px] text-muted-foreground truncate">{brand.brand_name}</p>
+                              {brand?.brand_name && advProfile?.display_name && brand.brand_name !== advProfile.display_name && (
+                                <p className="text-[12px] text-muted-foreground truncate leading-tight">{advProfile.display_name}</p>
                               )}
                             </div>
                           </div>
-                          <Badge variant="outline" className={`text-[10px] shrink-0 border ${statusCfg.cls}`}>
+                          <Badge variant="outline" className={`text-[11px] shrink-0 border font-medium ${statusCfg.cls}`}>
                             {statusCfg.label}
                           </Badge>
                         </div>
 
-                        {/* Row 2: Summary line — placement + budget + deadline */}
-                        <div className="flex items-center gap-3 mt-2.5 text-sm">
+                        {/* Row 2: Summary — placement + budget + deadline */}
+                        <div className="flex items-center gap-2 text-[14px] flex-wrap">
                           {placement && (
                             <span className="font-medium text-card-foreground">{placement}</span>
                           )}
+                          {placement && <span className="text-muted-foreground">·</span>}
                           <span className="font-bold text-card-foreground">{(deal.budget || 0).toLocaleString()} ₽</span>
                           {deal.deadline && (
                             <>
                               <span className="text-muted-foreground">·</span>
-                              <span className="text-muted-foreground text-xs flex items-center gap-1">
+                              <span className="text-muted-foreground text-[13px] flex items-center gap-1">
                                 <CalendarDays className="h-3 w-3" />
                                 до {new Date(deal.deadline).toLocaleDateString("ru-RU")}
                               </span>
@@ -577,31 +584,43 @@ function CreatorOffers() {
                           )}
                         </div>
 
-                        {/* Row 3: Chips — category, platform, partner score */}
-                        <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                          {brand?.business_category && (
-                            <span className="inline-flex items-center rounded-md bg-secondary px-2 py-0.5 text-[10px] font-medium text-secondary-foreground">
-                              {brand.business_category}
-                            </span>
-                          )}
-                          {advScore && advScore.partnerScore > 0 && !isLow && (
-                            <span className="inline-flex items-center rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
-                              ⭐ {advScore.partnerScore.toFixed(1)}
-                            </span>
-                          )}
-                        </div>
+                        {/* Row 3: Brief hook */}
+                        {briefHook && (
+                          <p className="text-[13px] text-foreground/70 leading-snug line-clamp-1">
+                            «{briefHook}»
+                          </p>
+                        )}
 
-                        {/* Row 4: Last activity + primary action */}
-                        <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-border">
-                          <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
-                            {timeAgo(deal.created_at)}
-                          </span>
+                        {/* Row 4: Icons row + timestamp + CTA */}
+                        <div className="flex items-center justify-between pt-1.5 border-t border-border">
+                          <div className="flex items-center gap-3">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="flex items-center gap-1 text-[12px] text-muted-foreground">
+                                  <ShieldCheck className="h-3.5 w-3.5" />
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent><p className="text-xs">Маркировка через платформу</p></TooltipContent>
+                            </Tooltip>
+                            {brand?.business_category && (
+                              <span className="text-[12px] text-muted-foreground">{brand.business_category}</span>
+                            )}
+                            {advScore && advScore.partnerScore > 0 && !isLow && (
+                              <span className="text-[12px] text-muted-foreground flex items-center gap-0.5">
+                                <Star className="h-3 w-3 text-warning fill-warning" />
+                                {advScore.partnerScore.toFixed(1)}
+                              </span>
+                            )}
+                            <span className="text-[12px] text-muted-foreground flex items-center gap-1">
+                              <Clock className="h-3 w-3" />
+                              {timeAgo(deal.created_at)}
+                            </span>
+                          </div>
 
-                          {pStatus === "new" ? (
+                          {isNew ? (
                             <Button
                               size="sm"
-                              className="h-7 text-xs"
+                              className="h-8 text-[13px] font-medium"
                               onClick={(e) => { e.stopPropagation(); setSelectedDeal(deal); }}
                             >
                               Открыть предложение
@@ -609,8 +628,8 @@ function CreatorOffers() {
                           ) : pStatus === "active" ? (
                             <Button
                               size="sm"
-                              variant="outline"
-                              className="h-7 text-xs"
+                              variant="secondary"
+                              className="h-8 text-[13px] font-medium"
                               onClick={(e) => { e.stopPropagation(); setSelectedDeal(deal); }}
                             >
                               Продолжить
