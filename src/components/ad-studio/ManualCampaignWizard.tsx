@@ -458,21 +458,45 @@ export function ManualCampaignWizard({ isVerified, ordConnected, onBack, onCompl
       <Card>
         <CardContent className="p-4 space-y-2">
           <p className="text-[12px] font-semibold text-muted-foreground uppercase tracking-wider">Креатив</p>
-          <div className="flex items-start gap-3">
-            {creativePreview && (
-              <div className="rounded-md border border-border overflow-hidden bg-muted/30 w-24 h-16 shrink-0">
+          {creativePreview && creativeFile && (
+            <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/20 p-2.5">
+              <div className="rounded-md border border-border overflow-hidden bg-muted/30 w-20 h-14 shrink-0">
                 {creativeType === "video" ? (
-                  <video src={creativePreview} className="w-full h-full object-cover" muted />
+                  <video src={creativePreview} className="w-full h-full object-contain" muted />
                 ) : (
-                  <img src={creativePreview} alt="" className="w-full h-full object-cover" />
+                  <img src={creativePreview} alt="" className="w-full h-full object-contain" />
                 )}
               </div>
-            )}
-            <div className="space-y-0.5 text-[13px]">
-              {creativeTitle && <p className="font-medium text-foreground">{creativeTitle}</p>}
-              {creativeText && <p className="text-muted-foreground line-clamp-2">{creativeText}</p>}
-              <p className="text-primary text-[12px] truncate">{destinationUrl}{utmParams ? `?${utmParams}` : ""}</p>
+              <div className="flex-1 min-w-0 space-y-0.5">
+                <p className="text-[13px] font-medium text-foreground truncate">{creativeFile.name}</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {creativeType === "video" ? "Видео" : "Изображение"} · {(creativeFile.size / 1024).toFixed(0)} КБ
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-[11px] px-2"
+                  onClick={() => window.open(creativePreview, "_blank")}
+                >
+                  <Eye className="h-3 w-3 mr-1" />Открыть
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-[11px] px-2"
+                  onClick={() => setStep(2)}
+                >
+                  Заменить
+                </Button>
+              </div>
             </div>
+          )}
+          <div className="space-y-0.5 text-[13px]">
+            {creativeTitle && <p className="font-medium text-foreground">{creativeTitle}</p>}
+            {creativeText && <p className="text-muted-foreground line-clamp-2">{creativeText}</p>}
+            <p className="text-primary text-[12px] truncate">{destinationUrl}{utmParams ? `?${utmParams}` : ""}</p>
           </div>
         </CardContent>
       </Card>
