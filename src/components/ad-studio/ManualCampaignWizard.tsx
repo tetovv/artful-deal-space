@@ -201,7 +201,7 @@ export function ManualCampaignWizard({ isVerified, ordConnected, onBack, onCompl
 
   // ═══ Step 1: Placement ═══
   const StepPlacement = () => (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <div>
         <h3 className="text-[15px] font-semibold text-foreground">Выберите тип размещения</h3>
         <p className="text-[13px] text-muted-foreground mt-0.5">Определяет, где будет показан ваш креатив</p>
@@ -239,7 +239,7 @@ export function ManualCampaignWizard({ isVerified, ordConnected, onBack, onCompl
 
   // ═══ Step 2: Creative ═══
   const StepCreative = () => (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <div>
         <h3 className="text-[15px] font-semibold text-foreground">Креатив</h3>
         <p className="text-[13px] text-muted-foreground mt-0.5">Загрузите изображение или видео для размещения</p>
@@ -250,13 +250,13 @@ export function ManualCampaignWizard({ isVerified, ordConnected, onBack, onCompl
         <Label className="text-[13px]">Файл креатива *</Label>
         {creativePreview ? (
           <div className="space-y-2">
-            <div className="relative rounded-lg border border-border overflow-hidden bg-muted/30 max-w-[320px]">
+            <div className="relative rounded-lg border border-border overflow-hidden bg-muted/30 w-full max-w-full">
               {creativeType === "video" ? (
-                <video src={creativePreview} className="w-full max-h-[200px] object-contain" controls muted />
+                <video src={creativePreview} className="w-full max-h-[280px] object-contain" controls muted />
               ) : (
-                <img src={creativePreview} alt="Preview" className="w-full max-h-[200px] object-contain" />
+                <img src={creativePreview} alt="Preview" className="w-full max-h-[280px] object-contain" />
               )}
-              <Badge variant="secondary" className="absolute top-2 right-2 text-[10px]">
+              <Badge variant="secondary" className="absolute top-2 left-2 text-[10px] max-w-[80%] truncate">
                 {creativeFile?.name}
               </Badge>
             </div>
@@ -311,7 +311,7 @@ export function ManualCampaignWizard({ isVerified, ordConnected, onBack, onCompl
 
   // ═══ Step 3: Budget & Schedule ═══
   const StepBudget = () => (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <div>
         <h3 className="text-[15px] font-semibold text-foreground">Бюджет и расписание</h3>
         <p className="text-[13px] text-muted-foreground mt-0.5">После старта общий бюджет нельзя уменьшить ниже потраченного</p>
@@ -321,11 +321,20 @@ export function ManualCampaignWizard({ isVerified, ordConnected, onBack, onCompl
         <Label className="text-[13px]">Общий бюджет (₽) *</Label>
         <div className="relative">
           <Wallet className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-          <Input type="number" min={100} placeholder="15000" value={totalBudget} onChange={(e) => setTotalBudget(e.target.value)} className="pl-9 text-[14px]" />
+          <Input
+            inputMode="numeric"
+            placeholder="15000"
+            value={totalBudget}
+            onChange={(e) => {
+              const v = e.target.value.replace(/[^0-9]/g, "");
+              setTotalBudget(v);
+            }}
+            className="pl-9 text-[14px]"
+          />
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <Label className="text-[13px]">Дата старта *</Label>
           <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="text-[14px]" />
@@ -344,7 +353,16 @@ export function ManualCampaignWizard({ isVerified, ordConnected, onBack, onCompl
 
       <div className="space-y-1.5">
         <Label className="text-[13px]">Дневной лимит (₽) <span className="text-muted-foreground">(опционально)</span></Label>
-        <Input type="number" min={0} placeholder="1000" value={dailyCap} onChange={(e) => setDailyCap(e.target.value)} className="text-[14px]" />
+        <Input
+          inputMode="numeric"
+          placeholder="1000"
+          value={dailyCap}
+          onChange={(e) => {
+            const v = e.target.value.replace(/[^0-9]/g, "");
+            setDailyCap(v);
+          }}
+          className="text-[14px]"
+        />
         <p className="text-[11px] text-muted-foreground">Если указан — расходы в день не превысят эту сумму</p>
       </div>
     </div>
@@ -522,7 +540,7 @@ export function ManualCampaignWizard({ isVerified, ordConnected, onBack, onCompl
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="w-full max-w-[860px] mx-auto px-6 py-6 space-y-0">
+      <div className="w-full max-w-[860px] mx-auto px-6 py-6 space-y-5">
         {/* Header */}
         <div className="flex items-center gap-3 mb-5">
           <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={goBack}>
