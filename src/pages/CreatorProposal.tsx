@@ -11,6 +11,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from "@/components/ui/dialog";
+import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -21,12 +24,14 @@ import {
   ArrowLeft, CheckCircle2, MoreVertical, Download, FileText, Shield,
   CalendarDays, Video, FileEdit, Mic, Loader2, Send, ArrowLeftRight,
   XCircle, Paperclip, History, Clock, AlertTriangle, MessageSquare,
-  ExternalLink, ScrollText, Archive, Lightbulb, ChevronRight, Printer,
+  ExternalLink, ScrollText, Archive, Lightbulb, ChevronRight, Printer, Eye,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { CurrencyInput } from "@/components/ui/currency-input";
+import { DatePickerField } from "@/components/ui/date-picker-field";
 
 /* ─── Status config ─── */
 const statusConfig: Record<string, { label: string; cls: string }> = {
@@ -138,11 +143,14 @@ export default function CreatorProposal() {
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
   const [rejecting, setRejecting] = useState(false);
-  const [showCounterForm, setShowCounterForm] = useState(false);
+  const [showCounterModal, setShowCounterModal] = useState(false);
   const [counterBudget, setCounterBudget] = useState("");
-  const [counterDeadline, setCounterDeadline] = useState("");
+  const [counterDeadline, setCounterDeadline] = useState<Date | undefined>(undefined);
+  const [counterRevisions, setCounterRevisions] = useState("");
+  const [counterAcceptance, setCounterAcceptance] = useState("");
   const [counterMessage, setCounterMessage] = useState("");
   const [submittingCounter, setSubmittingCounter] = useState(false);
+  const [showCounterPreview, setShowCounterPreview] = useState(false);
   const [chatInput, setChatInput] = useState("");
   const [sendingChat, setSendingChat] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -273,30 +281,43 @@ export default function CreatorProposal() {
   };
 
   const handleCounterOffer = async () => {
-    if (!user || !deal || !counterMessage.trim()) return;
+    if (!user || !deal || !counterMessage.trim() || !counterBudget.trim()) return;
     setSubmittingCounter(true);
     try {
       const currentVersion = latestTerms ? (latestTerms as any).version : 0;
-      const newFields = {
+      const newFields: Record<string, string> = {
         ...(termsFields || {}),
         budget: counterBudget || termsFields?.budget || String(deal.budget || 0),
-        deadline: counterDeadline || termsFields?.deadline || "",
         counterMessage: counterMessage,
       };
-      await supabase.from("deal_terms").insert({ deal_id: deal.id, created_by: user.id, version: currentVersion + 1, status: "draft", fields: newFields });
+      if (counterDeadline) {
+        newFields.deadline = counterDeadline.toISOString();
+      }
+      if (counterRevisions.trim()) {
+        newFields.revisions = counterRevisions.trim();
+      }
+      if (counterAcceptance.trim()) {
+        newFields.acceptanceCriteria = counterAcceptance.trim();
+      }
+      await supabase.from("deal_terms").insert({ deal_id: deal.id, created_by: user.id, version: currentVersion + 1, status: "draft", fields: newFields } as any);
       await supabase.from("deals").update({ status: "needs_changes" }).eq("id", deal.id);
-      await supabase.from("deal_audit_log").insert({ deal_id: deal.id, user_id: user.id, action: `Автор предложил изменения (v${currentVersion + 1})`, category: "terms", metadata: { counterBudget, counterDeadline } });
+      await supabase.from("deal_audit_log").insert({ deal_id: deal.id, user_id: user.id, action: `Автор предложил изменения (v${currentVersion + 1})`, category: "terms", metadata: { counterBudget, counterDeadline: counterDeadline?.toISOString() } } as any);
       if (deal.advertiser_id) {
         await supabase.from("notifications").insert({ user_id: deal.advertiser_id, title: "Предложены изменения", message: `${profile?.display_name || "Автор"} предложил(а) изменения к «${deal.title}»`, type: "deal", link: "/ad-studio" });
       }
-      toast.success("Встречное предложение отправлено");
+      toast.success("Встречное предложение отправлено. Ожидаем ответа рекламодателя.");
       qc.invalidateQueries({ queryKey: ["proposal-deal", proposalId] });
       qc.invalidateQueries({ queryKey: ["deal_terms", deal.id] });
       qc.invalidateQueries({ queryKey: ["creator-incoming-deals"] });
-      setShowCounterForm(false);
+      setShowCounterModal(false);
+      setShowCounterPreview(false);
       setCounterBudget("");
-      setCounterDeadline("");
+      setCounterDeadline(undefined);
+      setCounterRevisions("");
+      setCounterAcceptance("");
       setCounterMessage("");
+      setSelectedVersionIdx(null); // auto-select new latest
+      setActiveTab("negotiation");
     } catch (err) {
       console.error(err);
       toast.error("Ошибка при отправке изменений");
@@ -473,10 +494,10 @@ export default function CreatorProposal() {
             )}
 
             {/* Secondary CTA: Counter-offer */}
-            {canRespond && !showCounterForm && (
+            {canRespond && (
               <Button
                 variant="outline" size="sm" className="h-9 gap-1.5 text-[13px]"
-                onClick={() => { setShowCounterForm(true); setActiveTab("negotiation"); }}
+                onClick={() => setShowCounterModal(true)}
               >
                 <ArrowLeftRight className="h-4 w-4" /> Встречное
               </Button>
@@ -583,7 +604,7 @@ export default function CreatorProposal() {
                     </Button>
                   )}
                   {nextStep.action === "counter" && (
-                    <Button size="sm" variant="outline" className="mt-1 h-8 text-[12px] gap-1.5" onClick={() => { setShowCounterForm(true); setActiveTab("negotiation"); }}>
+                    <Button size="sm" variant="outline" className="mt-1 h-8 text-[12px] gap-1.5" onClick={() => setShowCounterModal(true)}>
                       <ArrowLeftRight className="h-3.5 w-3.5" /> Ответить
                     </Button>
                   )}
@@ -847,41 +868,14 @@ export default function CreatorProposal() {
                 </div>
               )}
 
-              {/* Counter-offer form — only pre-accept */}
-              {!isAccepted && showCounterForm && canRespond && (
-                <div className="space-y-3 bg-muted/20 rounded-xl p-4 border border-border">
-                  <h3 className="text-[14px] font-semibold text-foreground flex items-center gap-2">
-                    <ArrowLeftRight className="h-4 w-4 text-primary" /> Встречное предложение
-                  </h3>
-                  <div className="rounded-lg bg-background border border-border px-3 py-2 space-y-1">
-                    <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Текущие условия</p>
-                    <div className="flex items-center gap-4 text-[13px] flex-wrap">
-                      {deal.budget ? <span className="text-foreground/80">Бюджет: <span className="font-semibold text-foreground">{fmtBudget(deal.budget)}</span></span> : null}
-                      {deal.deadline && <span className="text-foreground/80">Дедлайн: <span className="font-semibold text-foreground">{fmtDate(deal.deadline)}</span></span>}
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-[12px] font-medium text-muted-foreground">Новая цена (₽) <span className="text-destructive">*</span></label>
-                      <Input type="number" value={counterBudget} onChange={(e) => setCounterBudget(e.target.value)} placeholder={deal.budget ? deal.budget.toLocaleString() : "0"} className="h-9 text-[13px]" />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[12px] font-medium text-muted-foreground">Новый дедлайн</label>
-                      <Input type="date" value={counterDeadline} onChange={(e) => setCounterDeadline(e.target.value)} className="h-9 text-[13px]" />
-                    </div>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[12px] font-medium text-muted-foreground">Комментарий <span className="text-destructive">*</span></label>
-                    <Textarea value={counterMessage} onChange={(e) => setCounterMessage(e.target.value)} placeholder="Объясните предлагаемые изменения…" rows={2} className="text-[13px]" />
-                  </div>
-                  <div className="flex items-center gap-2 justify-end">
-                    <Button variant="ghost" size="sm" onClick={() => setShowCounterForm(false)}>Отмена</Button>
-                    <Button size="sm" className="gap-1.5" disabled={!counterBudget.trim() || !counterMessage.trim() || submittingCounter} onClick={handleCounterOffer}>
-                      {submittingCounter ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-                      Отправить встречное
-                    </Button>
-                  </div>
-                </div>
+              {/* Counter-offer button — only pre-accept */}
+              {!isAccepted && canRespond && (
+                <Button
+                  variant="outline" size="sm" className="w-full gap-1.5 text-[13px]"
+                  onClick={() => setShowCounterModal(true)}
+                >
+                  <ArrowLeftRight className="h-4 w-4" /> Предложить свои условия
+                </Button>
               )}
 
               {/* Read-only notice when accepted */}
@@ -1074,6 +1068,192 @@ export default function CreatorProposal() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* ── Counter-offer Modal ── */}
+      <Dialog open={showCounterModal} onOpenChange={(open) => {
+        setShowCounterModal(open);
+        if (!open) setShowCounterPreview(false);
+      }}>
+        <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-[17px]">
+              <ArrowLeftRight className="h-5 w-5 text-primary" />
+              Встречное предложение
+            </DialogTitle>
+            <DialogDescription>
+              Предложите свои условия рекламодателю
+            </DialogDescription>
+          </DialogHeader>
+
+          {!showCounterPreview ? (
+            <div className="space-y-5 pt-2">
+              {/* Current offer summary */}
+              <div className="rounded-lg bg-muted/30 border border-border px-4 py-3 space-y-2">
+                <p className="text-[12px] font-semibold text-muted-foreground uppercase tracking-wide">Текущие условия</p>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-[13px]">
+                  {deal?.budget ? (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Бюджет</span>
+                      <span className="font-semibold text-foreground">{fmtBudget(deal.budget)}</span>
+                    </div>
+                  ) : null}
+                  {deal?.deadline ? (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Дедлайн</span>
+                      <span className="font-medium text-foreground">{fmtDate(deal.deadline)}</span>
+                    </div>
+                  ) : null}
+                  {termsFields?.revisions && !isBriefEmpty(termsFields.revisions) ? (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Правки</span>
+                      <span className="font-medium text-foreground">{termsFields.revisions}</span>
+                    </div>
+                  ) : null}
+                  {termsFields?.acceptanceCriteria && !isBriefEmpty(termsFields.acceptanceCriteria) ? (
+                    <div className="col-span-2 flex justify-between">
+                      <span className="text-muted-foreground">Приёмка</span>
+                      <span className="font-medium text-foreground truncate max-w-[240px]">{termsFields.acceptanceCriteria}</span>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Editable fields */}
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-[13px] font-medium text-foreground">Новый бюджет <span className="text-destructive">*</span></label>
+                  <CurrencyInput
+                    value={counterBudget}
+                    onChange={setCounterBudget}
+                    placeholder={deal?.budget ? deal.budget.toLocaleString("ru-RU") : "0"}
+                    min={1}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[13px] font-medium text-foreground">Новый дедлайн / окно публикации</label>
+                  <DatePickerField
+                    value={counterDeadline}
+                    onChange={setCounterDeadline}
+                    placeholder="Выберите дату"
+                    minDate={new Date()}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[13px] font-medium text-foreground">Количество правок</label>
+                    <Input
+                      inputMode="numeric"
+                      value={counterRevisions}
+                      onChange={(e) => setCounterRevisions(e.target.value.replace(/[^0-9]/g, ""))}
+                      placeholder={termsFields?.revisions || "2"}
+                      className="h-10 text-[14px]"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[13px] font-medium text-foreground">Критерии приёмки</label>
+                    <Input
+                      value={counterAcceptance}
+                      onChange={(e) => setCounterAcceptance(e.target.value)}
+                      placeholder={termsFields?.acceptanceCriteria || "Не указаны"}
+                      className="h-10 text-[14px]"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[13px] font-medium text-foreground">Комментарий <span className="text-destructive">*</span></label>
+                  <Textarea
+                    value={counterMessage}
+                    onChange={(e) => setCounterMessage(e.target.value)}
+                    placeholder="Объясните предлагаемые изменения (мин. 10 символов)…"
+                    rows={3}
+                    className="text-[14px]"
+                  />
+                  {counterMessage.trim().length > 0 && counterMessage.trim().length < 10 && (
+                    <p className="text-[11px] text-destructive">Минимум 10 символов</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 justify-end pt-2">
+                <Button variant="ghost" size="sm" onClick={() => setShowCounterModal(false)}>
+                  Отмена
+                </Button>
+                <Button
+                  size="sm" className="gap-1.5 h-10 px-5 text-[14px]"
+                  disabled={!counterBudget.trim() || !counterMessage.trim() || counterMessage.trim().length < 10}
+                  onClick={() => setShowCounterPreview(true)}
+                >
+                  <Eye className="h-4 w-4" /> Предпросмотр изменений
+                </Button>
+              </div>
+            </div>
+          ) : (
+            /* ── Preview step ── */
+            <div className="space-y-5 pt-2">
+              <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 space-y-3">
+                <p className="text-[13px] font-semibold text-foreground flex items-center gap-2">
+                  <Eye className="h-4 w-4 text-primary" /> Предпросмотр изменений
+                </p>
+
+                <div className="space-y-2">
+                  {/* Budget diff */}
+                  <CounterDiffRow
+                    label="Бюджет"
+                    oldVal={fmtBudget(termsFields?.budget || deal?.budget)}
+                    newVal={counterBudget ? fmtBudget(counterBudget) : null}
+                  />
+
+                  {/* Deadline diff */}
+                  <CounterDiffRow
+                    label="Дедлайн"
+                    oldVal={fmtDate(termsFields?.deadline || deal?.deadline)}
+                    newVal={counterDeadline ? fmtDate(counterDeadline.toISOString()) : null}
+                  />
+
+                  {/* Revisions diff */}
+                  <CounterDiffRow
+                    label="Правки"
+                    oldVal={termsFields?.revisions || "—"}
+                    newVal={counterRevisions || null}
+                  />
+
+                  {/* Acceptance diff */}
+                  <CounterDiffRow
+                    label="Критерии приёмки"
+                    oldVal={termsFields?.acceptanceCriteria || "—"}
+                    newVal={counterAcceptance || null}
+                  />
+                </div>
+              </div>
+
+              {/* Message preview */}
+              <div className="rounded-lg bg-muted/30 border border-border px-4 py-3">
+                <p className="text-[12px] font-medium text-muted-foreground mb-1">Ваш комментарий</p>
+                <p className="text-[14px] text-foreground whitespace-pre-wrap">{counterMessage}</p>
+              </div>
+
+              <div className="flex items-center gap-2 justify-end pt-2">
+                <Button variant="ghost" size="sm" onClick={() => setShowCounterPreview(false)}>
+                  ← Редактировать
+                </Button>
+                <Button
+                  size="sm" className="gap-1.5 h-10 px-5 text-[14px]"
+                  disabled={submittingCounter}
+                  onClick={handleCounterOffer}
+                >
+                  {submittingCounter ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  Отправить встречное предложение
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </PageTransition>
   );
 }
@@ -1167,6 +1347,24 @@ function AuditEntry({ icon, text, date, category, accent }: { icon: React.ReactN
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function CounterDiffRow({ label, oldVal, newVal }: { label: string; oldVal: string; newVal: string | null }) {
+  const changed = newVal !== null && newVal !== oldVal;
+  return (
+    <div className="flex items-center gap-2 text-[13px]">
+      <span className="text-muted-foreground w-[120px] shrink-0">{label}:</span>
+      {changed ? (
+        <>
+          <span className="line-through text-muted-foreground/60">{oldVal}</span>
+          <span className="text-foreground">→</span>
+          <span className="font-semibold text-primary">{newVal}</span>
+        </>
+      ) : (
+        <span className="text-foreground/70">{oldVal} <span className="text-[11px] text-muted-foreground">(без изменений)</span></span>
+      )}
     </div>
   );
 }
