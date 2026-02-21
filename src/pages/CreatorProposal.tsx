@@ -277,7 +277,8 @@ export default function CreatorProposal() {
     if (!user || !deal) return;
     setAccepting(true);
     try {
-      await supabase.from("deals").update({ status: "invoice_needed" }).eq("id", deal.id);
+      const { error: updateErr } = await supabase.from("deals").update({ status: "invoice_needed" }).eq("id", deal.id);
+      if (updateErr) throw updateErr;
       if (latestTerms) {
         await supabase.from("deal_terms_acceptance").insert({ terms_id: (latestTerms as any).id, user_id: user.id });
         await supabase.from("deal_terms").update({ status: "accepted" }).eq("id", (latestTerms as any).id);
@@ -293,7 +294,7 @@ export default function CreatorProposal() {
       qc.invalidateQueries({ queryKey: ["my_deals"] });
       qc.invalidateQueries({ queryKey: ["proposal-deal", proposalId] });
     } catch (err) {
-      console.error(err);
+      console.error("Accept error:", err);
       toast.error("Не удалось принять предложение");
     } finally {
       setAccepting(false);
