@@ -209,7 +209,7 @@ export default function CreatorProposal() {
       toast.success("Сделка создана. Переход в рабочее пространство…");
       qc.invalidateQueries({ queryKey: ["creator-incoming-deals"] });
       qc.invalidateQueries({ queryKey: ["my_deals"] });
-      navigate("/ad-studio", { state: { openDealId: deal.id }, replace: true });
+      navigate("/marketplace", { state: { openDealId: deal.id }, replace: true });
     } catch (err) {
       console.error(err);
       toast.error("Не удалось принять предложение");
@@ -230,7 +230,7 @@ export default function CreatorProposal() {
       toast.success("Предложение отклонено");
       qc.invalidateQueries({ queryKey: ["creator-incoming-deals"] });
       setShowRejectDialog(false);
-      navigate("/ad-studio");
+      navigate("/marketplace");
     } catch {
       toast.error("Ошибка при отклонении");
     } finally {
@@ -305,7 +305,7 @@ export default function CreatorProposal() {
       <div className="min-h-[60vh] flex flex-col items-center justify-center gap-3">
         <AlertTriangle className="h-8 w-8 text-warning" />
         <p className="text-[15px] text-muted-foreground">Предложение не найдено</p>
-        <Button variant="outline" size="sm" onClick={() => navigate("/ad-studio")}>
+        <Button variant="outline" size="sm" onClick={() => navigate("/marketplace")}>
           <ArrowLeft className="h-4 w-4 mr-1.5" /> Назад к сделкам
         </Button>
       </div>
@@ -318,7 +318,7 @@ export default function CreatorProposal() {
         <Shield className="h-8 w-8 text-destructive" />
         <p className="text-[15px] text-foreground font-medium">Доступ запрещён</p>
         <p className="text-[13px] text-muted-foreground">Это предложение адресовано другому автору.</p>
-        <Button variant="outline" size="sm" onClick={() => navigate("/ad-studio")}>
+        <Button variant="outline" size="sm" onClick={() => navigate("/marketplace")}>
           <ArrowLeft className="h-4 w-4 mr-1.5" /> Назад
         </Button>
       </div>
@@ -338,7 +338,7 @@ export default function CreatorProposal() {
       <div className="max-w-[1100px] mx-auto px-4 lg:px-8 py-6 space-y-0">
         {/* ── Back link ── */}
         <button
-          onClick={() => navigate("/ad-studio")}
+          onClick={() => navigate("/marketplace")}
           className="flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground transition-colors mb-4"
         >
           <ArrowLeft className="h-3.5 w-3.5" /> Назад к сделкам
@@ -422,7 +422,7 @@ export default function CreatorProposal() {
 
             {/* If accepted — show "Open deal" */}
             {isAccepted && (
-              <Button size="sm" className="h-9 gap-1.5" onClick={() => navigate("/ad-studio", { state: { openDealId: deal.id } })}>
+              <Button size="sm" className="h-9 gap-1.5" onClick={() => navigate("/marketplace", { state: { openDealId: deal.id } })}>
                 <ExternalLink className="h-4 w-4" />
                 Открыть сделку
               </Button>
