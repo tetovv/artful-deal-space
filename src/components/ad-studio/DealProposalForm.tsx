@@ -6,31 +6,47 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import {
   Send, Save, CalendarIcon, Upload, X, Lock, FileText,
-  Video, FileEdit, Mic, Loader2,
+  Video, FileEdit, Mic, Loader2, ChevronDown, HelpCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
+/* ── Constants ── */
+
 const PLACEMENT_TYPES = [
-  { value: "video", label: "Видео-интеграция", icon: Video },
-  { value: "post", label: "Пост", icon: FileEdit },
-  { value: "podcast", label: "Подкаст", icon: Mic },
+  { value: "video", label: "Видео", fullLabel: "Видео-интеграция", icon: Video, hint: "Рекламная вставка в видеоролике" },
+  { value: "post", label: "Пост", fullLabel: "Пост", icon: FileEdit, hint: "Рекламный пост в канале / блоге" },
+  { value: "podcast", label: "Подкаст", fullLabel: "Подкаст", icon: Mic, hint: "Спонсорская вставка в подкасте" },
 ] as const;
 
+const PLACEMENT_LABEL_MAP: Record<string, string> = {
+  video: "Видео-интеграция",
+  post: "Пост",
+  podcast: "Подкаст",
+};
+
 const MARKING_OPTIONS = [
-  { value: "platform", label: "Платформа маркирует (по умолчанию)" },
+  { value: "platform", label: "Платформа маркирует" },
   { value: "advertiser", label: "Рекламодатель предоставляет данные" },
 ];
+
+const BRIEF_PLACEHOLDER = `• Ключевое сообщение: …
+• Призыв к действию (CTA): …
+• Ограничения / запреты: …`;
+
+/* ── Types ── */
 
 interface CreatorInfo {
   userId: string;
@@ -46,45 +62,58 @@ interface DealProposalFormProps {
   creator: CreatorInfo;
 }
 
+/* ── Component ── */
+
 export function DealProposalForm({ open, onClose, creator }: DealProposalFormProps) {
   const { user, profile } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  /* Core fields */
   const [placementType, setPlacementType] = useState("");
   const [platform, setPlatform] = useState("");
+  const [budgetMode, setBudgetMode] = useState<"fixed" | "range">("fixed");
   const [budgetFixed, setBudgetFixed] = useState("");
-  const [deadline, setDeadline] = useState<Date | undefined>();
+  const [budgetMin, setBudgetMin] = useState("");
+  const [budgetMax, setBudgetMax] = useState("");
+  const [deadlineStart, setDeadlineStart] = useState<Date | undefined>();
+  const [deadlineEnd, setDeadlineEnd] = useState<Date | undefined>();
   const [briefText, setBriefText] = useState("");
+  const [platformCompliance, setPlatformCompliance] = useState(false);
+
+  /* Detail fields */
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [revisions, setRevisions] = useState("");
   const [acceptanceCriteria, setAcceptanceCriteria] = useState("");
   const [marking, setMarking] = useState("platform");
-  const [platformCompliance, setPlatformCompliance] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
+
   const [submitting, setSubmitting] = useState(false);
 
-  // Derive starting price from creator offers
-  const PLACEMENT_LABEL_MAP: Record<string, string> = {
-    video: "Видео-интеграция",
-    post: "Пост",
-    podcast: "Подкаст",
-  };
-  const selectedOffer = creator.offers.find(
-    (o) => o.type === PLACEMENT_LABEL_MAP[placementType]
-  );
+  /* Derived */
+  const selectedOffer = creator.offers.find((o) => o.type === PLACEMENT_LABEL_MAP[placementType]);
+  const budgetDisplay = budgetMode === "fixed"
+    ? (budgetFixed ? `${parseInt(budgetFixed).toLocaleString("ru-RU")} ₽` : "—")
+    : (budgetMin && budgetMax ? `${parseInt(budgetMin).toLocaleString("ru-RU")} – ${parseInt(budgetMax).toLocaleString("ru-RU")} ₽` : "—");
+
+  const deadlineDisplay = deadlineStart
+    ? deadlineEnd
+      ? `${format(deadlineStart, "dd.MM", { locale: ru })} – ${format(deadlineEnd, "dd.MM.yyyy", { locale: ru })}`
+      : format(deadlineStart, "dd MMM yyyy", { locale: ru })
+    : "—";
+
+  const budgetValue = budgetMode === "fixed" ? budgetFixed.trim() !== "" : (budgetMin.trim() !== "" && budgetMax.trim() !== "");
 
   const canSubmit =
     placementType !== "" &&
-    budgetFixed.trim() !== "" &&
-    deadline !== undefined &&
+    budgetValue &&
+    deadlineStart !== undefined &&
     briefText.trim() !== "" &&
     platformCompliance;
 
+  /* Handlers */
   const handleFileAdd = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      setFiles((prev) => [...prev, ...Array.from(e.target.files!)]);
-    }
+    if (e.target.files) setFiles((prev) => [...prev, ...Array.from(e.target.files!)]);
   };
-
   const removeFile = (idx: number) => setFiles((prev) => prev.filter((_, i) => i !== idx));
 
   const handleSubmit = async () => {
@@ -92,74 +121,65 @@ export function DealProposalForm({ open, onClose, creator }: DealProposalFormPro
     setSubmitting(true);
     try {
       const advertiserName = profile?.display_name || user.email || "";
+      const finalBudget = budgetMode === "fixed" ? parseInt(budgetFixed) || 0 : parseInt(budgetMax) || 0;
 
-      // 1. Create deal
       const { data: deal, error: dealErr } = await supabase.from("deals").insert({
         title: `${PLACEMENT_LABEL_MAP[placementType]} — ${creator.displayName}`,
         advertiser_id: user.id,
         advertiser_name: advertiserName,
         creator_id: creator.userId,
         creator_name: creator.displayName,
-        budget: parseInt(budgetFixed) || 0,
+        budget: finalBudget,
         status: "pending",
-        deadline: deadline?.toISOString() || null,
+        deadline: deadlineStart?.toISOString() || null,
         description: briefText,
       }).select().single();
 
       if (dealErr) throw dealErr;
-
-      // 2. Create initial deal terms
-      const termsFields = {
-        placementType: PLACEMENT_LABEL_MAP[placementType],
-        platform: platform || "—",
-        budget: budgetFixed,
-        deadline: deadline ? format(deadline, "dd.MM.yyyy") : "",
-        brief: briefText,
-        revisions: revisions || "Не указано",
-        acceptanceCriteria: acceptanceCriteria || "Не указано",
-        markingResponsibility: marking === "platform" ? "Платформа" : "Рекламодатель",
-      };
 
       await supabase.from("deal_terms").insert({
         deal_id: deal.id,
         created_by: user.id,
         version: 1,
         status: "draft",
-        fields: termsFields,
+        fields: {
+          placementType: PLACEMENT_LABEL_MAP[placementType],
+          platform: platform || "—",
+          budget: budgetMode === "fixed" ? budgetFixed : `${budgetMin}–${budgetMax}`,
+          budgetMode,
+          deadlineStart: deadlineStart ? format(deadlineStart, "dd.MM.yyyy") : "",
+          deadlineEnd: deadlineEnd ? format(deadlineEnd, "dd.MM.yyyy") : "",
+          brief: briefText,
+          revisions: revisions || "Не указано",
+          acceptanceCriteria: acceptanceCriteria || "Не указано",
+          markingResponsibility: marking === "platform" ? "Платформа" : "Рекламодатель",
+        },
       });
 
-      // 3. Audit log
       await supabase.from("deal_audit_log").insert({
         deal_id: deal.id,
         user_id: user.id,
         action: "Отправил предложение о сделке",
         category: "general",
-        metadata: { placementType: PLACEMENT_LABEL_MAP[placementType], budget: budgetFixed },
+        metadata: { placementType: PLACEMENT_LABEL_MAP[placementType], budget: finalBudget },
       });
 
-      // 4. Upload files if any
       for (const file of files) {
         const path = `${user.id}/${deal.id}/${Date.now()}_${file.name}`;
         const { error: upErr } = await supabase.storage.from("deal-files").upload(path, file);
         if (!upErr) {
           await supabase.from("deal_files").insert({
-            deal_id: deal.id,
-            user_id: user.id,
-            file_name: file.name,
-            file_size: file.size,
-            file_type: file.type,
-            category: "brief",
-            storage_path: path,
+            deal_id: deal.id, user_id: user.id, file_name: file.name,
+            file_size: file.size, file_type: file.type, category: "brief", storage_path: path,
           });
         }
       }
 
-      // 5. Notify creator about new proposal
       if (creator.userId) {
         await supabase.from("notifications").insert({
           user_id: creator.userId,
           title: "Новое предложение о сделке",
-          message: `${advertiserName} предлагает сотрудничество: ${PLACEMENT_LABEL_MAP[placementType]}, бюджет ${parseInt(budgetFixed).toLocaleString()} ₽`,
+          message: `${advertiserName} предлагает сотрудничество: ${PLACEMENT_LABEL_MAP[placementType]}, бюджет ${finalBudget.toLocaleString()} ₽`,
           type: "deal",
           link: "/marketplace",
         });
@@ -175,229 +195,332 @@ export function DealProposalForm({ open, onClose, creator }: DealProposalFormPro
     }
   };
 
+  /* ── Render ── */
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-[720px] max-h-[90vh] p-0 gap-0">
-        <DialogHeader className="px-6 pt-5 pb-3">
+      <DialogContent className="max-w-[720px] max-h-[90vh] p-0 gap-0 flex flex-col">
+        <DialogHeader className="px-6 pt-5 pb-0">
           <DialogTitle className="text-lg">Предложение о сделке</DialogTitle>
         </DialogHeader>
 
-        <ScrollArea className="max-h-[calc(90vh-130px)]">
-          <div className="px-6 pb-6 space-y-5">
-            {/* Summary strip */}
-            <div className="flex items-center gap-3 bg-muted/40 rounded-lg px-4 py-3">
-              <img
-                src={creator.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${creator.userId}`}
-                alt="" className="h-10 w-10 rounded-full bg-muted object-cover shrink-0"
-              />
-              <div className="flex-1 min-w-0">
-                <p className="text-[15px] font-semibold text-foreground truncate">{creator.displayName}</p>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Badge variant="outline" className="text-[10px] h-5 gap-0.5 border-primary/40 text-primary">
-                    <Lock className="h-2.5 w-2.5" />Platform-only
-                  </Badge>
-                  {selectedOffer && (
-                    <span className="text-[12px] text-muted-foreground">
-                      {selectedOffer.type}: от {selectedOffer.price.toLocaleString("ru-RU")} ₽
-                    </span>
+        {/* ── Summary strip ── */}
+        <div className="mx-6 mt-3 flex items-center gap-3 bg-muted/40 rounded-lg px-4 py-2.5">
+          <img
+            src={creator.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${creator.userId}`}
+            alt="" className="h-9 w-9 rounded-full bg-muted object-cover shrink-0"
+          />
+          <div className="flex-1 min-w-0 flex items-center gap-4 flex-wrap">
+            <span className="text-[14px] font-semibold text-foreground truncate">{creator.displayName}</span>
+            {placementType && (
+              <Badge variant="secondary" className="text-[11px] h-5">{PLACEMENT_LABEL_MAP[placementType]}</Badge>
+            )}
+            <span className="text-[12px] text-muted-foreground">{budgetDisplay}</span>
+            <span className="text-[12px] text-muted-foreground">{deadlineDisplay}</span>
+          </div>
+        </div>
+
+        <ScrollArea className="flex-1 max-h-[calc(90vh-200px)]">
+          <div className="px-6 pb-4 pt-4 space-y-1">
+
+            {/* ═══════════ Section A: Core (required) ═══════════ */}
+            <Collapsible defaultOpen>
+              <CollapsibleTrigger className="flex items-center justify-between w-full py-2.5 group">
+                <span className="text-[13px] font-bold uppercase tracking-wider text-foreground">
+                  Основное <span className="text-destructive text-[11px] normal-case ml-1">обязательно</span>
+                </span>
+                <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-5 pb-4">
+
+                {/* Placement type — segmented control */}
+                <div className="space-y-2">
+                  <FieldLabel required>Тип размещения</FieldLabel>
+                  <div className="grid grid-cols-3 gap-0 border border-border rounded-lg overflow-hidden">
+                    {PLACEMENT_TYPES.map((pt) => {
+                      const Icon = pt.icon;
+                      const selected = placementType === pt.value;
+                      const offer = creator.offers.find((o) => o.type === PLACEMENT_LABEL_MAP[pt.value]);
+                      return (
+                        <button
+                          key={pt.value}
+                          type="button"
+                          onClick={() => setPlacementType(pt.value)}
+                          className={cn(
+                            "flex flex-col items-center gap-1 px-3 py-3.5 text-center transition-colors relative",
+                            "border-r last:border-r-0 border-border",
+                            selected
+                              ? "bg-primary/10 text-primary"
+                              : "bg-background hover:bg-muted/50 text-muted-foreground"
+                          )}
+                        >
+                          <Icon className={cn("h-6 w-6", selected && "text-primary")} />
+                          <span className={cn("text-[14px] font-semibold", selected && "text-primary")}>{pt.label}</span>
+                          <span className="text-[11px] leading-tight opacity-70">{pt.hint}</span>
+                          {offer && (
+                            <span className="text-[11px] font-medium mt-0.5">от {offer.price.toLocaleString("ru-RU")} ₽</span>
+                          )}
+                          {selected && (
+                            <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-primary rounded-t-sm" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Platform selector (if multiple) */}
+                {creator.platforms.length > 1 && (
+                  <div className="space-y-1.5">
+                    <FieldLabel>Платформа / канал</FieldLabel>
+                    <Select value={platform} onValueChange={setPlatform}>
+                      <SelectTrigger className="h-9"><SelectValue placeholder="Выберите платформу" /></SelectTrigger>
+                      <SelectContent>
+                        {creator.platforms.map((p) => (
+                          <SelectItem key={p.name} value={p.name}>{p.name} ({p.metric})</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {/* Budget */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <FieldLabel required>Бюджет (₽)</FieldLabel>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <span className={cn("text-[12px]", budgetMode === "fixed" ? "text-foreground font-medium" : "text-muted-foreground")}>
+                        Фиксированный
+                      </span>
+                      <Switch
+                        checked={budgetMode === "range"}
+                        onCheckedChange={(v) => setBudgetMode(v ? "range" : "fixed")}
+                        className="h-5 w-9 data-[state=checked]:bg-primary"
+                      />
+                      <span className={cn("text-[12px]", budgetMode === "range" ? "text-foreground font-medium" : "text-muted-foreground")}>
+                        Диапазон
+                      </span>
+                    </label>
+                  </div>
+
+                  {budgetMode === "fixed" ? (
+                    <div className="relative">
+                      <Input
+                        type="number"
+                        value={budgetFixed}
+                        onChange={(e) => setBudgetFixed(e.target.value)}
+                        placeholder={selectedOffer ? `напр. ${selectedOffer.price.toLocaleString("ru-RU")}` : "напр. 50 000"}
+                        className="h-10 pr-8"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[13px] text-muted-foreground">₽</span>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="relative">
+                        <Input
+                          type="number"
+                          value={budgetMin}
+                          onChange={(e) => setBudgetMin(e.target.value)}
+                          placeholder="От (напр. 30 000)"
+                          className="h-10 pr-8"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[13px] text-muted-foreground">₽</span>
+                      </div>
+                      <div className="relative">
+                        <Input
+                          type="number"
+                          value={budgetMax}
+                          onChange={(e) => setBudgetMax(e.target.value)}
+                          placeholder="До (напр. 80 000)"
+                          className="h-10 pr-8"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[13px] text-muted-foreground">₽</span>
+                      </div>
+                    </div>
                   )}
                 </div>
-              </div>
-            </div>
 
-            {/* 1. Placement type */}
-            <div className="space-y-2">
-              <label className="text-[13px] font-semibold text-foreground">
-                Тип размещения <span className="text-destructive">*</span>
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                {PLACEMENT_TYPES.map((pt) => {
-                  const Icon = pt.icon;
-                  const offer = creator.offers.find((o) => o.type === PLACEMENT_LABEL_MAP[pt.value]);
-                  return (
-                    <button
-                      key={pt.value}
-                      type="button"
-                      onClick={() => setPlacementType(pt.value)}
-                      className={cn(
-                        "flex flex-col items-center gap-1.5 rounded-lg border px-3 py-3 text-center transition-colors",
-                        placementType === pt.value
-                          ? "border-primary bg-primary/5 text-primary"
-                          : "border-border hover:border-primary/30 text-muted-foreground"
-                      )}
-                    >
-                      <Icon className="h-5 w-5" />
-                      <span className="text-[13px] font-medium">{pt.label}</span>
-                      {offer && (
-                        <span className="text-[11px]">от {offer.price.toLocaleString("ru-RU")} ₽</span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* 2. Platform/channel */}
-            {creator.platforms.length > 1 && (
-              <div className="space-y-2">
-                <label className="text-[13px] font-semibold text-foreground">Платформа / канал</label>
-                <Select value={platform} onValueChange={setPlatform}>
-                  <SelectTrigger className="h-9"><SelectValue placeholder="Выберите платформу" /></SelectTrigger>
-                  <SelectContent>
-                    {creator.platforms.map((p) => (
-                      <SelectItem key={p.name} value={p.name}>{p.name} ({p.metric})</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            <Separator />
-
-            {/* 3. Budget */}
-            <div className="space-y-2">
-              <label className="text-[13px] font-semibold text-foreground">
-                Бюджет (₽) <span className="text-destructive">*</span>
-              </label>
-              <Input
-                type="number"
-                value={budgetFixed}
-                onChange={(e) => setBudgetFixed(e.target.value)}
-                placeholder={selectedOffer ? `Минимум: ${selectedOffer.price.toLocaleString("ru-RU")} ₽` : "Укажите сумму"}
-                className="h-9"
-              />
-            </div>
-
-            {/* 4. Deadline */}
-            <div className="space-y-2">
-              <label className="text-[13px] font-semibold text-foreground">
-                Срок / дата публикации <span className="text-destructive">*</span>
-              </label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className={cn("w-full justify-start h-9 text-left font-normal", !deadline && "text-muted-foreground")}>
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {deadline ? format(deadline, "dd MMMM yyyy", { locale: ru }) : "Выберите дату"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={deadline}
-                    onSelect={setDeadline}
-                    disabled={(date) => date < new Date()}
-                    initialFocus
-                    className="p-3 pointer-events-auto"
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-
-            <Separator />
-
-            {/* 5. Brief */}
-            <div className="space-y-2">
-              <label className="text-[13px] font-semibold text-foreground">
-                Бриф: сообщение, CTA, ограничения <span className="text-destructive">*</span>
-              </label>
-              <Textarea
-                value={briefText}
-                onChange={(e) => setBriefText(e.target.value)}
-                placeholder="Опишите ключевое сообщение, призыв к действию и ограничения..."
-                rows={4}
-                className="text-[14px]"
-              />
-            </div>
-
-            {/* 6. Deliverables */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <label className="text-[13px] font-semibold text-foreground">Кол-во правок</label>
-                <Input
-                  type="number"
-                  value={revisions}
-                  onChange={(e) => setRevisions(e.target.value)}
-                  placeholder="Напр. 2"
-                  className="h-9"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-[13px] font-semibold text-foreground">Критерии приёмки</label>
-                <Input
-                  value={acceptanceCriteria}
-                  onChange={(e) => setAcceptanceCriteria(e.target.value)}
-                  placeholder="Утверждение рекламодателем"
-                  className="h-9"
-                />
-              </div>
-            </div>
-
-            <Separator />
-
-            {/* 7. Marking (ORD) */}
-            <div className="space-y-2">
-              <label className="text-[13px] font-semibold text-foreground">Маркировка (ОРД)</label>
-              <Select value={marking} onValueChange={setMarking}>
-                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {MARKING_OPTIONS.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* 8. Files */}
-            <div className="space-y-2">
-              <label className="text-[13px] font-semibold text-foreground">Файлы брифа</label>
-              <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileAdd} />
-              <Button variant="outline" size="sm" className="h-8 text-[12px] gap-1.5" onClick={() => fileInputRef.current?.click()}>
-                <Upload className="h-3.5 w-3.5" />Прикрепить файлы
-              </Button>
-              {files.length > 0 && (
-                <div className="space-y-1 mt-1">
-                  {files.map((f, i) => (
-                    <div key={i} className="flex items-center gap-2 bg-muted/30 rounded-md px-2.5 py-1.5">
-                      <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                      <span className="text-[12px] text-foreground truncate flex-1">{f.name}</span>
-                      <span className="text-[11px] text-muted-foreground">{(f.size / 1024).toFixed(0)} KB</span>
-                      <button onClick={() => removeFile(i)} className="text-muted-foreground hover:text-destructive"><X className="h-3.5 w-3.5" /></button>
-                    </div>
-                  ))}
+                {/* Deadline — date range */}
+                <div className="space-y-2">
+                  <FieldLabel required>Окно публикации</FieldLabel>
+                  <div className="grid grid-cols-2 gap-2">
+                    <DatePickerField
+                      value={deadlineStart}
+                      onChange={setDeadlineStart}
+                      placeholder="Начало"
+                      minDate={new Date()}
+                    />
+                    <DatePickerField
+                      value={deadlineEnd}
+                      onChange={setDeadlineEnd}
+                      placeholder="Конец (опц.)"
+                      minDate={deadlineStart || new Date()}
+                    />
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">Укажите диапазон дат, когда публикация допустима. Второе поле необязательно.</p>
                 </div>
-              )}
-            </div>
 
-            <Separator />
+                {/* Brief */}
+                <div className="space-y-2">
+                  <FieldLabel required>Бриф</FieldLabel>
+                  <Textarea
+                    value={briefText}
+                    onChange={(e) => setBriefText(e.target.value)}
+                    placeholder={BRIEF_PLACEHOLDER}
+                    rows={5}
+                    className="text-[14px] leading-relaxed"
+                  />
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
 
-            {/* Compliance */}
-            <label className="flex items-start gap-2.5 cursor-pointer">
-              <Checkbox
-                checked={platformCompliance}
-                onCheckedChange={(v) => setPlatformCompliance(v === true)}
-                className="mt-0.5"
-              />
-              <span className="text-[13px] text-foreground leading-snug">
-                Вся коммуникация и поставка контента происходят исключительно внутри платформы <span className="text-destructive">*</span>
-              </span>
-            </label>
+            {/* ═══════════ Section B: Details (optional) ═══════════ */}
+            <Collapsible open={detailsOpen} onOpenChange={setDetailsOpen}>
+              <CollapsibleTrigger className="flex items-center justify-between w-full py-2.5 border-t border-border group">
+                <span className="text-[13px] font-bold uppercase tracking-wider text-foreground">
+                  Детали <span className="text-muted-foreground text-[11px] normal-case ml-1">опционально</span>
+                </span>
+                <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-4 pb-4">
+
+                {/* Revisions & acceptance */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <FieldLabel>Кол-во правок</FieldLabel>
+                    <Input type="number" value={revisions} onChange={(e) => setRevisions(e.target.value)} placeholder="напр. 2" className="h-9" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <FieldLabel>Критерии приёмки</FieldLabel>
+                    <Input value={acceptanceCriteria} onChange={(e) => setAcceptanceCriteria(e.target.value)} placeholder="Утверждение рекламодателем" className="h-9" />
+                  </div>
+                </div>
+
+                {/* Files */}
+                <div className="space-y-2">
+                  <FieldLabel>Файлы брифа</FieldLabel>
+                  <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileAdd} />
+                  <Button variant="outline" size="sm" className="h-8 text-[12px] gap-1.5" onClick={() => fileInputRef.current?.click()}>
+                    <Upload className="h-3.5 w-3.5" />Прикрепить файлы
+                  </Button>
+                  {files.length > 0 && (
+                    <div className="space-y-1 mt-1">
+                      {files.map((f, i) => (
+                        <div key={i} className="flex items-center gap-2 bg-muted/30 rounded-md px-2.5 py-1.5">
+                          <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          <span className="text-[12px] text-foreground truncate flex-1">{f.name}</span>
+                          <span className="text-[11px] text-muted-foreground">{(f.size / 1024).toFixed(0)} KB</span>
+                          <button onClick={() => removeFile(i)} className="text-muted-foreground hover:text-destructive"><X className="h-3.5 w-3.5" /></button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Marking (ORD) */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <FieldLabel>Маркировка (ОРД)</FieldLabel>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-[260px] text-[12px]">
+                          По закону рекламные интеграции должны быть промаркированы через ОРД. По умолчанию платформа берёт это на себя.
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                  <Select value={marking} onValueChange={setMarking}>
+                    <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {MARKING_OPTIONS.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
           </div>
         </ScrollArea>
 
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-2.5 px-6 py-3.5 border-t border-border bg-card">
-          <Button variant="outline" size="sm" onClick={onClose} className="h-9">Отмена</Button>
-          <Button
-            size="sm"
-            className="h-9 gap-1.5"
-            disabled={!canSubmit || submitting}
-            onClick={handleSubmit}
-          >
-            {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            Отправить предложение
+        {/* ── Platform-only checkbox (above footer) ── */}
+        <div className="px-6 py-2.5 border-t border-border">
+          <label className="flex items-center gap-2.5 cursor-pointer">
+            <Checkbox
+              checked={platformCompliance}
+              onCheckedChange={(v) => setPlatformCompliance(v === true)}
+            />
+            <span className="text-[13px] text-foreground leading-snug flex items-center gap-1.5">
+              <Lock className="h-3.5 w-3.5 text-primary shrink-0" />
+              Работа и оплата — только через платформу <span className="text-destructive">*</span>
+            </span>
+          </label>
+        </div>
+
+        {/* ── Footer: 3 actions ── */}
+        <div className="flex items-center justify-between px-6 py-3 border-t border-border bg-card">
+          <Button variant="ghost" size="sm" onClick={onClose} className="h-9 text-muted-foreground">
+            Отмена
           </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => toast.info("Черновик сохранён (демо)")}>
+              <Save className="h-3.5 w-3.5" />Черновик
+            </Button>
+            <Button
+              size="sm"
+              className="h-9 gap-1.5"
+              disabled={!canSubmit || submitting}
+              onClick={handleSubmit}
+            >
+              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              Отправить
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/* ── Shared sub-components ── */
+
+function FieldLabel({ children, required }: { children: React.ReactNode; required?: boolean }) {
+  return (
+    <label className="text-[13px] font-semibold text-foreground">
+      {children} {required && <span className="text-destructive">*</span>}
+    </label>
+  );
+}
+
+function DatePickerField({ value, onChange, placeholder, minDate }: {
+  value: Date | undefined;
+  onChange: (d: Date | undefined) => void;
+  placeholder: string;
+  minDate: Date;
+}) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          className={cn("w-full justify-start h-10 text-left font-normal", !value && "text-muted-foreground")}
+        >
+          <CalendarIcon className="mr-2 h-4 w-4" />
+          {value ? format(value, "dd MMM yyyy", { locale: ru }) : placeholder}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0" align="start">
+        <Calendar
+          mode="single"
+          selected={value}
+          onSelect={onChange}
+          disabled={(date) => date < minDate}
+          initialFocus
+          className="p-3 pointer-events-auto"
+        />
+      </PopoverContent>
+    </Popover>
   );
 }
