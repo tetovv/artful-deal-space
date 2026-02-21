@@ -19,6 +19,7 @@ import { useContentItems } from "@/hooks/useDbData";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { useVideoViewCounts } from "@/hooks/useVideoViews";
+import { usePostImpressionCounts } from "@/hooks/usePostImpressions";
 import { Tooltip as UiTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useMemo, useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -154,6 +155,10 @@ const CreatorStudio = () => {
   // Fetch 30%-watched view counts for video items
   const videoIds = useMemo(() => myItems.filter(i => i.type === "video").map(i => i.id), [myItems]);
   const { data: viewCounts30 = {} } = useVideoViewCounts(videoIds);
+
+  // Fetch impression counts for post items
+  const postIds = useMemo(() => myItems.filter(i => i.type === "post").map(i => i.id), [myItems]);
+  const { data: impressionCounts = {} } = usePostImpressionCounts(postIds);
 
   /* deals */
   const { data: dbDeals = [] } = useQuery({
@@ -490,6 +495,17 @@ const CreatorStudio = () => {
                                     </span>
                                   </TooltipTrigger>
                                   <TooltipContent><p className="text-xs">Просмотры: пользователь посмотрел ≥30% видео</p></TooltipContent>
+                                </UiTooltip>
+                              )}
+                              {item.type === "post" && (
+                                <UiTooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="flex items-center gap-1 text-primary/80 cursor-help">
+                                      <Eye className="h-3 w-3" />{fmtNum(impressionCounts[item.id] || 0)}
+                                      <span className="text-[10px]">(показы)</span>
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent><p className="text-xs">Показы: пост был виден ≥50% в области просмотра ≥1 сек</p></TooltipContent>
                                 </UiTooltip>
                               )}
                               <span className="flex items-center gap-1"><Heart className="h-3 w-3" />{fmtNum(item.likes)}</span>

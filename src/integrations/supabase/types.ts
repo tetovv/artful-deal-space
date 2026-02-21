@@ -1110,6 +1110,41 @@ export type Database = {
         }
         Relationships: []
       }
+      post_impressions: {
+        Row: {
+          created_at: string
+          date_bucket: string
+          id: string
+          post_id: string
+          viewer_user_id: string
+          visible_ms: number
+        }
+        Insert: {
+          created_at?: string
+          date_bucket?: string
+          id?: string
+          post_id: string
+          viewer_user_id: string
+          visible_ms?: number
+        }
+        Update: {
+          created_at?: string
+          date_bucket?: string
+          id?: string
+          post_id?: string
+          viewer_user_id?: string
+          visible_ms?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_impressions_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "content_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -1711,6 +1746,13 @@ export type Database = {
           contact_email: string
           ord_verified: boolean
           user_id: string
+        }[]
+      }
+      get_post_impressions_batch: {
+        Args: { p_post_ids: string[] }
+        Returns: {
+          impression_count: number
+          post_id: string
         }[]
       }
       get_video_view_count_30pct: {

@@ -140,7 +140,7 @@ export const OffersSection = ({ offers, onDeal }: { offers: OfferData[]; onDeal?
 };
 
 /* ─── Portfolio Section ─── */
-export const PortfolioSection = ({ items, videoViewCounts = {} }: { items: any[]; videoViewCounts?: Record<string, number> }) => {
+export const PortfolioSection = ({ items, videoViewCounts = {}, postImpressionCounts = {} }: { items: any[]; videoViewCounts?: Record<string, number>; postImpressionCounts?: Record<string, number> }) => {
   const fmtNum = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}K` : String(n));
 
   return (
@@ -161,6 +161,16 @@ export const PortfolioSection = ({ items, videoViewCounts = {} }: { items: any[]
                     </span>
                   </TooltipTrigger>
                   <TooltipContent><p className="text-xs">Просмотры: пользователь посмотрел ≥30% видео</p></TooltipContent>
+                </Tooltip>
+              )}
+              {item.type === "post" && postImpressionCounts[item.id] !== undefined && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex items-center gap-1 text-[11px] text-primary/80 cursor-help px-1">
+                      <Eye className="h-3 w-3" />{fmtNum(postImpressionCounts[item.id])} показов
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent><p className="text-xs">Показы: пост был виден ≥50% в области просмотра ≥1 сек</p></TooltipContent>
                 </Tooltip>
               )}
             </div>

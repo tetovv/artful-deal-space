@@ -8,6 +8,7 @@ import { PageTransition } from "@/components/layout/PageTransition";
 import { useState, useMemo } from "react";
 import { toast } from "sonner";
 import { useVideoViewCounts } from "@/hooks/useVideoViews";
+import { usePostImpressionCounts } from "@/hooks/usePostImpressions";
 
 import { ProfileHero } from "@/components/creator-profile/ProfileHero";
 import { ProfileActionCard } from "@/components/creator-profile/ProfileActionCard";
@@ -196,6 +197,9 @@ const CreatorProfile = () => {
   const videoIds = useMemo(() => contentToShow.filter(c => c.type === "video").map(c => c.id), [contentToShow]);
   const { data: videoViewCounts = {} } = useVideoViewCounts(videoIds);
 
+  const postIds = useMemo(() => contentToShow.filter(c => c.type === "post").map(c => c.id), [contentToShow]);
+  const { data: postImpressionCounts = {} } = usePostImpressionCounts(postIds);
+
   if (isLoading) {
     return <div className="p-8 text-muted-foreground animate-pulse">Загрузка профиля...</div>;
   }
@@ -229,7 +233,7 @@ const CreatorProfile = () => {
               onDeal={!isOwnProfile ? () => setDealSent(true) : undefined}
             />
 
-            <PortfolioSection items={contentToShow} videoViewCounts={videoViewCounts} />
+            <PortfolioSection items={contentToShow} videoViewCounts={videoViewCounts} postImpressionCounts={postImpressionCounts} />
 
             <AudienceCard connected={false} />
 
