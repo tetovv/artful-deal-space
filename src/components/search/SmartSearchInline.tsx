@@ -620,10 +620,21 @@ export function SmartSearchInline({ query, contentType, onSwitchToNormal, standa
   /* ── QUERYING ── */
   if (state === "querying") {
     return (
-      <div className="space-y-4 py-8">
-        <div className="flex items-center gap-2 justify-center text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Ищем по смыслу…
+      <div className="space-y-5 py-10 animate-fade-in">
+        <div className="flex flex-col items-center gap-3 text-center">
+          <div className="h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center">
+            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+          </div>
+          <div>
+            <p className="text-base font-medium text-foreground">Ищем…</p>
+            {contentType === "all" ? (
+              <p className="text-sm text-muted-foreground mt-1">Проверяем видео, подкасты и другие типы</p>
+            ) : contentType === "podcast" ? (
+              <p className="text-sm text-muted-foreground mt-1">Анализируем подкасты по смыслу</p>
+            ) : (
+              <p className="text-sm text-muted-foreground mt-1">Анализируем видео по смыслу</p>
+            )}
+          </div>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl mx-auto">
           {Array.from({ length: 4 }).map((_, i) => (
@@ -697,7 +708,7 @@ export function SmartSearchInline({ query, contentType, onSwitchToNormal, standa
     ].slice(0, 4);
 
     return (
-      <div className="text-center py-16 space-y-4">
+      <div className="text-center py-16 space-y-4 animate-fade-in">
         <div className="flex justify-center">
           <div className="h-14 w-14 rounded-2xl bg-muted/50 flex items-center justify-center">
             <SearchX className="h-7 w-7 text-muted-foreground" />
@@ -727,7 +738,7 @@ export function SmartSearchInline({ query, contentType, onSwitchToNormal, standa
   const showTabsForAll = contentType === "all" && (meaningHasHits || standardHasHits);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 animate-fade-in">
       {/* Tab bar for "all" mode */}
       {showTabsForAll && (
         <div className="flex gap-1 border-b border-border pb-0 mb-2">
