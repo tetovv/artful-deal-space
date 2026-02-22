@@ -1433,6 +1433,38 @@ export type Database = {
           },
         ]
       }
+      montage_edit_history: {
+        Row: {
+          action_type: string
+          created_at: string
+          id: string
+          montage_id: string
+          payload: Json
+        }
+        Insert: {
+          action_type: string
+          created_at?: string
+          id?: string
+          montage_id: string
+          payload?: Json
+        }
+        Update: {
+          action_type?: string
+          created_at?: string
+          id?: string
+          montage_id?: string
+          payload?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "montage_edit_history_montage_id_fkey"
+            columns: ["montage_id"]
+            isOneToOne: false
+            referencedRelation: "montage_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       montage_projects: {
         Row: {
           created_at: string
@@ -1482,6 +1514,7 @@ export type Database = {
           id: string
           montage_id: string
           rationale: string
+          segment_status: string
           sort_order: number
           source_id: string | null
           source_type: string
@@ -1494,6 +1527,7 @@ export type Database = {
           id?: string
           montage_id: string
           rationale?: string
+          segment_status?: string
           sort_order?: number
           source_id?: string | null
           source_type: string
@@ -1506,6 +1540,7 @@ export type Database = {
           id?: string
           montage_id?: string
           rationale?: string
+          segment_status?: string
           sort_order?: number
           source_id?: string | null
           source_type?: string
