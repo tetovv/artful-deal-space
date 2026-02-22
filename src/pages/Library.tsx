@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   ListVideo, History, Download, Plus, Trash2, Bookmark,
   Search, FolderOpen, Globe, Lock, Play, Clock,
+  Sparkles, RefreshCw, Video, Music, FileText, BookOpen, Layout,
+  CheckCircle2, AlertTriangle, XCircle, ExternalLink, ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,10 +13,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { Card } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { PageTransition } from "@/components/layout/PageTransition";
@@ -26,6 +29,32 @@ const formatDate = (d: string) => {
   try { return format(new Date(d), "d MMM yyyy, HH:mm", { locale: ru }); } catch { return d; }
 };
 
+const VALIDATION_STATUS_META: Record<string, { label: string; icon: React.ElementType; className: string }> = {
+  VALID: { label: "Актуален", icon: CheckCircle2, className: "text-success" },
+  STALE: { label: "Устарел", icon: AlertTriangle, className: "text-warning" },
+  PARTIALLY_INACCESSIBLE: { label: "Частично недоступен", icon: AlertTriangle, className: "text-warning" },
+  FAILED: { label: "Ошибка валидации", icon: XCircle, className: "text-destructive" },
+};
+
+const SOURCE_TYPE_FILTERS = [
+  { value: "all", label: "Все" },
+  { value: "video", label: "Видео" },
+  { value: "audio", label: "Аудио" },
+  { value: "post", label: "Посты" },
+  { value: "book", label: "Книги" },
+  { value: "template", label: "Шаблоны" },
+];
+
+const SOURCE_ICONS: Record<string, React.ElementType> = {
+  video: Video, audio: Music, podcast: Music, post: FileText, book: BookOpen, template: Layout,
+};
+
+const CONFIDENCE_STYLES: Record<string, { label: string; className: string }> = {
+  high: { label: "Высокая", className: "bg-success/10 text-success border-success/20" },
+  medium: { label: "Средняя", className: "bg-warning/10 text-warning border-warning/20" },
+  low: { label: "Низкая", className: "bg-destructive/10 text-destructive border-destructive/20" },
+};
+
 const Library = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -34,6 +63,12 @@ const Library = () => {
   const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [newPlaylist, setNewPlaylist] = useState({ title: "", description: "", is_public: true });
+
+  // Saved answers state
+  const [savedSearch, setSavedSearch] = useState("");
+  const [savedTypeFilter, setSavedTypeFilter] = useState("all");
+  const [selectedSavedId, setSelectedSavedId] = useState<string | null>(null);
+  const [revalidating, setRevalidating] = useState(false);
 
   // Playlists
   const { data: playlists = [], isLoading: playlistsLoading } = useQuery({
@@ -96,6 +131,56 @@ const Library = () => {
     enabled: !!user?.id,
   });
 
+  // Saved answers
+  const { data: savedAnswers = [], isLoading: savedLoading } = useQuery({
+    queryKey: ["saved-answers", user?.id],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      const { data, error } = await supabase
+        .from("saved_answers")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user?.id,
+  });
+
+  // Evidence for selected saved answer
+  const { data: selectedEvidence = [] } = useQuery({
+    queryKey: ["saved-answer-evidence", selectedSavedId],
+    queryFn: async () => {
+      if (!selectedSavedId) return [];
+      const { data, error } = await supabase
+        .from("saved_answer_evidence")
+        .select("*")
+        .eq("saved_answer_id", selectedSavedId)
+        .order("captured_at");
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!selectedSavedId,
+  });
+
+  const selectedSaved = savedAnswers.find((s: any) => s.id === selectedSavedId);
+
+  // Filter saved answers
+  const filteredSaved = useMemo(() => {
+    let items = savedAnswers;
+    if (savedSearch) {
+      const q = savedSearch.toLowerCase();
+      items = items.filter((s: any) => s.question_text.toLowerCase().includes(q) || s.answer_text.toLowerCase().includes(q));
+    }
+    return items;
+  }, [savedAnswers, savedSearch]);
+
+  // Filter by source type (needs evidence data — filter on selected detail only)
+  const filteredEvidence = useMemo(() => {
+    if (savedTypeFilter === "all") return selectedEvidence;
+    return selectedEvidence.filter((e: any) => e.source_type === savedTypeFilter);
+  }, [selectedEvidence, savedTypeFilter]);
+
   const createPlaylistMutation = useMutation({
     mutationFn: async () => {
       if (!user?.id || !newPlaylist.title.trim()) throw new Error("Введите название");
@@ -126,6 +211,63 @@ const Library = () => {
     onSuccess: (_, type) => { queryClient.invalidateQueries({ queryKey: [type === "view" ? "view-history" : "download-history"] }); toast.success("История очищена"); },
   });
 
+  const deleteSavedMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("saved_answers").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["saved-answers"] });
+      setSelectedSavedId(null);
+      toast.success("Ответ удалён");
+    },
+  });
+
+  const handleRevalidate = async () => {
+    if (!selectedSaved || !user || revalidating) return;
+    setRevalidating(true);
+    console.log("[analytics] answer_revalidated");
+
+    try {
+      // Check if evidence sources still exist
+      const sourceIds = selectedEvidence
+        .map((e: any) => e.source_id)
+        .filter(Boolean);
+
+      let newStatus = "VALID";
+      if (sourceIds.length > 0) {
+        const { data: existingContent } = await supabase
+          .from("content_items")
+          .select("id")
+          .in("id", sourceIds);
+
+        const existingIds = new Set((existingContent || []).map((c: any) => c.id));
+        const missingCount = sourceIds.filter((id: string) => !existingIds.has(id)).length;
+
+        if (missingCount === sourceIds.length) {
+          newStatus = "FAILED";
+        } else if (missingCount > 0) {
+          newStatus = "PARTIALLY_INACCESSIBLE";
+        }
+      }
+
+      await supabase
+        .from("saved_answers")
+        .update({
+          validation_status: newStatus,
+          last_validated_at: new Date().toISOString(),
+        })
+        .eq("id", selectedSaved.id);
+
+      queryClient.invalidateQueries({ queryKey: ["saved-answers"] });
+      toast.success("Валидация завершена");
+    } catch {
+      toast.error("Ошибка валидации");
+    } finally {
+      setRevalidating(false);
+    }
+  };
+
   const filteredPlaylists = playlists.filter((p: any) => p.title.toLowerCase().includes(search.toLowerCase()));
 
   return (
@@ -133,13 +275,14 @@ const Library = () => {
       <div className="p-6 lg:p-8 space-y-6 max-w-5xl mx-auto">
         <div className="space-y-1">
           <h1 className="text-2xl font-bold text-foreground">Библиотека</h1>
-          <p className="text-sm text-muted-foreground">Плейлисты, закладки, история просмотров и загрузок</p>
+          <p className="text-sm text-muted-foreground">Плейлисты, закладки, сохранённые ответы и история</p>
         </div>
 
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList>
             <TabsTrigger value="playlists" className="gap-1.5"><ListVideo className="h-3.5 w-3.5" /> Плейлисты</TabsTrigger>
             <TabsTrigger value="bookmarks" className="gap-1.5"><Bookmark className="h-3.5 w-3.5" /> Закладки</TabsTrigger>
+            <TabsTrigger value="saved-answers" className="gap-1.5"><Sparkles className="h-3.5 w-3.5" /> Ответы</TabsTrigger>
             <TabsTrigger value="history" className="gap-1.5"><History className="h-3.5 w-3.5" /> Просмотры</TabsTrigger>
             <TabsTrigger value="downloads" className="gap-1.5"><Download className="h-3.5 w-3.5" /> Загрузки</TabsTrigger>
           </TabsList>
@@ -250,6 +393,194 @@ const Library = () => {
                   </div>
                 ))}
               </div>
+            )}
+          </TabsContent>
+
+          {/* SAVED ANSWERS */}
+          <TabsContent value="saved-answers" className="space-y-4 mt-4">
+            {selectedSavedId && selectedSaved ? (
+              /* Detail view */
+              <div className="space-y-4">
+                <button
+                  onClick={() => { setSelectedSavedId(null); setSavedTypeFilter("all"); }}
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  ← Назад к списку
+                </button>
+
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Вопрос</p>
+                  <h2 className="text-lg font-semibold text-foreground">{selectedSaved.question_text}</h2>
+                </div>
+
+                {/* Validation status */}
+                <div className="flex items-center gap-3">
+                  {(() => {
+                    const meta = VALIDATION_STATUS_META[selectedSaved.validation_status] || VALIDATION_STATUS_META.VALID;
+                    const StatusIcon = meta.icon;
+                    return (
+                      <div className={cn("flex items-center gap-1.5 text-xs", meta.className)}>
+                        <StatusIcon className="h-3.5 w-3.5" />
+                        {meta.label}
+                      </div>
+                    );
+                  })()}
+                  <span className="text-[11px] text-muted-foreground">
+                    Проверено: {formatDate(selectedSaved.last_validated_at)}
+                  </span>
+                  {selectedSaved.validation_status !== "VALID" && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleRevalidate}
+                      disabled={revalidating}
+                      className="h-7 text-xs"
+                    >
+                      <RefreshCw className={cn("h-3 w-3 mr-1", revalidating && "animate-spin")} />
+                      {revalidating ? "Проверка…" : "Перепроверить"}
+                    </Button>
+                  )}
+                </div>
+
+                {/* Answer */}
+                <Card className="p-5 border-primary/20 bg-primary/5">
+                  <div className="flex items-start gap-2">
+                    <CheckCircle2 className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-foreground">Ответ</p>
+                      <p className="text-sm text-foreground leading-relaxed">{selectedSaved.answer_text}</p>
+                    </div>
+                  </div>
+                </Card>
+
+                {/* Source type filters */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-sm font-medium text-foreground mr-2">Источники ({filteredEvidence.length})</p>
+                  {SOURCE_TYPE_FILTERS.map((f) => (
+                    <button
+                      key={f.value}
+                      onClick={() => setSavedTypeFilter(f.value)}
+                      className={cn(
+                        "text-[11px] px-2 py-1 rounded-md transition-colors",
+                        savedTypeFilter === f.value
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted text-muted-foreground hover:bg-muted/80"
+                      )}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Evidence list */}
+                <div className="space-y-2">
+                  {filteredEvidence.map((ev: any) => {
+                    const Icon = SOURCE_ICONS[ev.source_type] || FileText;
+                    const conf = CONFIDENCE_STYLES[ev.confidence] || CONFIDENCE_STYLES.medium;
+                    const link = ev.deep_link || (ev.source_id ? `/product/${ev.source_id}` : "#");
+                    return (
+                      <Card key={ev.id} className="p-4 hover:bg-muted/30 transition-colors">
+                        <div className="flex items-start gap-3">
+                          <div className="h-9 w-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                            <Icon className="h-4 w-4 text-muted-foreground" />
+                          </div>
+                          <div className="flex-1 min-w-0 space-y-1.5">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <Link to={link} className="text-sm font-medium text-foreground hover:text-primary transition-colors line-clamp-1">
+                                  {ev.title}
+                                </Link>
+                                <p className="text-xs text-muted-foreground">{ev.creator_name} · {ev.source_type}</p>
+                              </div>
+                              <Badge variant="outline" className={`shrink-0 text-[10px] ${conf.className}`}>
+                                {conf.label}
+                              </Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3 break-words">{ev.snippet}</p>
+                            <Link to={link} className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                              <ExternalLink className="h-3 w-3" /> Перейти к источнику
+                            </Link>
+                          </div>
+                        </div>
+                      </Card>
+                    );
+                  })}
+                  {filteredEvidence.length === 0 && (
+                    <p className="text-sm text-muted-foreground text-center py-8">Нет источников данного типа</p>
+                  )}
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => deleteSavedMutation.mutate(selectedSaved.id)}>
+                    <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Удалить
+                  </Button>
+                  {selectedSaved.validation_status === "VALID" ? null : (
+                    <Button size="sm" variant="outline" onClick={handleRevalidate} disabled={revalidating}>
+                      <RefreshCw className={cn("h-3.5 w-3.5 mr-1.5", revalidating && "animate-spin")} />
+                      Перепроверить
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              /* List view */
+              <>
+                <div className="flex items-center gap-3">
+                  <div className="relative flex-1 max-w-sm">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input placeholder="Поиск по ответам..." value={savedSearch} onChange={(e) => setSavedSearch(e.target.value)} className="pl-9 text-sm" />
+                  </div>
+                  <p className="text-sm text-muted-foreground">{filteredSaved.length} ответов</p>
+                </div>
+
+                {savedLoading ? (
+                  <div className="text-center py-16 text-muted-foreground text-sm">Загрузка...</div>
+                ) : filteredSaved.length === 0 ? (
+                  <div className="text-center py-16 space-y-3">
+                    <Sparkles className="h-12 w-12 text-muted-foreground/40 mx-auto" />
+                    <p className="text-sm text-muted-foreground">Сохранённых ответов пока нет</p>
+                    <p className="text-xs text-muted-foreground">Задайте вопрос в Ask и сохраните полезный ответ</p>
+                    <Button size="sm" variant="outline" asChild>
+                      <Link to="/ask"><Sparkles className="h-3.5 w-3.5 mr-1.5" /> Задать вопрос</Link>
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {filteredSaved.map((item: any) => {
+                      const meta = VALIDATION_STATUS_META[item.validation_status] || VALIDATION_STATUS_META.VALID;
+                      const StatusIcon = meta.icon;
+                      return (
+                        <motion.div
+                          key={item.id}
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          onClick={() => {
+                            setSelectedSavedId(item.id);
+                            console.log("[analytics] saved_answer_opened");
+                          }}
+                          className="flex items-center gap-3 p-4 rounded-lg border border-border bg-card hover:border-primary/30 transition-all cursor-pointer group"
+                        >
+                          <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                            <Sparkles className="h-5 w-5 text-primary" />
+                          </div>
+                          <div className="flex-1 min-w-0 space-y-1">
+                            <p className="text-sm font-medium text-foreground line-clamp-1">{item.question_text}</p>
+                            <p className="text-xs text-muted-foreground line-clamp-1">{item.answer_text}</p>
+                            <div className="flex items-center gap-3 text-[11px]">
+                              <span className={cn("flex items-center gap-1", meta.className)}>
+                                <StatusIcon className="h-3 w-3" /> {meta.label}
+                              </span>
+                              <span className="text-muted-foreground/60">{formatDate(item.created_at)}</span>
+                            </div>
+                          </div>
+                          <ChevronRight className="h-4 w-4 text-muted-foreground/40 shrink-0 group-hover:text-foreground transition-colors" />
+                        </motion.div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
             )}
           </TabsContent>
 
