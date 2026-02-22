@@ -1,6 +1,5 @@
-import { Handshake, MessageSquare, Rss, Crown, Clock, ShieldCheck, Briefcase, Zap } from "lucide-react";
+import { Handshake, Rss, Crown, Clock, ShieldCheck, Briefcase, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface ProfileActionCardProps {
   isOwnProfile: boolean;
@@ -47,28 +46,6 @@ export const ProfileActionCard = ({
           </Button>
         )}
 
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div>
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  size="sm"
-                  disabled={!hasActiveDeal}
-                >
-                  <MessageSquare className="h-4 w-4 mr-2" />
-                  Написать
-                </Button>
-              </div>
-            </TooltipTrigger>
-            {!hasActiveDeal && (
-              <TooltipContent side="bottom" className="text-[12px] max-w-[220px]">
-                Сообщения доступны после принятия предложения о сделке
-              </TooltipContent>
-            )}
-          </Tooltip>
-        </TooltipProvider>
 
         <div className="grid grid-cols-2 gap-2">
           <Button
