@@ -249,20 +249,20 @@ function ClarificationPanel({
   );
 }
 
-/* ── Montage Footer Bar ── */
+/* ── Montage Bar (non-sticky, above results) ── */
 
-function MontageFooter({ count, onOpen }: { count: number; onOpen: () => void }) {
+function MontageBar({ count, onOpen }: { count: number; onOpen: () => void }) {
   if (count < 2) return null;
   return (
-    <div className="sticky bottom-4 z-10 max-w-2xl">
-      <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card/95 backdrop-blur-sm shadow-lg px-4 py-3">
+    <div className="max-w-2xl">
+      <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/30 px-4 py-2.5">
         <div className="flex items-center gap-2 min-w-0">
-          <Scissors className="h-4 w-4 text-primary shrink-0" />
-          <span className="text-sm text-foreground">
-            Доступно моментов для нарезки: <strong>{count}</strong>
+          <Scissors className="h-4 w-4 text-muted-foreground shrink-0" />
+          <span className="text-sm text-muted-foreground">
+            Доступно моментов для нарезки: <strong className="text-foreground">{count}</strong>
           </span>
         </div>
-        <Button size="sm" className="shrink-0" onClick={onOpen}>
+        <Button size="sm" variant="outline" className="shrink-0 text-xs h-8" onClick={onOpen}>
           Создать нарезку
         </Button>
       </div>
@@ -770,10 +770,12 @@ export function SmartSearchInline({ query, contentType, onSwitchToNormal, standa
         </div>
       )}
 
+      {/* Montage bar — above results, non-sticky, secondary */}
+      <MontageBar count={montageCount} onOpen={() => setMontageOpen(true)} />
+
       {/* Meaning results */}
       {(resultTab === "meaning" || !showTabsForAll) && meaningResults && (
         <div className="space-y-5">
-          {/* Best match — highlighted card with top 3 moments */}
           {meaningResults.best && (
             <div>
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1.5">
@@ -788,7 +790,6 @@ export function SmartSearchInline({ query, contentType, onSwitchToNormal, standa
             </div>
           )}
 
-          {/* More results — grouped by source, collapsed by default */}
           {groupedMore.length > 0 && (
             <div>
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
@@ -823,9 +824,6 @@ export function SmartSearchInline({ query, contentType, onSwitchToNormal, standa
         <ShieldCheck className="h-3.5 w-3.5" />
         Показаны только источники, к которым у вас есть доступ.
       </p>
-
-      {/* Montage sticky footer */}
-      <MontageFooter count={montageCount} onOpen={() => setMontageOpen(true)} />
 
       {/* Montage wizard */}
       <MontageWizardModal
