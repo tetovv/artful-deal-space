@@ -1,11 +1,11 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { contentItems as mockItems, contentTypeLabels } from "@/data/mockData";
 import { ContentCard } from "@/components/content/ContentCard";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Search, Loader2, RefreshCw } from "lucide-react";
+import { Search, Loader2, RefreshCw, Sparkles } from "lucide-react";
 import { ContentType } from "@/types";
 import { useContentItems } from "@/hooks/useDbData";
 import { PageTransition } from "@/components/layout/PageTransition";
@@ -14,8 +14,10 @@ import { SelectTabPrompt } from "@/pages/Home";
 const types: ContentType[] = ["video", "music", "post", "podcast", "book", "template"];
 
 type SearchState = "idle" | "loading" | "results" | "no_results" | "error";
+type VideoSearchMode = "normal" | "meaning";
 
 const Explore = () => {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const urlQuery = searchParams.get("q") || "";
 
@@ -24,6 +26,7 @@ const Explore = () => {
   const [activeType, setActiveType] = useState<ContentType | null>(null);
   const [searchState, setSearchState] = useState<SearchState>(urlQuery ? "loading" : "idle");
   const [error, setError] = useState(false);
+  const [videoMode, setVideoMode] = useState<VideoSearchMode>("normal");
 
   const { data: dbItems, isLoading, isError, refetch } = useContentItems();
 
@@ -93,6 +96,14 @@ const Explore = () => {
 
   const submitSearch = useCallback(() => {
     const q = inputValue.trim();
+
+    // Meaning mode → redirect to meaning search flow
+    if (activeType === "video" && videoMode === "meaning" && q) {
+      console.log("[analytics] meaning_search_submitted");
+      navigate(`/search?mode=meaning_video&q=${encodeURIComponent(q)}`);
+      return;
+    }
+
     setCommittedQuery(q);
     if (q) {
       setSearchParams({ q }, { replace: true });
@@ -100,7 +111,7 @@ const Explore = () => {
       setSearchParams({}, { replace: true });
     }
     setError(false);
-  }, [inputValue, setSearchParams]);
+  }, [inputValue, setSearchParams, activeType, videoMode, navigate]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
@@ -136,7 +147,11 @@ const Explore = () => {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Что посмотреть? Поиск по названию, теме, описанию..."
+                placeholder={
+                  activeType === "video" && videoMode === "meaning"
+                    ? "Опишите, что происходит в видео (люди, действия, фразы, эмоции)…"
+                    : "Что посмотреть? Поиск по названию, теме, описанию..."
+                }
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={handleKeyDown}
@@ -159,21 +174,64 @@ const Explore = () => {
             </Button>
           </div>
 
-          {/* Content type chips */}
-          <div className="flex gap-1.5 flex-wrap max-w-2xl mx-auto">
-            {types.map((t) => (
-              <button
-                key={t}
-                onClick={() => setActiveType(activeType === t ? null : t)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                  activeType === t
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-secondary text-secondary-foreground hover:bg-accent"
-                }`}
-              >
-                {contentTypeLabels[t] || t}
-              </button>
-            ))}
+          {/* Meaning hint */}
+          {activeType === "video" && videoMode === "meaning" && (
+            <p className="text-xs text-muted-foreground max-w-2xl mx-auto flex items-center gap-1.5">
+              <Sparkles className="h-3 w-3 shrink-0 text-primary" />
+              Поиск по смыслу ищет конкретные моменты по таймкоду.
+            </p>
+          )}
+
+          {/* Content type chips + video mode switch */}
+          <div className="flex items-center gap-3 flex-wrap max-w-2xl mx-auto">
+            <div className="flex gap-1.5 flex-wrap">
+              {types.map((t) => (
+                <button
+                  key={t}
+                  onClick={() => {
+                    setActiveType(activeType === t ? null : t);
+                    if (t !== "video") setVideoMode("normal");
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                    activeType === t
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-secondary text-secondary-foreground hover:bg-accent"
+                  }`}
+                >
+                  {contentTypeLabels[t] || t}
+                </button>
+              ))}
+            </div>
+
+            {/* Video mode switch — only when Видео chip is active */}
+            {activeType === "video" && (
+              <div className="flex rounded-lg border border-border overflow-hidden ml-auto">
+                <button
+                  onClick={() => setVideoMode("normal")}
+                  className={`px-3 py-1 text-xs font-medium transition-colors ${
+                    videoMode === "normal"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-card text-muted-foreground hover:bg-muted/50"
+                  }`}
+                >
+                  Обычный
+                </button>
+                <button
+                  onClick={() => {
+                    setVideoMode("meaning");
+                    console.log("[analytics] meaning_search_opened");
+                  }}
+                  className={`px-3 py-1 text-xs font-medium transition-colors border-l border-border ${
+                    videoMode === "meaning"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-card text-muted-foreground hover:bg-muted/50"
+                  }`}
+                >
+                  <Sparkles className="h-3 w-3 inline mr-1 -mt-0.5" />
+                  По смыслу
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
