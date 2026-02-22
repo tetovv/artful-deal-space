@@ -383,28 +383,6 @@ const Explore = () => {
         {/* ── Smart Search Flow (inline) ── */}
         {isSmartActive && (
           <>
-            {/* Smart summary for "Все" mode */}
-            {activeType === null && smartState === "results" && Object.keys(resultCounts).length > 0 && (
-              <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground max-w-2xl mx-auto bg-muted/30 rounded-lg px-4 py-2.5 animate-fade-in">
-                <Sparkles className="h-4 w-4 text-primary shrink-0" />
-                <span className="font-medium text-foreground">Найдено в:</span>
-                {Object.entries(resultCounts)
-                  .filter(([, v]) => v > 0)
-                  .map(([type, count]) => {
-                    const Icon = typeIcons[type] || Layers;
-                    return (
-                      <button
-                        key={type}
-                        onClick={() => handleTypeChange(type as ContentType)}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 transition-colors"
-                      >
-                        <Icon className="h-3 w-3" />
-                        {typeLabels[type] || type} ({count})
-                      </button>
-                    );
-                  })}
-              </div>
-            )}
             {activeType === null && smartState === "no_results" && committedQuery && (
               <div className="sr-only" aria-live="polite">Ничего не найдено</div>
             )}
