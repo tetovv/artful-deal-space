@@ -424,21 +424,23 @@ export function SmartSearchInline({ query, contentType, onSwitchToNormal, standa
               ? "Опишите что обсуждается в подкасте"
               : "Опишите что происходит в видео"}
         </p>
-        {/* Workplace toggle */}
-        <div className="flex items-center justify-center gap-3 pt-2">
-          <div className="flex items-center gap-2">
-            <Briefcase className="h-4 w-4 text-muted-foreground" />
-            <Label htmlFor="wp-toggle" className="text-sm text-muted-foreground cursor-pointer">Рабочие источники</Label>
+        {/* Workplace toggle — hidden for video/podcast */}
+        {contentType === "all" && (
+          <div className="flex items-center justify-center gap-3 pt-2">
+            <div className="flex items-center gap-2">
+              <Briefcase className="h-4 w-4 text-muted-foreground" />
+              <Label htmlFor="wp-toggle" className="text-sm text-muted-foreground cursor-pointer">Рабочие источники</Label>
+            </div>
+            <Switch
+              id="wp-toggle"
+              checked={includeWorkplace}
+              onCheckedChange={(v) => {
+                setIncludeWorkplace(v);
+                console.log(`[analytics] toggle_workplace_${v ? "on" : "off"}`);
+              }}
+            />
           </div>
-          <Switch
-            id="wp-toggle"
-            checked={includeWorkplace}
-            onCheckedChange={(v) => {
-              setIncludeWorkplace(v);
-              console.log(`[analytics] toggle_workplace_${v ? "on" : "off"}`);
-            }}
-          />
-        </div>
+        )}
         <p className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
           <ShieldCheck className="h-3.5 w-3.5" />
           Используются только источники, к которым у вас есть доступ.
