@@ -272,15 +272,15 @@ const Explore = () => {
           </div>
         </div>
 
-        {/* Smart hint */}
-        <div>
-          {isSmartActive && (
-            <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-              <Sparkles className="h-3 w-3 shrink-0 text-primary" />
-              Поиск по смыслу ищет конкретные моменты по таймкоду.
-            </p>
-          )}
-        </div>
+        {/* Meaning mode banner — below tabs row, above results */}
+        {isSmartActive && (
+          <div className="flex items-center gap-2 px-3.5 py-2 rounded-lg bg-primary/5 border border-primary/10 max-w-2xl">
+            <Sparkles className="h-4 w-4 shrink-0 text-primary" />
+            <span className="text-[14px] leading-snug text-foreground/80">
+              По смыслу: находим моменты внутри контента и показываем таймкоды.
+            </span>
+          </div>
+        )}
 
         {/* Row B: Tabs + Mode toggle — left-aligned, toggle outside scroll */}
         <div className="flex flex-wrap items-end gap-2 border-b border-border">
