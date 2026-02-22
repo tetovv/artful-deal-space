@@ -38,3 +38,6 @@ verify_jwt = false
 
 [functions.ask-answer]
 verify_jwt = false
+
+[functions.montage]
+verify_jwt = false

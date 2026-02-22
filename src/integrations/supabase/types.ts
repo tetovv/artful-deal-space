@@ -1433,6 +1433,94 @@ export type Database = {
           },
         ]
       }
+      montage_projects: {
+        Row: {
+          created_at: string
+          id: string
+          scope: string
+          source_query_id: string | null
+          status: string
+          target_duration: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          scope?: string
+          source_query_id?: string | null
+          status?: string
+          target_duration?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          scope?: string
+          source_query_id?: string | null
+          status?: string
+          target_duration?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "montage_projects_source_query_id_fkey"
+            columns: ["source_query_id"]
+            isOneToOne: false
+            referencedRelation: "ask_queries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      montage_segments: {
+        Row: {
+          created_at: string
+          deep_link: string | null
+          end_sec: number
+          id: string
+          montage_id: string
+          rationale: string
+          sort_order: number
+          source_id: string | null
+          source_type: string
+          start_sec: number
+        }
+        Insert: {
+          created_at?: string
+          deep_link?: string | null
+          end_sec?: number
+          id?: string
+          montage_id: string
+          rationale?: string
+          sort_order?: number
+          source_id?: string | null
+          source_type: string
+          start_sec?: number
+        }
+        Update: {
+          created_at?: string
+          deep_link?: string | null
+          end_sec?: number
+          id?: string
+          montage_id?: string
+          rationale?: string
+          sort_order?: number
+          source_id?: string | null
+          source_type?: string
+          start_sec?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "montage_segments_montage_id_fkey"
+            columns: ["montage_id"]
+            isOneToOne: false
+            referencedRelation: "montage_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           created_at: string
