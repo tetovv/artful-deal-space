@@ -1510,6 +1510,65 @@ export type Database = {
           },
         ]
       }
+      moment_index: {
+        Row: {
+          action_tags: Json
+          created_at: string
+          embedding_ref_text: string | null
+          embedding_ref_vision: string | null
+          emotion_tags: Json | null
+          end_sec: number
+          entity_tags: Json
+          id: string
+          popularity_signals: Json | null
+          safety_flags: Json | null
+          start_sec: number
+          transcript_snippet: string
+          video_id: string
+          visual_caption: string | null
+        }
+        Insert: {
+          action_tags?: Json
+          created_at?: string
+          embedding_ref_text?: string | null
+          embedding_ref_vision?: string | null
+          emotion_tags?: Json | null
+          end_sec?: number
+          entity_tags?: Json
+          id?: string
+          popularity_signals?: Json | null
+          safety_flags?: Json | null
+          start_sec?: number
+          transcript_snippet?: string
+          video_id: string
+          visual_caption?: string | null
+        }
+        Update: {
+          action_tags?: Json
+          created_at?: string
+          embedding_ref_text?: string | null
+          embedding_ref_vision?: string | null
+          emotion_tags?: Json | null
+          end_sec?: number
+          entity_tags?: Json
+          id?: string
+          popularity_signals?: Json | null
+          safety_flags?: Json | null
+          start_sec?: number
+          transcript_snippet?: string
+          video_id?: string
+          visual_caption?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "moment_index_video_id_fkey"
+            columns: ["video_id"]
+            isOneToOne: false
+            referencedRelation: "content_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       montage_edit_history: {
         Row: {
           action_type: string
@@ -2375,6 +2434,111 @@ export type Database = {
           },
         ]
       }
+      saved_moment_bookmarks: {
+        Row: {
+          created_at: string
+          end_sec: number
+          id: string
+          note: string | null
+          start_sec: number
+          user_id: string
+          video_id: string
+        }
+        Insert: {
+          created_at?: string
+          end_sec?: number
+          id?: string
+          note?: string | null
+          start_sec?: number
+          user_id: string
+          video_id: string
+        }
+        Update: {
+          created_at?: string
+          end_sec?: number
+          id?: string
+          note?: string | null
+          start_sec?: number
+          user_id?: string
+          video_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "saved_moment_bookmarks_video_id_fkey"
+            columns: ["video_id"]
+            isOneToOne: false
+            referencedRelation: "content_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      saved_searches: {
+        Row: {
+          created_at: string
+          id: string
+          label: string
+          query_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          label?: string
+          query_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          label?: string
+          query_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "saved_searches_query_id_fkey"
+            columns: ["query_id"]
+            isOneToOne: false
+            referencedRelation: "video_search_queries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      scene_segments: {
+        Row: {
+          created_at: string
+          end_sec: number
+          id: string
+          keyframe_ref: string | null
+          start_sec: number
+          video_id: string
+        }
+        Insert: {
+          created_at?: string
+          end_sec?: number
+          id?: string
+          keyframe_ref?: string | null
+          start_sec?: number
+          video_id: string
+        }
+        Update: {
+          created_at?: string
+          end_sec?: number
+          id?: string
+          keyframe_ref?: string | null
+          start_sec?: number
+          video_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scene_segments_video_id_fkey"
+            columns: ["video_id"]
+            isOneToOne: false
+            referencedRelation: "content_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       studio_settings: {
         Row: {
           auto_publish: boolean | null
@@ -2582,6 +2746,47 @@ export type Database = {
         }
         Relationships: []
       }
+      transcript_segments: {
+        Row: {
+          confidence: number | null
+          created_at: string
+          end_sec: number
+          id: string
+          speaker_id: string | null
+          start_sec: number
+          text: string
+          video_id: string
+        }
+        Insert: {
+          confidence?: number | null
+          created_at?: string
+          end_sec?: number
+          id?: string
+          speaker_id?: string | null
+          start_sec?: number
+          text?: string
+          video_id: string
+        }
+        Update: {
+          confidence?: number | null
+          created_at?: string
+          end_sec?: number
+          id?: string
+          speaker_id?: string | null
+          start_sec?: number
+          text?: string
+          video_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transcript_segments_video_id_fkey"
+            columns: ["video_id"]
+            isOneToOne: false
+            referencedRelation: "content_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_balances: {
         Row: {
           available: number
@@ -2626,6 +2831,119 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      video_access_snapshots: {
+        Row: {
+          created_at: string
+          entitlement_summary: Json
+          id: string
+          query_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          entitlement_summary?: Json
+          id?: string
+          query_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          entitlement_summary?: Json
+          id?: string
+          query_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "video_access_snapshots_query_id_fkey"
+            columns: ["query_id"]
+            isOneToOne: false
+            referencedRelation: "video_search_queries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      video_search_queries: {
+        Row: {
+          clarifications: Json | null
+          created_at: string
+          id: string
+          include_private_sources: boolean
+          mode: string
+          parsed_intent: Json | null
+          preferences: Json | null
+          query_text: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          clarifications?: Json | null
+          created_at?: string
+          id?: string
+          include_private_sources?: boolean
+          mode?: string
+          parsed_intent?: Json | null
+          preferences?: Json | null
+          query_text: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          clarifications?: Json | null
+          created_at?: string
+          id?: string
+          include_private_sources?: boolean
+          mode?: string
+          parsed_intent?: Json | null
+          preferences?: Json | null
+          query_text?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      video_search_results: {
+        Row: {
+          created_at: string
+          id: string
+          moment_id: string
+          query_id: string
+          rationale: Json | null
+          score: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          moment_id: string
+          query_id: string
+          rationale?: Json | null
+          score?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          moment_id?: string
+          query_id?: string
+          rationale?: Json | null
+          score?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "video_search_results_moment_id_fkey"
+            columns: ["moment_id"]
+            isOneToOne: false
+            referencedRelation: "moment_index"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "video_search_results_query_id_fkey"
+            columns: ["query_id"]
+            isOneToOne: false
+            referencedRelation: "video_search_queries"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       video_views: {
         Row: {
