@@ -36,6 +36,7 @@ import GoalPlaylistDetail from "./pages/GoalPlaylistDetail";
 import PlaylistTemplates from "./pages/PlaylistTemplates";
 import SharedTemplate from "./pages/SharedTemplate";
 import SearchPage from "./pages/SearchPage";
+import SearchClarify from "./pages/SearchClarify";
 import { RoleGuard } from "@/components/layout/RoleGuard";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useEffect } from "react";

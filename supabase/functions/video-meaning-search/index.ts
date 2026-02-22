@@ -260,6 +260,9 @@ async function handleSearch(supabase: any, userId: string, body: any) {
   // Parse intent (mock)
   const parsedIntent = { raw: queryText, type: "videoMeaning" };
 
+  // Check if clarification is needed
+  const clarification = needsClarification(queryText, preferences);
+
   // Persist query
   const { data: query, error: qErr } = await supabase
     .from("video_search_queries")
@@ -270,7 +273,8 @@ async function handleSearch(supabase: any, userId: string, body: any) {
       parsed_intent: parsedIntent,
       preferences,
       include_private_sources: includePrivate,
-      status: "completed",
+      status: clarification.needed ? "needs_clarification" : "completed",
+      clarification_questions: clarification.needed ? clarification.questions : null,
     })
     .select("id")
     .single();
@@ -287,6 +291,15 @@ async function handleSearch(supabase: any, userId: string, body: any) {
       subscribed_count: ent.subscribedCreatorIds.size,
     },
   });
+
+  // If clarification needed, return early with questions
+  if (clarification.needed) {
+    return json({
+      needsClarification: true,
+      queryId: query.id,
+      questions: clarification.questions,
+    });
+  }
 
   // Run search
   const results = await mockSearch(supabase, queryText, includePrivate, userId);
