@@ -21,8 +21,11 @@ import {
   ShieldCheck,
   Briefcase,
   FlaskConical,
+  SearchX,
+  Info,
 } from "lucide-react";
 import { toast } from "sonner";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { MOCK_QUERIES, findMockQuery, mockQueryId } from "@/data/mockSearchQueries";
 
 /* ── preference chips ── */
@@ -109,6 +112,8 @@ function MeaningVideoQuery({
   const [lengthPref, setLengthPref] = useState<string | null>(null);
   const [prefsOpen, setPrefsOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [indexNotReady, setIndexNotReady] = useState(false);
+  const [learnMoreOpen, setLearnMoreOpen] = useState(false);
 
   const canSubmit = queryText.trim().length > 0 && !submitting;
 
@@ -153,8 +158,23 @@ function MeaningVideoQuery({
         },
       );
 
-      if (!res.ok) throw new Error("Search failed");
+      if (!res.ok) {
+        // Treat 501/503/404 or specific body as "index not ready"
+        if (res.status === 501 || res.status === 503 || res.status === 404) {
+          setIndexNotReady(true);
+          setSubmitting(false);
+          return;
+        }
+        throw new Error("Search failed");
+      }
       const data = await res.json();
+
+      // Check for explicit "not ready" / empty index signal from backend
+      if (data.indexNotReady || data.error === "empty_index" || data.error === "not_implemented") {
+        setIndexNotReady(true);
+        setSubmitting(false);
+        return;
+      }
 
       if (data.needsClarification) {
         navigate(`/search/clarify/${data.queryId}`);
@@ -162,7 +182,8 @@ function MeaningVideoQuery({
         navigate(`/search/results/${data.queryId}`);
       }
     } catch {
-      toast.error("Не удалось выполнить поиск");
+      // Network error or unexpected failure → also show fallback
+      setIndexNotReady(true);
       setSubmitting(false);
     }
   };
@@ -295,22 +316,90 @@ function MeaningVideoQuery({
         Используются только источники, к которым у вас есть доступ.
       </p>
 
-      {/* Primary CTA */}
-      <Button
-        className="w-full h-12 text-base"
-        onClick={handleSubmit}
-        disabled={!canSubmit}
-      >
-        {submitting ? (
-          <>
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Ищем…
-          </>
-        ) : (
-          <>
-            <SearchIcon className="h-4 w-4 mr-2" /> Найти
-          </>
-        )}
-      </Button>
+      {/* Index not ready fallback */}
+      {indexNotReady ? (
+        <div className="rounded-xl border border-border bg-card p-6 space-y-4 text-center">
+          <div className="flex justify-center">
+            <div className="h-14 w-14 rounded-2xl bg-muted/50 flex items-center justify-center">
+              <SearchX className="h-7 w-7 text-muted-foreground" />
+            </div>
+          </div>
+          <h2 className="text-lg font-semibold text-foreground">
+            Поиск по смыслу пока не готов
+          </h2>
+          <p className="text-sm text-muted-foreground max-w-md mx-auto">
+            Нужно проиндексировать видео (распознавание речи и моменты).
+            Попробуйте обычный поиск или вернитесь позже.
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pt-2">
+            <Button
+              onClick={() => {
+                setIndexNotReady(false);
+                navigate("/explore");
+              }}
+            >
+              <SearchIcon className="h-4 w-4 mr-2" />
+              Перейти к обычному поиску
+            </Button>
+            <Button variant="outline" onClick={() => setLearnMoreOpen(true)}>
+              <Info className="h-4 w-4 mr-2" />
+              Подробнее
+            </Button>
+          </div>
+        </div>
+      ) : (
+        /* Primary CTA */
+        <Button
+          className="w-full h-12 text-base"
+          onClick={handleSubmit}
+          disabled={!canSubmit}
+        >
+          {submitting ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Ищем…
+            </>
+          ) : (
+            <>
+              <SearchIcon className="h-4 w-4 mr-2" /> Найти
+            </>
+          )}
+        </Button>
+      )}
+
+      {/* Learn more modal */}
+      <Dialog open={learnMoreOpen} onOpenChange={setLearnMoreOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Как работает поиск по смыслу?</DialogTitle>
+            <DialogDescription>
+              Поиск по смыслу анализирует содержимое видео — речь, действия и эмоции — чтобы находить конкретные моменты по таймкоду.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 text-sm text-muted-foreground">
+            <p>
+              Для работы этого режима каждое видео должно пройти индексацию:
+            </p>
+            <ol className="list-decimal list-inside space-y-1.5">
+              <li>Распознавание речи (транскрипция)</li>
+              <li>Анализ визуальных сцен и действий</li>
+              <li>Создание семантического индекса моментов</li>
+            </ol>
+            <p>
+              Если индекс ещё не создан, поиск по смыслу временно недоступен.
+              Используйте обычный поиск по названиям и описаниям, пока видео индексируются.
+            </p>
+          </div>
+          <div className="pt-2">
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => setLearnMoreOpen(false)}
+            >
+              Понятно
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Test queries panel */}
       <Collapsible>
