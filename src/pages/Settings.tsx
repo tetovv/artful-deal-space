@@ -11,7 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Save, User, Tags, MapPin, Upload, Loader2, Shield, Bell, Lock, Monitor, Globe, LayoutDashboard, Accessibility, UserX, ShieldCheck } from "lucide-react";
+import { Save, User, Tags, MapPin, Upload, Loader2, Shield, Bell, Lock, Monitor, Globe, LayoutDashboard, Accessibility, UserX, ShieldCheck, ArrowDownUp } from "lucide-react";
+import DataPortabilitySection from "@/components/settings/DataPortabilitySection";
 import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import type { Database } from "@/integrations/supabase/types";
@@ -42,6 +43,7 @@ const SECTIONS = [
   { id: "region", label: "Регион", icon: Globe },
   { id: "platform", label: "Платформа", icon: LayoutDashboard },
   { id: "security", label: "Безопасность", icon: ShieldCheck },
+  { id: "data", label: "Данные", icon: ArrowDownUp },
 ] as const;
 
 function useLocalSettings() {
@@ -515,6 +517,8 @@ export default function Settings() {
             </CardContent>
           </Card>
         );
+      case "data":
+        return <DataPortabilitySection />;
       default:
         return null;
     }
