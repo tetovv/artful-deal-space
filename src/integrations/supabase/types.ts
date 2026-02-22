@@ -1799,6 +1799,54 @@ export type Database = {
           },
         ]
       }
+      playlist_progress: {
+        Row: {
+          completed_items: string[]
+          created_at: string
+          current_item_id: string | null
+          id: string
+          playlist_id: string
+          time_remaining: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          completed_items?: string[]
+          created_at?: string
+          current_item_id?: string | null
+          id?: string
+          playlist_id: string
+          time_remaining?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          completed_items?: string[]
+          created_at?: string
+          current_item_id?: string | null
+          id?: string
+          playlist_id?: string
+          time_remaining?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "playlist_progress_current_item_id_fkey"
+            columns: ["current_item_id"]
+            isOneToOne: false
+            referencedRelation: "goal_playlist_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "playlist_progress_playlist_id_fkey"
+            columns: ["playlist_id"]
+            isOneToOne: false
+            referencedRelation: "goal_playlists"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       playlists: {
         Row: {
           created_at: string
