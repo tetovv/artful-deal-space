@@ -31,6 +31,8 @@ import Ask from "./pages/Ask";
 import AskResult from "./pages/AskResult";
 import MontageDetail from "./pages/MontageDetail";
 import SharedMontage from "./pages/SharedMontage";
+import GoalPlaylistWizard from "./pages/GoalPlaylistWizard";
+import GoalPlaylistDetail from "./pages/GoalPlaylistDetail";
 import { RoleGuard } from "@/components/layout/RoleGuard";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useEffect } from "react";
@@ -96,6 +98,8 @@ const App = () => (
               <Route path="/ask/:queryId" element={<Protected><AskResult /></Protected>} />
               <Route path="/montage/:montageId" element={<Protected><MontageDetail /></Protected>} />
               <Route path="/m/:slug" element={<Protected><SharedMontage /></Protected>} />
+              <Route path="/playlists/new" element={<Protected><GoalPlaylistWizard /></Protected>} />
+              <Route path="/playlists/:playlistId" element={<Protected><GoalPlaylistDetail /></Protected>} />
               <Route path="/settings" element={<Protected><Settings /></Protected>} />
               <Route path="*" element={<NotFound />} />
             </Routes>

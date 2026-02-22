@@ -41,3 +41,6 @@ verify_jwt = false
 
 [functions.montage]
 verify_jwt = false
+
+[functions.goal-playlists]
+verify_jwt = false
