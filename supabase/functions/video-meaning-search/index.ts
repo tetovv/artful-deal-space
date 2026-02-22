@@ -80,6 +80,126 @@ function hasAccessToContent(
   return false;
 }
 
+/* ── clarification logic ── */
+
+interface ClarificationQuestion {
+  id: string;
+  text: string;
+  reason: string;
+  options: { value: string; label: string }[];
+  defaultValue: string;
+}
+
+/** Detect what the query already tells us so we skip those questions. */
+function parseExplicitPrefs(queryText: string) {
+  const lower = queryText.toLowerCase();
+  const detected: Record<string, string> = {};
+
+  // Output type detection
+  if (/нарезк|монтаж|compilation/i.test(lower)) detected.outputType = "montage";
+  else if (/момент|отрыв|clip|фрагмент/i.test(lower)) detected.outputType = "just_moment";
+  else if (/несколько|больше|список|подборк/i.test(lower)) detected.outputType = "more_videos";
+  else if (/лучш|один|single|best/i.test(lower)) detected.outputType = "one_best";
+
+  // Duration detection
+  if (/коротк|short|<=?\s*60|минут/i.test(lower) && !/полн/i.test(lower)) detected.duration = "short";
+  else if (/средн|medium|5\s*мин/i.test(lower)) detected.duration = "medium";
+  else if (/полн|full|целиком|выпуск|эпизод/i.test(lower)) detected.duration = "full";
+
+  // Recency
+  if (/недавн|последн|свеж|новы[хйе]/i.test(lower)) detected.recency = "recent";
+
+  // "Why laughed" intent
+  const isLaughIntent = /смеял|смешн|ржал|угар|laugh|funny/i.test(lower);
+
+  return { detected, isLaughIntent };
+}
+
+function buildClarificationQuestions(
+  queryText: string,
+  preferences: Record<string, string>,
+): ClarificationQuestion[] {
+  const { detected, isLaughIntent } = parseExplicitPrefs(queryText);
+  const questions: ClarificationQuestion[] = [];
+
+  // Priority 1: Output type
+  if (!detected.outputType && !preferences.resultType) {
+    questions.push({
+      id: "outputType",
+      text: "Что именно вы хотите получить?",
+      reason: "Это поможет подобрать формат результата под вашу задачу.",
+      options: [
+        { value: "one_best", label: "Один лучший" },
+        { value: "more_videos", label: "Больше видео" },
+        { value: "montage", label: "Монтаж" },
+        { value: "just_moment", label: "Только момент" },
+      ],
+      defaultValue: "one_best",
+    });
+  }
+
+  // Priority 2: Duration
+  if (!detected.duration && !preferences.length) {
+    questions.push({
+      id: "duration",
+      text: "Какая длительность вам подходит?",
+      reason: "Так мы покажем фрагменты нужной длины, а не всё подряд.",
+      options: [
+        { value: "short", label: "Короткое (≤60с)" },
+        { value: "medium", label: "Среднее (1–5 мин)" },
+        { value: "full", label: "Полный выпуск" },
+      ],
+      defaultValue: "short",
+    });
+  }
+
+  // If we already have 2, stop here
+  if (questions.length >= 2) return questions.slice(0, 2);
+
+  // Priority 3: context for laugh intents
+  if (isLaughIntent && questions.length < 2) {
+    questions.push({
+      id: "includeContext",
+      text: "Включить контекст перед моментом?",
+      reason: "Иногда шутка понятна только с предысторией.",
+      options: [
+        { value: "yes", label: "Да, с контекстом" },
+        { value: "no", label: "Нет, только момент" },
+      ],
+      defaultValue: "yes",
+    });
+  }
+
+  // Priority 3: Recency (only if still room)
+  if (!detected.recency && questions.length < 2) {
+    questions.push({
+      id: "recency",
+      text: "За какой период искать?",
+      reason: "Ограничение по времени помогает найти актуальный контент.",
+      options: [
+        { value: "recent", label: "Последние 12 месяцев" },
+        { value: "any", label: "За всё время" },
+      ],
+      defaultValue: "any",
+    });
+  }
+
+  return questions.slice(0, 2);
+}
+
+/** Decide if clarification is needed. */
+function needsClarification(
+  queryText: string,
+  preferences: Record<string, string>,
+): { needed: boolean; questions: ClarificationQuestion[] } {
+  const questions = buildClarificationQuestions(queryText, preferences);
+  // If at least one priority-1 or priority-2 question remains, clarify
+  const hasCritical = questions.some(
+    (q) => q.id === "outputType" || q.id === "duration",
+  );
+  return { needed: hasCritical && questions.length > 0, questions };
+}
+
 /* ── mock search logic (MVP stub) ── */
 
 async function mockSearch(
