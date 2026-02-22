@@ -1307,6 +1307,83 @@ export type Database = {
           },
         ]
       }
+      goal_playlist_items: {
+        Row: {
+          content_id: string | null
+          content_type: string
+          created_at: string
+          est_time: number
+          id: string
+          playlist_id: string
+          reason: string
+          segment_ref: Json | null
+          sort_order: number
+        }
+        Insert: {
+          content_id?: string | null
+          content_type: string
+          created_at?: string
+          est_time?: number
+          id?: string
+          playlist_id: string
+          reason?: string
+          segment_ref?: Json | null
+          sort_order?: number
+        }
+        Update: {
+          content_id?: string | null
+          content_type?: string
+          created_at?: string
+          est_time?: number
+          id?: string
+          playlist_id?: string
+          reason?: string
+          segment_ref?: Json | null
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "goal_playlist_items_playlist_id_fkey"
+            columns: ["playlist_id"]
+            isOneToOne: false
+            referencedRelation: "goal_playlists"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      goal_playlists: {
+        Row: {
+          created_at: string
+          goal_type: string
+          id: string
+          mix_prefs: Json
+          scope: string
+          status: string
+          time_budget: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          goal_type: string
+          id?: string
+          mix_prefs?: Json
+          scope?: string
+          status?: string
+          time_budget: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          goal_type?: string
+          id?: string
+          mix_prefs?: Json
+          scope?: string
+          status?: string
+          time_budget?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       ingest_jobs: {
         Row: {
           created_at: string
