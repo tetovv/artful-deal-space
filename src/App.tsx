@@ -36,6 +36,7 @@ import GoalPlaylistDetail from "./pages/GoalPlaylistDetail";
 import PlaylistTemplates from "./pages/PlaylistTemplates";
 import SharedTemplate from "./pages/SharedTemplate";
 import SearchPage from "./pages/SearchPage";
+import SearchClarify from "./pages/SearchClarify";
 import { RoleGuard } from "@/components/layout/RoleGuard";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useEffect } from "react";
@@ -106,6 +107,7 @@ const App = () => (
               <Route path="/playlists/template/:slug" element={<Protected><SharedTemplate /></Protected>} />
               <Route path="/playlists/:playlistId" element={<Protected><GoalPlaylistDetail /></Protected>} />
               <Route path="/search" element={<Protected><SearchPage /></Protected>} />
+              <Route path="/search/clarify/:queryId" element={<Protected><SearchClarify /></Protected>} />
               <Route path="/settings" element={<Protected><Settings /></Protected>} />
               <Route path="*" element={<NotFound />} />
             </Routes>
