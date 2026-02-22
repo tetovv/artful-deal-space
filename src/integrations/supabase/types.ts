@@ -1933,6 +1933,94 @@ export type Database = {
           },
         ]
       }
+      saved_answer_evidence: {
+        Row: {
+          captured_at: string
+          confidence: string
+          creator_name: string
+          deep_link: string | null
+          id: string
+          saved_answer_id: string
+          snippet: string
+          source_id: string | null
+          source_type: string
+          title: string
+        }
+        Insert: {
+          captured_at?: string
+          confidence?: string
+          creator_name?: string
+          deep_link?: string | null
+          id?: string
+          saved_answer_id: string
+          snippet?: string
+          source_id?: string | null
+          source_type: string
+          title?: string
+        }
+        Update: {
+          captured_at?: string
+          confidence?: string
+          creator_name?: string
+          deep_link?: string | null
+          id?: string
+          saved_answer_id?: string
+          snippet?: string
+          source_id?: string | null
+          source_type?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "saved_answer_evidence_saved_answer_id_fkey"
+            columns: ["saved_answer_id"]
+            isOneToOne: false
+            referencedRelation: "saved_answers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      saved_answers: {
+        Row: {
+          answer_text: string
+          created_at: string
+          id: string
+          last_validated_at: string
+          query_id: string | null
+          question_text: string
+          user_id: string
+          validation_status: string
+        }
+        Insert: {
+          answer_text: string
+          created_at?: string
+          id?: string
+          last_validated_at?: string
+          query_id?: string | null
+          question_text: string
+          user_id: string
+          validation_status?: string
+        }
+        Update: {
+          answer_text?: string
+          created_at?: string
+          id?: string
+          last_validated_at?: string
+          query_id?: string | null
+          question_text?: string
+          user_id?: string
+          validation_status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "saved_answers_query_id_fkey"
+            columns: ["query_id"]
+            isOneToOne: false
+            referencedRelation: "ask_queries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       studio_settings: {
         Row: {
           auto_publish: boolean | null

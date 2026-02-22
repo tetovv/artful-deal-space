@@ -8,8 +8,9 @@ import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   ArrowLeft, AlertTriangle, Video, Music, FileText, BookOpen, Layout,
-  ExternalLink, Clock, CheckCircle2, XCircle, Shield,
+  ExternalLink, Clock, CheckCircle2, XCircle, Shield, BookmarkPlus, Check,
 } from "lucide-react";
+import { toast } from "sonner";
 
 const SOURCE_ICONS: Record<string, React.ElementType> = {
   video: Video,
@@ -26,7 +27,7 @@ const CONFIDENCE_STYLES: Record<string, { label: string; className: string }> = 
   low: { label: "Низкая", className: "bg-destructive/10 text-destructive border-destructive/20" },
 };
 
-interface EvidenceData {
+export interface EvidenceData {
   id: string;
   source_type: string;
   source_id: string | null;
@@ -38,7 +39,7 @@ interface EvidenceData {
   sort_order: number;
 }
 
-function EvidenceItem({ item }: { item: EvidenceData }) {
+export function EvidenceItem({ item }: { item: EvidenceData }) {
   const Icon = SOURCE_ICONS[item.source_type] || FileText;
   const conf = CONFIDENCE_STYLES[item.confidence] || CONFIDENCE_STYLES.medium;
   const link = item.deep_link || (item.source_id ? `/product/${item.source_id}` : "#");
@@ -87,6 +88,8 @@ export default function AskResult() {
   const [question, setQuestion] = useState("");
   const [answerText, setAnswerText] = useState("");
   const [evidence, setEvidence] = useState<EvidenceData[]>([]);
+  const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!queryId || !user) return;
@@ -94,14 +97,6 @@ export default function AskResult() {
 
     const poll = async () => {
       try {
-        // Fetch query + result
-        const { data: qData, error: qErr } = await supabase.functions.invoke("ask-answer", {
-          method: "GET",
-          headers: { "Content-Type": "application/json" },
-          body: null,
-        });
-
-        // We need custom fetch since functions.invoke doesn't support GET with path params well
         const baseUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ask-answer/${queryId}`;
         const session = (await supabase.auth.getSession()).data.session;
         const headers: Record<string, string> = {
@@ -124,30 +119,27 @@ export default function AskResult() {
           return;
         }
 
-        if (query.status === "error") {
-          setStatus("error");
-          return;
-        }
+        if (query.status === "error") { setStatus("error"); return; }
+        if (query.status === "insufficient") { setStatus("insufficient"); return; }
 
-        if (query.status === "insufficient") {
-          setStatus("insufficient");
-          return;
-        }
-
-        // Fetch evidence
         const evRes = await fetch(`${baseUrl}/evidence`, { headers });
         const evData = await evRes.json();
 
         if (cancelled) return;
-
-        if (!evData || evData.length === 0) {
-          setStatus("insufficient");
-          return;
-        }
+        if (!evData || evData.length === 0) { setStatus("insufficient"); return; }
 
         setEvidence(evData);
         setAnswerText(result?.answer_text || "");
         setStatus("answered");
+
+        // Check if already saved
+        const { data: existing } = await supabase
+          .from("saved_answers")
+          .select("id")
+          .eq("query_id", queryId)
+          .eq("user_id", user.id)
+          .maybeSingle();
+        if (existing) setSaved(true);
       } catch {
         if (!cancelled) setStatus("error");
       }
@@ -157,15 +149,55 @@ export default function AskResult() {
     return () => { cancelled = true; };
   }, [queryId, user]);
 
+  const handleSave = async () => {
+    if (!user || !queryId || saving || saved) return;
+    setSaving(true);
+    try {
+      const { data: sa, error: saErr } = await supabase
+        .from("saved_answers")
+        .insert({
+          user_id: user.id,
+          query_id: queryId,
+          question_text: question,
+          answer_text: answerText,
+          validation_status: "VALID",
+        })
+        .select("id")
+        .single();
+      if (saErr) throw saErr;
+
+      // Save evidence refs
+      if (evidence.length > 0) {
+        const refs = evidence.map((ev) => ({
+          saved_answer_id: sa.id,
+          source_type: ev.source_type,
+          source_id: ev.source_id,
+          title: ev.title,
+          creator_name: ev.creator_name,
+          deep_link: ev.deep_link,
+          snippet: ev.snippet,
+          confidence: ev.confidence,
+        }));
+        await supabase.from("saved_answer_evidence").insert(refs);
+      }
+
+      setSaved(true);
+      console.log("[analytics] answer_saved");
+      toast.success("Ответ сохранён в библиотеку");
+    } catch {
+      toast.error("Не удалось сохранить");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">
-      {/* Back */}
       <Link to="/ask" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
         <ArrowLeft className="h-4 w-4" />
         Новый вопрос
       </Link>
 
-      {/* Question */}
       {question && (
         <div>
           <p className="text-xs text-muted-foreground mb-1">Ваш вопрос</p>
@@ -173,7 +205,6 @@ export default function AskResult() {
         </div>
       )}
 
-      {/* Loading */}
       {status === "loading" && (
         <div className="space-y-4">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -186,18 +217,31 @@ export default function AskResult() {
         </div>
       )}
 
-      {/* Answered */}
       {status === "answered" && (
         <>
           <Card className="p-5 border-primary/20 bg-primary/5">
             <div className="flex items-start gap-2">
               <CheckCircle2 className="h-5 w-5 text-primary shrink-0 mt-0.5" />
-              <div className="space-y-2">
+              <div className="space-y-2 flex-1">
                 <p className="text-sm font-medium text-foreground">Ответ</p>
                 <p className="text-sm text-foreground leading-relaxed">{answerText}</p>
               </div>
             </div>
           </Card>
+
+          {/* Save CTA */}
+          <Button
+            onClick={handleSave}
+            disabled={saved || saving}
+            variant={saved ? "outline" : "default"}
+            className="w-full"
+          >
+            {saved ? (
+              <><Check className="h-4 w-4 mr-2" /> Сохранено</>
+            ) : (
+              <><BookmarkPlus className="h-4 w-4 mr-2" /> {saving ? "Сохранение…" : "Сохранить"}</>
+            )}
+          </Button>
 
           <div>
             <p className="text-sm font-medium text-foreground mb-3">
@@ -217,7 +261,6 @@ export default function AskResult() {
         </>
       )}
 
-      {/* Insufficient evidence */}
       {status === "insufficient" && (
         <Card className="p-6 text-center space-y-4">
           <div className="flex justify-center">
@@ -242,7 +285,6 @@ export default function AskResult() {
         </Card>
       )}
 
-      {/* Error */}
       {status === "error" && (
         <Card className="p-6 text-center space-y-4">
           <div className="flex justify-center">
