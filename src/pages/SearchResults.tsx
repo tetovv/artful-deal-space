@@ -19,10 +19,15 @@ import {
   Crown,
   Scissors,
   Briefcase,
+  Bookmark,
+  BookmarkCheck,
+  Save,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { MontageWizardModal } from "@/components/montage/MontageWizardModal";
 /* ── types ── */
 
@@ -101,11 +106,15 @@ function MomentRow({
   index,
   onJump,
   onPaywall,
+  onBookmark,
+  isBookmarked,
 }: {
   moment: MomentResult;
   index: number;
   onJump: (videoId: string, sec: number) => void;
   onPaywall: (videoId: string) => void;
+  onBookmark?: (moment: MomentResult) => void;
+  isBookmarked?: boolean;
 }) {
   const locked = moment.access === "locked";
 
@@ -133,7 +142,22 @@ function MomentRow({
           {mockRationale(index)}
         </p>
       </div>
-      <div className="shrink-0">
+      <div className="shrink-0 flex items-center gap-1">
+        {!locked && onBookmark && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="text-xs h-8 w-8 p-0"
+            onClick={() => onBookmark(moment)}
+            title={isBookmarked ? "В закладках" : "В закладки"}
+          >
+            {isBookmarked ? (
+              <BookmarkCheck className="h-3.5 w-3.5 text-primary" />
+            ) : (
+              <Bookmark className="h-3.5 w-3.5" />
+            )}
+          </Button>
+        )}
         {locked ? (
           <Button
             size="sm"
@@ -431,6 +455,58 @@ export default function SearchResultsPage() {
   };
 
   const [montageWizardOpen, setMontageWizardOpen] = useState(false);
+  const [saveQueryOpen, setSaveQueryOpen] = useState(false);
+  const [saveLabel, setSaveLabel] = useState("");
+  const [savingQuery, setSavingQuery] = useState(false);
+  const [querySaved, setQuerySaved] = useState(false);
+  const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(new Set());
+
+  const handleSaveQuery = async () => {
+    if (!user || !queryData || savingQuery) return;
+    setSavingQuery(true);
+    try {
+      const { error } = await supabase.from("saved_searches" as any).insert({
+        user_id: user.id,
+        query_id: queryId || null,
+        query_text: queryData.query_text,
+        label: saveLabel.trim() || null,
+        preferences: queryData.preferences,
+      });
+      if (error) throw error;
+      setQuerySaved(true);
+      setSaveQueryOpen(false);
+      toast.success("Поиск сохранён");
+    } catch {
+      toast.error("Не удалось сохранить");
+    } finally {
+      setSavingQuery(false);
+    }
+  };
+
+  const handleBookmarkMoment = async (moment: MomentResult) => {
+    if (!user) return;
+    if (bookmarkedIds.has(moment.id)) {
+      // Remove bookmark
+      await supabase.from("moment_bookmarks" as any).delete()
+        .eq("user_id", user.id)
+        .eq("video_id", moment.video_id)
+        .eq("start_sec", moment.start_sec);
+      setBookmarkedIds(prev => { const n = new Set(prev); n.delete(moment.id); return n; });
+      toast.success("Закладка удалена");
+    } else {
+      const { error } = await supabase.from("moment_bookmarks" as any).insert({
+        user_id: user.id,
+        video_id: moment.video_id,
+        start_sec: moment.start_sec,
+        end_sec: moment.end_sec,
+        video_title: moment.video_title,
+        creator_name: moment.creator_name,
+      });
+      if (error) { toast.error("Ошибка"); return; }
+      setBookmarkedIds(prev => new Set(prev).add(moment.id));
+      toast.success("Момент добавлен в закладки");
+    }
+  };
 
   // Group moments by video for "More videos" tab
   const groupedByVideo = useMemo(() => {
@@ -469,13 +545,30 @@ export default function SearchResultsPage() {
             «{queryData?.query_text}»
           </p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => navigate("/search?mode=meaning_video")}
-        >
-          Новый поиск
-        </Button>
+        <div className="flex items-center gap-2">
+          {!querySaved && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSaveQueryOpen(true)}
+              title="Сохранить поиск"
+            >
+              <Save className="h-4 w-4" />
+            </Button>
+          )}
+          {querySaved && (
+            <Badge variant="secondary" className="text-xs gap-1">
+              <BookmarkCheck className="h-3 w-3" /> Сохранено
+            </Badge>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate("/search?mode=meaning_video")}
+          >
+            Новый поиск
+          </Button>
+        </div>
       </div>
 
       {noResults ? (
@@ -537,6 +630,8 @@ export default function SearchResultsPage() {
                     index={0}
                     onJump={handleJump}
                     onPaywall={handlePaywall}
+                    onBookmark={handleBookmarkMoment}
+                    isBookmarked={bookmarkedIds.has(results.best.id)}
                   />
 
                   {/* Additional moments from same video in moreVideos */}
@@ -550,6 +645,8 @@ export default function SearchResultsPage() {
                         index={i + 1}
                         onJump={handleJump}
                         onPaywall={handlePaywall}
+                        onBookmark={handleBookmarkMoment}
+                        isBookmarked={bookmarkedIds.has(m.id)}
                       />
                     ))}
                 </Card>
@@ -662,6 +759,33 @@ export default function SearchResultsPage() {
         useVideoMeaningEndpoint
         selectedMomentIds={results?.montageCandidates?.map((m) => m.id)}
       />
+
+      {/* Save query dialog */}
+      <Dialog open={saveQueryOpen} onOpenChange={setSaveQueryOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Сохранить поиск</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <Label className="text-sm mb-1.5 block">Метка (опционально)</Label>
+              <Input
+                value={saveLabel}
+                onChange={(e) => setSaveLabel(e.target.value)}
+                placeholder="Например: моменты про юмор"
+                maxLength={100}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Запрос: «{queryData?.query_text}»
+            </p>
+            <Button className="w-full" onClick={handleSaveQuery} disabled={savingQuery}>
+              {savingQuery ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+              Сохранить
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

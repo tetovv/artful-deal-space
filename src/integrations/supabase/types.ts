@@ -1510,6 +1510,42 @@ export type Database = {
           },
         ]
       }
+      moment_bookmarks: {
+        Row: {
+          created_at: string
+          creator_name: string | null
+          end_sec: number
+          id: string
+          note: string | null
+          start_sec: number
+          user_id: string
+          video_id: string
+          video_title: string | null
+        }
+        Insert: {
+          created_at?: string
+          creator_name?: string | null
+          end_sec?: number
+          id?: string
+          note?: string | null
+          start_sec?: number
+          user_id: string
+          video_id: string
+          video_title?: string | null
+        }
+        Update: {
+          created_at?: string
+          creator_name?: string | null
+          end_sec?: number
+          id?: string
+          note?: string | null
+          start_sec?: number
+          user_id?: string
+          video_id?: string
+          video_title?: string | null
+        }
+        Relationships: []
+      }
       moment_index: {
         Row: {
           action_tags: Json
@@ -2468,6 +2504,47 @@ export type Database = {
             columns: ["video_id"]
             isOneToOne: false
             referencedRelation: "content_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      saved_montages: {
+        Row: {
+          created_at: string
+          id: string
+          label: string | null
+          lead_in_seconds: number
+          montage_id: string | null
+          segments_json: Json
+          target_duration_sec: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          label?: string | null
+          lead_in_seconds?: number
+          montage_id?: string | null
+          segments_json?: Json
+          target_duration_sec?: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          label?: string | null
+          lead_in_seconds?: number
+          montage_id?: string | null
+          segments_json?: Json
+          target_duration_sec?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "saved_montages_montage_id_fkey"
+            columns: ["montage_id"]
+            isOneToOne: false
+            referencedRelation: "montage_projects"
             referencedColumns: ["id"]
           },
         ]
