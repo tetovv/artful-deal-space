@@ -564,6 +564,99 @@ export type Database = {
         }
         Relationships: []
       }
+      data_exports: {
+        Row: {
+          categories: string[]
+          created_at: string
+          downloaded_at: string | null
+          error: string | null
+          expires_at: string | null
+          file_path: string | null
+          file_size: number | null
+          finished_at: string | null
+          format: string
+          id: string
+          started_at: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          categories?: string[]
+          created_at?: string
+          downloaded_at?: string | null
+          error?: string | null
+          expires_at?: string | null
+          file_path?: string | null
+          file_size?: number | null
+          finished_at?: string | null
+          format?: string
+          id?: string
+          started_at?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          categories?: string[]
+          created_at?: string
+          downloaded_at?: string | null
+          error?: string | null
+          expires_at?: string | null
+          file_path?: string | null
+          file_size?: number | null
+          finished_at?: string | null
+          format?: string
+          id?: string
+          started_at?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      data_imports: {
+        Row: {
+          categories: string[]
+          confirmed_at: string | null
+          conflict_strategy: string
+          created_at: string
+          error: string | null
+          finished_at: string | null
+          format: string
+          id: string
+          preview_data: Json | null
+          result_data: Json | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          categories?: string[]
+          confirmed_at?: string | null
+          conflict_strategy?: string
+          created_at?: string
+          error?: string | null
+          finished_at?: string | null
+          format?: string
+          id?: string
+          preview_data?: Json | null
+          result_data?: Json | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          categories?: string[]
+          confirmed_at?: string | null
+          conflict_strategy?: string
+          created_at?: string
+          error?: string | null
+          finished_at?: string | null
+          format?: string
+          id?: string
+          preview_data?: Json | null
+          result_data?: Json | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       deal_audit_log: {
         Row: {
           action: string
