@@ -107,6 +107,7 @@ const App = () => (
               <Route path="/playlists/template/:slug" element={<Protected><SharedTemplate /></Protected>} />
               <Route path="/playlists/:playlistId" element={<Protected><GoalPlaylistDetail /></Protected>} />
               <Route path="/search" element={<Protected><SearchPage /></Protected>} />
+              <Route path="/search/clarify/:queryId" element={<Protected><SearchClarify /></Protected>} />
               <Route path="/settings" element={<Protected><Settings /></Protected>} />
               <Route path="*" element={<NotFound />} />
             </Routes>
