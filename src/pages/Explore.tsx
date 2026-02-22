@@ -53,6 +53,27 @@ const Explore = () => {
 
   const [inputValue, setInputValue] = useState(urlQuery);
   const [committedQuery, setCommittedQuery] = useState(urlQuery);
+
+  // Clear search when input becomes empty
+  const handleInputChange = useCallback((value: string) => {
+    setInputValue(value);
+    if (value.trim() === "") {
+      setCommittedQuery("");
+      setSearchState("idle");
+      setError(false);
+      setResultCounts({});
+      setSmartState("idle");
+      setPulsingTabs(new Set());
+      // Clean URL params related to search
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("q");
+        next.delete("queryId");
+        next.delete("mode");
+        return next;
+      }, { replace: true });
+    }
+  }, [setSearchParams]);
   const [activeType, setActiveType] = useState<ContentType | null>(null);
   const [searchState, setSearchState] = useState<SearchState>(urlQuery ? "loading" : "idle");
   const [error, setError] = useState(false);
@@ -245,8 +266,8 @@ const Explore = () => {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder={placeholder}
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
+              value={inputValue}
+                onChange={(e) => handleInputChange(e.target.value)}
                 onKeyDown={handleKeyDown}
                 className="pl-9 pr-9 bg-card border-border h-11"
               />
