@@ -29,33 +29,8 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { MontageWizardModal } from "@/components/montage/MontageWizardModal";
-/* ── types ── */
-
-interface MomentResult {
-  id: string;
-  video_id: string;
-  start_sec: number;
-  end_sec: number;
-  transcript_snippet: string | null;
-  access: "allowed" | "locked";
-  video_title: string;
-  creator_name: string;
-  score: number;
-  entity_tags?: unknown[];
-  action_tags?: unknown[];
-}
-
-interface SearchResults {
-  best: MomentResult | null;
-  moreVideos: MomentResult[];
-  montageCandidates: MomentResult[];
-}
-
-interface QueryData {
-  query_text: string;
-  preferences: Record<string, string>;
-  include_private_sources: boolean;
-}
+import { MOCK_QUERIES, mockQueryId } from "@/data/mockSearchQueries";
+import type { MomentResult, SearchResults, QueryData } from "@/data/mockSearchTypes";
 
 /* ── helpers ── */
 
@@ -371,7 +346,25 @@ export default function SearchResultsPage() {
   const [includePrivate, setIncludePrivate] = useState(false);
 
   useEffect(() => {
-    if (!queryId || !user) return;
+    if (!queryId) return;
+
+    // Check if this is a mock query
+    const mockDef = MOCK_QUERIES.find((q) => mockQueryId(q.queryText) === queryId);
+    if (mockDef) {
+      setQueryData(mockDef.queryData);
+      setIncludePrivate(mockDef.queryData.include_private_sources);
+      setResults(mockDef.results);
+
+      const prefs = mockDef.queryData.preferences;
+      if (prefs.resultType === "just_moment") setActiveTab("one_best");
+      else if (prefs.resultType === "more_videos") setActiveTab("more_videos");
+      else if (prefs.resultType === "montage") setActiveTab("montage");
+
+      setLoading(false);
+      return;
+    }
+
+    if (!user) return;
     (async () => {
       try {
         const session = (await supabase.auth.getSession()).data.session;

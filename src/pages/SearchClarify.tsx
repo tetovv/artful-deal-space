@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Film, Loader2, SkipForward } from "lucide-react";
 import { toast } from "sonner";
+import { MOCK_QUERIES, mockQueryId } from "@/data/mockSearchQueries";
 
 interface ClarificationOption {
   value: string;
@@ -38,7 +39,21 @@ export default function SearchClarify() {
 
   // Load query + questions
   useEffect(() => {
-    if (!queryId || !user) return;
+    if (!queryId) return;
+
+    // Check if this is a mock query
+    const mockDef = MOCK_QUERIES.find((q) => mockQueryId(q.queryText) === queryId);
+    if (mockDef && mockDef.needsClarification && mockDef.clarificationQuestions) {
+      setQueryText(mockDef.queryText);
+      setQuestions(mockDef.clarificationQuestions);
+      const defaults: Record<string, string> = {};
+      mockDef.clarificationQuestions.forEach((q) => { defaults[q.id] = q.defaultValue; });
+      setAnswers(defaults);
+      setLoading(false);
+      return;
+    }
+
+    if (!user) return;
     (async () => {
       try {
         const session = (await supabase.auth.getSession()).data.session;
@@ -75,7 +90,7 @@ export default function SearchClarify() {
   }, [queryId, user]);
 
   const handleSubmit = async (skipAll = false) => {
-    if (!queryId || !user) return;
+    if (!queryId) return;
     setSubmitting(true);
 
     const finalAnswers = skipAll
@@ -85,6 +100,15 @@ export default function SearchClarify() {
     console.log("[analytics] meaning_search_clarification_answered", {
       skipped: skipAll,
     });
+
+    // Mock queries go straight to results
+    const mockDef = MOCK_QUERIES.find((q) => mockQueryId(q.queryText) === queryId);
+    if (mockDef) {
+      navigate(`/search/results/${queryId}`, { replace: true });
+      return;
+    }
+
+    if (!user) return;
 
     try {
       const session = (await supabase.auth.getSession()).data.session;

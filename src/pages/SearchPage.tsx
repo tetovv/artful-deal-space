@@ -20,8 +20,10 @@ import {
   Loader2,
   ShieldCheck,
   Briefcase,
+  FlaskConical,
 } from "lucide-react";
 import { toast } from "sonner";
+import { MOCK_QUERIES, findMockQuery, mockQueryId } from "@/data/mockSearchQueries";
 
 /* ── preference chips ── */
 
@@ -114,6 +116,18 @@ function MeaningVideoQuery({
     if (!canSubmit || !user) return;
     setSubmitting(true);
     console.log("[analytics] meaning_search_submitted");
+
+    // Check for mock query first
+    const mock = findMockQuery(queryText.trim());
+    if (mock) {
+      const qid = mockQueryId(mock.queryText);
+      if (mock.needsClarification) {
+        navigate(`/search/clarify/${qid}`);
+      } else {
+        navigate(`/search/results/${qid}`);
+      }
+      return;
+    }
 
     try {
       const session = (await supabase.auth.getSession()).data.session;
@@ -297,6 +311,45 @@ function MeaningVideoQuery({
           </>
         )}
       </Button>
+
+      {/* Test queries panel */}
+      <Collapsible>
+        <CollapsibleTrigger asChild>
+          <button className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+            <FlaskConical className="h-3.5 w-3.5" />
+            Тестовые запросы ({MOCK_QUERIES.length})
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="space-y-1.5 pt-2">
+          {MOCK_QUERIES.map((mq, i) => (
+            <button
+              key={i}
+              onClick={() => setQueryText(mq.queryText)}
+              className="w-full text-left px-3 py-2 rounded-lg border border-border/50 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors"
+            >
+              <span className="font-mono text-xs text-muted-foreground mr-2">
+                {i + 1}.
+              </span>
+              {mq.queryText}
+              {mq.needsClarification && (
+                <Badge variant="outline" className="ml-2 text-[10px]">
+                  уточнение
+                </Badge>
+              )}
+              {mq.results.best === null && (
+                <Badge variant="destructive" className="ml-2 text-[10px]">
+                  0 результатов
+                </Badge>
+              )}
+              {(mq.results.montageCandidates?.length ?? 0) > 0 && (
+                <Badge variant="secondary" className="ml-2 text-[10px]">
+                  монтаж
+                </Badge>
+              )}
+            </button>
+          ))}
+        </CollapsibleContent>
+      </Collapsible>
     </div>
   );
 }
