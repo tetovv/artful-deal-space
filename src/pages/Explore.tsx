@@ -1,8 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
 import { contentItems as mockItems, contentTypeLabels } from "@/data/mockData";
 import { ContentCard } from "@/components/content/ContentCard";
 import { Input } from "@/components/ui/input";
-import { Search } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Search, Loader2, RefreshCw } from "lucide-react";
 import { ContentType } from "@/types";
 import { useContentItems } from "@/hooks/useDbData";
 import { PageTransition } from "@/components/layout/PageTransition";
@@ -10,75 +13,272 @@ import { SelectTabPrompt } from "@/pages/Home";
 
 const types: ContentType[] = ["video", "music", "post", "podcast", "book", "template"];
 
+type SearchState = "idle" | "loading" | "results" | "no_results" | "error";
+
 const Explore = () => {
-  const [search, setSearch] = useState("");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlQuery = searchParams.get("q") || "";
+
+  const [inputValue, setInputValue] = useState(urlQuery);
+  const [committedQuery, setCommittedQuery] = useState(urlQuery);
   const [activeType, setActiveType] = useState<ContentType | null>(null);
-  const { data: dbItems, isLoading } = useContentItems();
+  const [searchState, setSearchState] = useState<SearchState>(urlQuery ? "loading" : "idle");
+  const [error, setError] = useState(false);
 
-  // Use DB data, fallback to mock
-  const items = (dbItems && dbItems.length > 0 ? dbItems : mockItems).map((item: any) => ({
-    id: item.id,
-    title: item.title,
-    description: item.description || "",
-    type: item.type,
-    thumbnail: item.thumbnail || "",
-    creatorId: item.creator_id || item.creatorId || "",
-    creatorName: item.creator_name || item.creatorName || "",
-    creatorAvatar: item.creator_avatar || item.creatorAvatar || "",
-    price: item.price ?? null,
-    views: item.views || 0,
-    likes: item.likes || 0,
-    createdAt: item.created_at || item.createdAt || "",
-    tags: item.tags || [],
-    duration: item.duration ?? null,
-  }));
+  const { data: dbItems, isLoading, isError, refetch } = useContentItems();
 
-  const filtered = items.filter((item: any) => {
-    const matchSearch = item.title.toLowerCase().includes(search.toLowerCase()) || (item.tags || []).some((t: string) => t.toLowerCase().includes(search.toLowerCase()));
-    const matchType = !activeType || item.type === activeType;
-    return matchSearch && matchType;
-  });
+  // Normalize items
+  const allItems = useMemo(() => {
+    return (dbItems && dbItems.length > 0 ? dbItems : mockItems).map((item: any) => ({
+      id: item.id,
+      title: item.title,
+      description: item.description || "",
+      type: item.type,
+      thumbnail: item.thumbnail || "",
+      creatorId: item.creator_id || item.creatorId || "",
+      creatorName: item.creator_name || item.creatorName || "",
+      creatorAvatar: item.creator_avatar || item.creatorAvatar || "",
+      price: item.price ?? null,
+      views: item.views || 0,
+      likes: item.likes || 0,
+      createdAt: item.created_at || item.createdAt || "",
+      tags: item.tags || [],
+      duration: item.duration ?? null,
+    }));
+  }, [dbItems]);
+
+  // Filter
+  const filtered = useMemo(() => {
+    if (!committedQuery && !activeType) return allItems;
+    return allItems.filter((item: any) => {
+      const q = committedQuery.toLowerCase();
+      const matchSearch = !committedQuery ||
+        item.title.toLowerCase().includes(q) ||
+        (item.description || "").toLowerCase().includes(q) ||
+        (item.tags || []).some((t: string) => t.toLowerCase().includes(q));
+      const matchType = !activeType || item.type === activeType;
+      return matchSearch && matchType;
+    });
+  }, [allItems, committedQuery, activeType]);
+
+  // Derive state from data
+  useEffect(() => {
+    if (isError) {
+      setSearchState("error");
+      setError(true);
+      return;
+    }
+    if (isLoading && committedQuery) {
+      setSearchState("loading");
+      return;
+    }
+    if (!committedQuery) {
+      setSearchState("idle");
+      return;
+    }
+    if (filtered.length === 0) {
+      setSearchState("no_results");
+    } else {
+      setSearchState("results");
+    }
+  }, [isLoading, isError, committedQuery, filtered.length]);
+
+  // Auto-run search from URL on mount
+  useEffect(() => {
+    if (urlQuery && !committedQuery) {
+      setCommittedQuery(urlQuery);
+      setInputValue(urlQuery);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const submitSearch = useCallback(() => {
+    const q = inputValue.trim();
+    setCommittedQuery(q);
+    if (q) {
+      setSearchParams({ q }, { replace: true });
+    } else {
+      setSearchParams({}, { replace: true });
+    }
+    setError(false);
+  }, [inputValue, setSearchParams]);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      submitSearch();
+    }
+  };
+
+  const handleRetry = () => {
+    setError(false);
+    refetch();
+    submitSearch();
+  };
+
+  // Suggestions for no-results
+  const suggestions = useMemo(() => {
+    const words = committedQuery.split(/\s+/).filter((w) => w.length > 2);
+    const base = words.slice(0, 2).join(" ");
+    return [
+      base ? `${base}` : "популярное",
+      words[0] ? `${words[0]} видео` : "видео обзор",
+      "подкаст",
+      "музыка",
+    ].slice(0, 4);
+  }, [committedQuery]);
 
   return (
     <PageTransition>
       <div className="p-6 lg:p-8 space-y-6 max-w-7xl mx-auto">
-
+        {/* Search input with button */}
         <div className="space-y-3">
-          <div className="relative max-w-2xl mx-auto">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Что посмотреть? Поиск по названию, теме, описанию..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 bg-card border-border" />
+          <div className="relative max-w-2xl mx-auto flex gap-0">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Что посмотреть? Поиск по названию, теме, описанию..."
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={handleKeyDown}
+                className="pl-9 pr-2 bg-card border-border rounded-r-none border-r-0 h-11"
+              />
+            </div>
+            <Button
+              onClick={submitSearch}
+              disabled={isLoading}
+              className="rounded-l-none h-11 px-5 shrink-0"
+            >
+              {isLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <>
+                  <Search className="h-4 w-4 mr-1.5" />
+                  Найти
+                </>
+              )}
+            </Button>
           </div>
-          <div className="flex gap-1.5 flex-wrap">
+
+          {/* Content type chips */}
+          <div className="flex gap-1.5 flex-wrap max-w-2xl mx-auto">
             {types.map((t) => (
-              <button key={t} onClick={() => setActiveType(activeType === t ? null : t)}
+              <button
+                key={t}
+                onClick={() => setActiveType(activeType === t ? null : t)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                  activeType === t ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground hover:bg-accent"
-                }`}>
+                  activeType === t
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-secondary text-secondary-foreground hover:bg-accent"
+                }`}
+              >
                 {contentTypeLabels[t] || t}
               </button>
             ))}
           </div>
         </div>
 
-        {isLoading ? (
-          <div className="text-center py-16 text-muted-foreground">Загрузка...</div>
-        ) : activeType === null ? (
+        {/* ── States ── */}
+
+        {/* Idle (no query) */}
+        {searchState === "idle" && !activeType && (
           <SelectTabPrompt onSelectType={setActiveType} />
-        ) : activeType === "post" ? (
-          <div className="space-y-4 max-w-2xl mx-auto">
-            {filtered.map((item: any) => (
-              <ContentCard key={item.id} item={item} />
-            ))}
-          </div>
-        ) : (
+        )}
+
+        {/* Idle with type filter but no query */}
+        {searchState === "idle" && activeType && (
+          <>
+            {activeType === "post" ? (
+              <div className="space-y-4 max-w-2xl mx-auto">
+                {filtered.map((item: any) => (
+                  <ContentCard key={item.id} item={item} />
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {filtered.map((item: any) => (
+                  <ContentCard key={item.id} item={item} />
+                ))}
+              </div>
+            )}
+            {filtered.length === 0 && (
+              <p className="text-center py-12 text-muted-foreground text-sm">
+                В этой категории пока ничего нет
+              </p>
+            )}
+          </>
+        )}
+
+        {/* Loading */}
+        {searchState === "loading" && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {filtered.map((item: any) => (
-              <ContentCard key={item.id} item={item} />
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="space-y-3">
+                <Skeleton className="aspect-video w-full rounded-lg" />
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-3 w-1/2" />
+              </div>
             ))}
           </div>
         )}
-        {!isLoading && filtered.length === 0 && (
-          <div className="text-center py-16 text-muted-foreground">Ничего не найдено</div>
+
+        {/* Error */}
+        {searchState === "error" && (
+          <div className="text-center py-16 space-y-4">
+            <p className="text-muted-foreground">
+              Не удалось выполнить поиск. Попробуйте ещё раз
+            </p>
+            <Button variant="outline" onClick={handleRetry}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Повторить
+            </Button>
+          </div>
+        )}
+
+        {/* No results */}
+        {searchState === "no_results" && (
+          <div className="text-center py-16 space-y-4">
+            <p className="text-lg font-medium text-foreground">Ничего не найдено</p>
+            <p className="text-sm text-muted-foreground">
+              Попробуйте другой запрос или выберите категорию
+            </p>
+            <div className="flex flex-wrap gap-2 justify-center pt-2">
+              {suggestions.map((s) => (
+                <button
+                  key={s}
+                  onClick={() => {
+                    setInputValue(s);
+                    setCommittedQuery(s);
+                    setSearchParams({ q: s }, { replace: true });
+                  }}
+                  className="px-3 py-1.5 rounded-full border border-border text-sm text-muted-foreground hover:bg-muted/50 transition-colors"
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Results */}
+        {searchState === "results" && (
+          <>
+            <p className="text-sm text-muted-foreground">
+              Найдено: {filtered.length}
+            </p>
+            {activeType === "post" ? (
+              <div className="space-y-4 max-w-2xl mx-auto">
+                {filtered.map((item: any) => (
+                  <ContentCard key={item.id} item={item} />
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {filtered.map((item: any) => (
+                  <ContentCard key={item.id} item={item} />
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
     </PageTransition>
@@ -86,4 +286,3 @@ const Explore = () => {
 };
 
 export default Explore;
-
