@@ -195,9 +195,9 @@ export default function AskResult() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">
-      <Link to="/ask" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+      <Link to="/explore" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
         <ArrowLeft className="h-4 w-4" />
-        Новый вопрос
+        Назад к поиску
       </Link>
 
       {question && (
@@ -294,7 +294,7 @@ export default function AskResult() {
             <li>• Подписаться на больше авторов для расширения базы знаний</li>
           </ul>
           <Button asChild variant="outline">
-            <Link to="/ask">Задать другой вопрос</Link>
+            <Link to="/explore">Попробовать другой запрос</Link>
           </Button>
         </Card>
       )}
@@ -313,7 +313,7 @@ export default function AskResult() {
             </p>
           </div>
           <Button asChild variant="outline">
-            <Link to="/ask">Попробовать снова</Link>
+            <Link to="/explore">Попробовать снова</Link>
           </Button>
         </Card>
       )}

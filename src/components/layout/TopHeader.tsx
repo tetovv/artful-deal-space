@@ -322,7 +322,6 @@ const allNavItems: NavItem[] = [
   { title: "Предложения", url: "/marketplace", icon: Store, roles: ["creator", "moderator"] },
   
   { title: "AI", url: "/ai-workspace", icon: Brain },
-  { title: "Ask", url: "/ask", icon: Search },
   { title: "Библиотека", url: "/library", icon: Library },
 ];
 
