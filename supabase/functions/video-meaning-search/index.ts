@@ -398,25 +398,77 @@ async function handleCreateMontage(
   const {
     queryId,
     selectedMomentIds,
-    leadInSeconds = 2,
-    maxSegments = 10,
+    leadInSeconds = 10,
+    maxSegments = 5,
     targetDurationSec = 60,
   } = body;
   if (!queryId) return err("queryId is required");
+
+  // Clamp lead-in: 0–25s
+  const leadIn = Math.max(0, Math.min(25, leadInSeconds));
+  const segLimit = Math.min(maxSegments, 5); // MVP hard limit
 
   // Build segments from selected moments or top results
   let momentIds = selectedMomentIds;
   if (!momentIds || momentIds.length === 0) {
     const { data: topResults } = await supabase
       .from("video_search_results")
-      .select("moment_id")
+      .select("moment_id, score")
       .eq("query_id", queryId)
       .order("score", { ascending: false })
-      .limit(maxSegments);
+      .limit(20); // fetch more for diversification
     momentIds = (topResults || []).map((r: any) => r.moment_id);
   }
 
-  // Create montage project (reuse existing montage_projects table)
+  // Fetch moment details for diversification
+  let moments: any[] = [];
+  if (momentIds.length > 0) {
+    const { data } = await supabase
+      .from("moment_index")
+      .select("id, video_id, start_sec, end_sec, transcript_snippet")
+      .in("id", momentIds);
+    moments = data || [];
+  }
+
+  // Diversify: avoid multiple segments from same 60s window of same video
+  const selected: any[] = [];
+  const usedWindows = new Set<string>();
+  // Sort by original order (score rank)
+  const orderedMoments = momentIds
+    .map((mid: string) => moments.find((m: any) => m.id === mid))
+    .filter(Boolean);
+
+  for (const m of orderedMoments) {
+    if (selected.length >= segLimit) break;
+    const windowKey = `${m.video_id}:${Math.floor(m.start_sec / 60)}`;
+    if (usedWindows.has(windowKey)) continue;
+    usedWindows.add(windowKey);
+    selected.push(m);
+  }
+
+  // Check entitlements — only include accessible content
+  const videoIds = [...new Set(selected.map((m: any) => m.video_id))];
+  const ent = await buildEntitlements(supabase, userId);
+  let accessibleVideoIds = new Set<string>();
+
+  if (videoIds.length > 0) {
+    const { data: contentItems } = await supabase
+      .from("content_items")
+      .select("id, monetization_type, price, creator_id")
+      .in("id", videoIds);
+
+    for (const ci of contentItems || []) {
+      if (hasAccessToContent(ci, ent.purchasedIds, ent.subscribedCreatorIds)) {
+        accessibleVideoIds.add(ci.id);
+      }
+    }
+  }
+
+  const accessibleSegments = selected.filter((m: any) =>
+    accessibleVideoIds.has(m.video_id),
+  );
+
+  // Create montage project
   const { data: project, error: pErr } = await supabase
     .from("montage_projects")
     .insert({
@@ -424,37 +476,31 @@ async function handleCreateMontage(
       source_query_id: queryId,
       target_duration: targetDurationSec,
       scope: "video_meaning_search",
-      status: "completed",
+      status: accessibleSegments.length > 0 ? "ready" : "empty",
     })
     .select("id")
     .single();
 
   if (pErr) return err("Failed to create montage", 500);
 
-  // Fetch moments for segments
-  if (momentIds.length > 0) {
-    const { data: moments } = await supabase
-      .from("moment_index")
-      .select("id, video_id, start_sec, end_sec, transcript_snippet")
-      .in("id", momentIds);
-
-    const segments = (moments || []).map((m: any, i: number) => ({
+  // Insert segments with lead-in applied
+  if (accessibleSegments.length > 0) {
+    const segments = accessibleSegments.map((m: any, i: number) => ({
       montage_id: project.id,
       source_type: "video",
       source_id: m.video_id,
-      start_sec: Math.max(0, m.start_sec - leadInSeconds),
+      start_sec: Math.max(0, m.start_sec - leadIn),
       end_sec: m.end_sec,
-      rationale: m.transcript_snippet?.slice(0, 100) || "",
+      deep_link: `/product/${m.video_id}?t=${Math.max(0, Math.floor(m.start_sec - leadIn))}`,
+      rationale: m.transcript_snippet?.slice(0, 120) || "Визуальное совпадение",
       sort_order: i,
       segment_status: "included",
     }));
 
-    if (segments.length > 0) {
-      await supabase.from("montage_segments").insert(segments);
-    }
+    await supabase.from("montage_segments").insert(segments);
   }
 
-  return json({ projectId: project.id, status: "completed" });
+  return json({ projectId: project.id, status: accessibleSegments.length > 0 ? "ready" : "empty" });
 }
 
 async function handleGetMontage(

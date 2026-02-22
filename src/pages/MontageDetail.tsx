@@ -194,7 +194,7 @@ export default function MontageDetail() {
       }
     }));
     setDirty(true);
-    console.log("[analytics] segment_trimmed");
+    console.log("[analytics] montage_segment_trimmed");
     logEdit("trim", { segmentId: segId, edge, delta });
   }, [logEdit]);
 
@@ -207,6 +207,7 @@ export default function MontageDetail() {
       return arr.map((s, i) => ({ ...s, sort_order: i }));
     });
     setDirty(true);
+    console.log("[analytics] montage_segment_reordered");
     logEdit("reorder", { fromIndex: index, toIndex: targetIndex });
   }, [segments.length, logEdit]);
 
@@ -215,7 +216,7 @@ export default function MontageDetail() {
       s.id === segId ? { ...s, segment_status: "REMOVED" } : s
     ));
     setDirty(true);
-    console.log("[analytics] segment_removed");
+    console.log("[analytics] montage_segment_removed");
     logEdit("remove", { segmentId: segId });
   }, [logEdit]);
 

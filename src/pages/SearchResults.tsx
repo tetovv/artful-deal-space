@@ -23,7 +23,7 @@ import {
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-
+import { MontageWizardModal } from "@/components/montage/MontageWizardModal";
 /* ── types ── */
 
 interface MomentResult {
@@ -430,31 +430,7 @@ export default function SearchResultsPage() {
     navigate(`/search?mode=meaning_video&q=${encodeURIComponent(text)}`);
   };
 
-  const handleCreateMontage = async () => {
-    if (!queryId || !user) return;
-    try {
-      const session = (await supabase.auth.getSession()).data.session;
-      const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/video-meaning-search/montage`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-            ...(session?.access_token
-              ? { Authorization: `Bearer ${session.access_token}` }
-              : {}),
-          },
-          body: JSON.stringify({ queryId }),
-        },
-      );
-      if (!res.ok) throw new Error();
-      const data = await res.json();
-      navigate(`/montage/${data.projectId}`);
-    } catch {
-      toast.error("Не удалось создать монтаж");
-    }
-  };
+  const [montageWizardOpen, setMontageWizardOpen] = useState(false);
 
   // Group moments by video for "More videos" tab
   const groupedByVideo = useMemo(() => {
@@ -660,7 +636,7 @@ export default function SearchResultsPage() {
 
                 <Button
                   className="w-full h-12 text-base"
-                  onClick={handleCreateMontage}
+                  onClick={() => setMontageWizardOpen(true)}
                 >
                   <Scissors className="h-4 w-4 mr-2" /> Создать монтаж
                 </Button>
@@ -678,6 +654,14 @@ export default function SearchResultsPage() {
           </TabsContent>
         </Tabs>
       )}
+
+      <MontageWizardModal
+        open={montageWizardOpen}
+        onOpenChange={setMontageWizardOpen}
+        queryId={queryId}
+        useVideoMeaningEndpoint
+        selectedMomentIds={results?.montageCandidates?.map((m) => m.id)}
+      />
     </div>
   );
 }
