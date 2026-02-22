@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { toast } from "@/hooks/use-toast";
 import {
   Loader2,
   SearchX,
@@ -29,11 +30,13 @@ import {
   Film,
   Mic,
   Layers,
+  Scissors,
 } from "lucide-react";
 import { MontageWizardModal } from "@/components/montage/MontageWizardModal";
 import { findMockQuery, mockQueryId, MOCK_QUERIES } from "@/data/mockSearchQueries";
 import type { MomentResult, SearchResults, ClarificationQuestion } from "@/data/mockSearchTypes";
 import { ContentCard } from "@/components/content/ContentCard";
+import { cn } from "@/lib/utils";
 
 /* ── Types ── */
 
@@ -45,11 +48,8 @@ export type ResultCounts = Record<string, number>;
 interface SmartSearchInlineProps {
   query: string;
   contentType: SmartContentType;
-  /** Called to switch back to normal search */
   onSwitchToNormal: () => void;
-  /** Standard keyword results for non-meaning types in "all" mode */
   standardResults?: any[];
-  /** Called when results are computed with per-type counts */
   onResultCounts?: (counts: ResultCounts, state: SmartState) => void;
 }
 
@@ -66,7 +66,14 @@ function getEndpointForType(type: SmartContentType): string {
   return "video-meaning-search";
 }
 
-/* ── Moment Row ── */
+const RATIONALES = [
+  "Прямое совпадение по теме запроса",
+  "Содержит ключевые понятия из запроса",
+  "Подробное объяснение темы",
+  "Похожий контекст обсуждения",
+];
+
+/* ── Moment Row (compact) ── */
 
 function MomentRow({ moment, index, onJump, onPaywall }: {
   moment: MomentResult;
@@ -75,38 +82,32 @@ function MomentRow({ moment, index, onJump, onPaywall }: {
   onPaywall: (videoId: string) => void;
 }) {
   const locked = moment.access === "locked";
-  const rationales = [
-    "Прямое совпадение по теме запроса",
-    "Содержит ключевые понятия из запроса",
-    "Подробное объяснение темы",
-    "Похожий контекст обсуждения",
-  ];
 
   return (
-    <div className="flex items-start gap-3 py-3 border-b border-border/50 last:border-0">
-      <div className="shrink-0 text-xs font-mono text-muted-foreground bg-muted/50 rounded px-2 py-1 mt-0.5">
+    <div className="flex items-start gap-3 py-2.5 border-b border-border/40 last:border-0">
+      <span className="shrink-0 text-xs font-mono text-primary bg-primary/10 rounded-md px-2 py-1 mt-0.5">
         {formatTime(moment.start_sec)}–{formatTime(moment.end_sec)}
-      </div>
-      <div className="flex-1 min-w-0 space-y-1">
+      </span>
+      <div className="flex-1 min-w-0 space-y-0.5" style={{ overflowWrap: "anywhere", wordBreak: "break-word" }}>
         {!locked && moment.transcript_snippet ? (
-          <p className="text-sm text-foreground line-clamp-2">{moment.transcript_snippet}</p>
+          <p className="text-sm text-foreground leading-relaxed line-clamp-2">{moment.transcript_snippet}</p>
         ) : locked ? (
           <p className="text-sm text-muted-foreground italic">Содержимое скрыто — требуется доступ</p>
         ) : (
           <p className="text-sm text-muted-foreground italic">Визуальный момент</p>
         )}
         <p className="text-xs text-muted-foreground flex items-center gap-1">
-          <Sparkles className="h-3 w-3" />
-          {rationales[index % rationales.length]}
+          <Sparkles className="h-3 w-3 shrink-0" />
+          {RATIONALES[index % RATIONALES.length]}
         </p>
       </div>
       <div className="shrink-0">
         {locked ? (
-          <Button size="sm" variant="outline" className="text-xs gap-1" onClick={() => onPaywall(moment.video_id)}>
+          <Button size="sm" variant="outline" className="text-xs gap-1 h-7" onClick={() => onPaywall(moment.video_id)}>
             <Crown className="h-3 w-3" /> Доступ
           </Button>
         ) : (
-          <Button size="sm" variant="ghost" className="text-xs gap-1" onClick={() => onJump(moment.video_id, moment.start_sec)}>
+          <Button size="sm" variant="ghost" className="text-xs gap-1 h-7" onClick={() => onJump(moment.video_id, moment.start_sec)}>
             <Play className="h-3 w-3" /> Перейти
           </Button>
         )}
@@ -115,38 +116,157 @@ function MomentRow({ moment, index, onJump, onPaywall }: {
   );
 }
 
-/* ── Video/Podcast Card (group by source) ── */
+/* ── Source Card (grouped by video/podcast) ── */
 
-function SourceCard({ moments, onJump, onPaywall }: {
+function SourceCard({ moments, isBest, onJump, onPaywall }: {
   moments: MomentResult[];
+  isBest?: boolean;
   onJump: (videoId: string, sec: number) => void;
   onPaywall: (videoId: string) => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(isBest ?? false);
   const first = moments[0];
   if (!first) return null;
-  const shown = expanded ? moments : moments.slice(0, 1);
+
+  const previewCount = isBest ? 3 : 1;
+  const shown = expanded ? moments : moments.slice(0, previewCount);
+  const hasMore = moments.length > previewCount;
 
   return (
-    <Card className="p-4 space-y-2">
+    <Card
+      className={cn(
+        "p-4 space-y-1",
+        isBest && "border-primary/25 bg-primary/[0.03]",
+      )}
+    >
+      {/* Header */}
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-medium text-foreground truncate">{first.video_title}</h3>
-          <p className="text-xs text-muted-foreground">{first.creator_name}</p>
+        <div className="min-w-0 flex-1" style={{ overflowWrap: "anywhere", wordBreak: "break-word" }}>
+          <h3 className="text-sm font-semibold text-foreground leading-snug">{first.video_title}</h3>
+          <p className="text-xs text-muted-foreground mt-0.5">{first.creator_name}</p>
         </div>
-        <Badge variant="secondary" className="text-xs shrink-0">
-          {first.access === "locked" ? <><Lock className="h-3 w-3 mr-1" />Заблокировано</> : "Бесплатно"}
+        <Badge
+          variant={first.access === "locked" ? "outline" : "secondary"}
+          className="text-[11px] shrink-0"
+        >
+          {first.access === "locked" ? (
+            <><Lock className="h-3 w-3 mr-1" />Подписка</>
+          ) : (
+            "Бесплатно"
+          )}
         </Badge>
       </div>
-      {shown.map((m, i) => (
-        <MomentRow key={m.id} moment={m} index={i} onJump={onJump} onPaywall={onPaywall} />
-      ))}
-      {moments.length > 1 && (
-        <button onClick={() => setExpanded(!expanded)} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 pt-1">
-          {expanded ? <><ChevronUp className="h-3 w-3" /> Скрыть</> : <><ChevronDown className="h-3 w-3" /> Ещё {moments.length - 1} момент(ов)</>}
+
+      {/* Moments */}
+      <div className="pt-1">
+        {shown.map((m, i) => (
+          <MomentRow key={m.id} moment={m} index={i} onJump={onJump} onPaywall={onPaywall} />
+        ))}
+      </div>
+
+      {hasMore && (
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 pt-1 transition-colors"
+        >
+          {expanded ? (
+            <><ChevronUp className="h-3 w-3" /> Скрыть</>
+          ) : (
+            <><ChevronDown className="h-3 w-3" /> Ещё {moments.length - previewCount} момент(ов)</>
+          )}
         </button>
       )}
     </Card>
+  );
+}
+
+/* ── Clarification Panel (inline, compact) ── */
+
+function ClarificationPanel({
+  query,
+  questions,
+  answers,
+  onAnswerChange,
+  onSubmit,
+  onSkip,
+}: {
+  query: string;
+  questions: ClarificationQuestion[];
+  answers: Record<string, string>;
+  onAnswerChange: (id: string, value: string) => void;
+  onSubmit: () => void;
+  onSkip: () => void;
+}) {
+  return (
+    <div className="rounded-xl border border-border bg-card p-4 sm:p-5 space-y-4 max-w-2xl">
+      <div className="flex items-center gap-2.5">
+        <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+          <Sparkles className="h-4 w-4 text-primary" />
+        </div>
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-foreground">Уточним запрос</h3>
+          <p className="text-xs text-muted-foreground truncate">«{query}»</p>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        {questions.slice(0, 2).map((q) => (
+          <div key={q.id} className="space-y-2">
+            <div>
+              <p className="text-sm font-medium text-foreground">{q.text}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{q.reason}</p>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {q.options.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => onAnswerChange(q.id, opt.value)}
+                  className={cn(
+                    "px-3 py-1.5 rounded-full border text-xs transition-colors",
+                    answers[q.id] === opt.value
+                      ? "border-primary bg-primary/10 text-primary font-medium"
+                      : "border-border text-muted-foreground hover:bg-muted/50",
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex items-center gap-3 pt-1">
+        <Button size="sm" className="h-9 px-5" onClick={onSubmit}>
+          Продолжить
+        </Button>
+        <Button size="sm" variant="ghost" className="h-9 text-muted-foreground" onClick={onSkip}>
+          <SkipForward className="h-3.5 w-3.5 mr-1.5" />
+          Пропустить
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/* ── Montage Footer Bar ── */
+
+function MontageFooter({ count, onOpen }: { count: number; onOpen: () => void }) {
+  if (count < 2) return null;
+  return (
+    <div className="sticky bottom-4 z-10 max-w-2xl">
+      <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card/95 backdrop-blur-sm shadow-lg px-4 py-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <Scissors className="h-4 w-4 text-primary shrink-0" />
+          <span className="text-sm text-foreground">
+            Доступно моментов для нарезки: <strong>{count}</strong>
+          </span>
+        </div>
+        <Button size="sm" className="shrink-0" onClick={onOpen}>
+          Создать нарезку
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -185,6 +305,22 @@ export function SmartSearchInline({ query, contentType, onSwitchToNormal, standa
     return list;
   }, [meaningResults]);
 
+  // Group moments by video for "more results"
+  const groupedMore = useMemo(() => {
+    if (!meaningResults) return [];
+    const map = new Map<string, MomentResult[]>();
+    for (const m of meaningResults.moreVideos) {
+      const key = m.video_id;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(m);
+    }
+    return Array.from(map.values());
+  }, [meaningResults]);
+
+  const montageCount = useMemo(() => {
+    return meaningResults?.montageCandidates?.length ?? allMoments.filter(m => m.access === "allowed").length;
+  }, [meaningResults, allMoments]);
+
   // Emit per-type counts to parent
   useEffect(() => {
     if (!onResultCounts) return;
@@ -211,7 +347,7 @@ export function SmartSearchInline({ query, contentType, onSwitchToNormal, standa
     }
   }, [state, allMoments.length, standardResults, contentType, onResultCounts]);
 
-  // Reset when query/contentType changes
+  // Reset when contentType changes
   useEffect(() => {
     setState("idle");
     setQuestions([]);
@@ -235,7 +371,7 @@ export function SmartSearchInline({ query, contentType, onSwitchToNormal, standa
     setState("querying");
     console.log("[analytics] smart_search_submitted", { query: q, contentType });
 
-    // Check mock queries (video only)
+    // Check mock queries
     if (contentType === "video" || contentType === "all") {
       const mock = findMockQuery(q);
       if (mock) {
@@ -255,7 +391,6 @@ export function SmartSearchInline({ query, contentType, onSwitchToNormal, standa
       }
     }
 
-    // Call meaning endpoints
     const types: SmartContentType[] = contentType === "all" ? ["video", "podcast"] : [contentType];
 
     try {
@@ -266,7 +401,6 @@ export function SmartSearchInline({ query, contentType, onSwitchToNormal, standa
         ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
       };
 
-      // Run meaning searches in parallel
       const results = await Promise.allSettled(
         types.map(async (t) => {
           const endpoint = getEndpointForType(t);
@@ -295,7 +429,6 @@ export function SmartSearchInline({ query, contentType, onSwitchToNormal, standa
         }),
       );
 
-      // Merge results
       let combinedResults: SearchResults = { best: null, moreVideos: [], montageCandidates: [] };
       let hasClarification = false;
       let firstQueryId: string | null = null;
@@ -354,11 +487,18 @@ export function SmartSearchInline({ query, contentType, onSwitchToNormal, standa
     if (!queryId || !user) return;
     setState("querying");
 
+    // "Skip" sends explicit defaults; "Continue" sends user selections
     const finalAnswers = skip
-      ? Object.fromEntries(questions.map((q) => [q.id, q.defaultValue]))
+      ? { skip: true }
       : answers;
 
-    console.log("[analytics] smart_search_clarification_answered", { skipped: skip });
+    console.log("[analytics] smart_search_clarification_answered", { skipped: skip, answers: finalAnswers });
+
+    if (skip) {
+      toast({
+        description: "Используем настройки по умолчанию: Один лучший • Короткое",
+      });
+    }
 
     // Check mock
     const mockDef = MOCK_QUERIES.find((q) => mockQueryId(q.queryText) === queryId);
@@ -382,7 +522,11 @@ export function SmartSearchInline({ query, contentType, onSwitchToNormal, standa
         {
           method: "POST",
           headers,
-          body: JSON.stringify({ queryId, answersJson: finalAnswers }),
+          body: JSON.stringify({
+            queryId,
+            answersJson: skip ? {} : finalAnswers,
+            skip: skip ? true : undefined,
+          }),
         },
       );
 
@@ -424,7 +568,6 @@ export function SmartSearchInline({ query, contentType, onSwitchToNormal, standa
               ? "Опишите что обсуждается в подкасте"
               : "Опишите что происходит в видео"}
         </p>
-        {/* Workplace toggle — hidden for video/podcast */}
         {contentType === "all" && (
           <div className="flex items-center justify-center gap-3 pt-2">
             <div className="flex items-center gap-2">
@@ -470,56 +613,17 @@ export function SmartSearchInline({ query, contentType, onSwitchToNormal, standa
     );
   }
 
-  /* ── CLARIFYING ── */
+  /* ── CLARIFYING (inline panel, not full-page) ── */
   if (state === "clarifying") {
     return (
-      <div className="max-w-2xl mx-auto space-y-5 py-6">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
-            <ContentTypeIcon className="h-5 w-5 text-primary" />
-          </div>
-          <div>
-            <h2 className="text-lg font-semibold text-foreground">Уточним запрос</h2>
-            <p className="text-sm text-muted-foreground line-clamp-1">«{query}»</p>
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          {questions.map((q) => (
-            <Card key={q.id} className="p-5 space-y-3">
-              <div>
-                <p className="text-base font-medium text-foreground">{q.text}</p>
-                <p className="text-sm text-muted-foreground mt-1">{q.reason}</p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {q.options.map((opt) => (
-                  <button
-                    key={opt.value}
-                    onClick={() => setAnswers((prev) => ({ ...prev, [q.id]: opt.value }))}
-                    className={`px-4 py-2 rounded-full border text-sm transition-colors ${
-                      answers[q.id] === opt.value
-                        ? "border-primary bg-primary/5 text-primary font-medium"
-                        : "border-border text-muted-foreground hover:bg-muted/50"
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            </Card>
-          ))}
-        </div>
-
-        <div className="flex flex-col gap-3 pt-2">
-          <Button className="w-full h-12 text-base" onClick={() => handleClarificationSubmit(false)}>
-            Продолжить
-          </Button>
-          <Button variant="ghost" className="w-full text-muted-foreground" onClick={() => handleClarificationSubmit(true)}>
-            <SkipForward className="h-4 w-4 mr-2" />
-            Пропустить
-          </Button>
-        </div>
-      </div>
+      <ClarificationPanel
+        query={query}
+        questions={questions}
+        answers={answers}
+        onAnswerChange={(id, value) => setAnswers((prev) => ({ ...prev, [id]: value }))}
+        onSubmit={() => handleClarificationSubmit(false)}
+        onSkip={() => handleClarificationSubmit(true)}
+      />
     );
   }
 
@@ -604,11 +708,12 @@ export function SmartSearchInline({ query, contentType, onSwitchToNormal, standa
         <div className="flex gap-1 border-b border-border pb-0 mb-2">
           <button
             onClick={() => setResultTab("meaning")}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            className={cn(
+              "px-4 py-2 text-sm font-medium border-b-2 transition-colors",
               resultTab === "meaning"
                 ? "border-primary text-primary"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
+                : "border-transparent text-muted-foreground hover:text-foreground",
+            )}
           >
             <Sparkles className="h-3.5 w-3.5 inline mr-1.5 -mt-0.5" />
             По смыслу
@@ -616,11 +721,12 @@ export function SmartSearchInline({ query, contentType, onSwitchToNormal, standa
           </button>
           <button
             onClick={() => setResultTab("standard")}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            className={cn(
+              "px-4 py-2 text-sm font-medium border-b-2 transition-colors",
               resultTab === "standard"
                 ? "border-primary text-primary"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
+                : "border-transparent text-muted-foreground hover:text-foreground",
+            )}
           >
             Обычные
             {standardHasHits && <Badge variant="secondary" className="ml-1.5 text-[10px] h-4 px-1">{standardResults?.length}</Badge>}
@@ -630,62 +736,39 @@ export function SmartSearchInline({ query, contentType, onSwitchToNormal, standa
 
       {/* Meaning results */}
       {(resultTab === "meaning" || !showTabsForAll) && meaningResults && (
-        <div className="space-y-4">
-          {/* Best match */}
+        <div className="space-y-5">
+          {/* Best match — highlighted card with top 3 moments */}
           {meaningResults.best && (
             <div>
-              <p className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1.5">
                 <Sparkles className="h-3 w-3 text-primary" /> Лучшее совпадение
               </p>
-              <Card className="p-4 border-primary/20 bg-primary/5 space-y-2">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <h3 className="text-sm font-medium text-foreground truncate">{meaningResults.best.video_title}</h3>
-                    <p className="text-xs text-muted-foreground">{meaningResults.best.creator_name}</p>
-                  </div>
-                </div>
-                <MomentRow moment={meaningResults.best} index={0} onJump={handleJump} onPaywall={handlePaywall} />
-              </Card>
+              <SourceCard
+                moments={[meaningResults.best]}
+                isBest
+                onJump={handleJump}
+                onPaywall={handlePaywall}
+              />
             </div>
           )}
 
-          {/* More results */}
-          {meaningResults.moreVideos.length > 0 && (
+          {/* More results — grouped by source, collapsed by default */}
+          {groupedMore.length > 0 && (
             <div>
-              <p className="text-xs font-medium text-muted-foreground mb-2">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
                 Ещё результаты ({meaningResults.moreVideos.length})
               </p>
               <div className="space-y-2">
-                {meaningResults.moreVideos.map((m, i) => (
-                  <Card key={m.id} className="p-4">
-                    <div className="flex items-start justify-between gap-3 mb-1">
-                      <div className="min-w-0 flex-1">
-                        <h3 className="text-sm font-medium text-foreground truncate">{m.video_title}</h3>
-                        <p className="text-xs text-muted-foreground">{m.creator_name}</p>
-                      </div>
-                    </div>
-                    <MomentRow moment={m} index={i + 1} onJump={handleJump} onPaywall={handlePaywall} />
-                  </Card>
+                {groupedMore.map((group, gi) => (
+                  <SourceCard
+                    key={group[0]?.video_id ?? gi}
+                    moments={group}
+                    onJump={handleJump}
+                    onPaywall={handlePaywall}
+                  />
                 ))}
               </div>
             </div>
-          )}
-
-          {/* Montage CTA */}
-          {(meaningResults.montageCandidates?.length ?? 0) >= 2 && (
-            <Card className="p-4 border-dashed">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-foreground">Создать нарезку</p>
-                  <p className="text-xs text-muted-foreground">
-                    {meaningResults.montageCandidates!.length} доступных моментов для монтажа
-                  </p>
-                </div>
-                <Button size="sm" onClick={() => setMontageOpen(true)}>
-                  Создать нарезку
-                </Button>
-              </div>
-            </Card>
           )}
         </div>
       )}
@@ -704,6 +787,9 @@ export function SmartSearchInline({ query, contentType, onSwitchToNormal, standa
         <ShieldCheck className="h-3.5 w-3.5" />
         Показаны только источники, к которым у вас есть доступ.
       </p>
+
+      {/* Montage sticky footer */}
+      <MontageFooter count={montageCount} onOpen={() => setMontageOpen(true)} />
 
       {/* Montage wizard */}
       <MontageWizardModal
