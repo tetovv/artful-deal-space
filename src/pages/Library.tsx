@@ -4,6 +4,7 @@ import {
   Search, FolderOpen, Globe, Lock, Play, Clock,
   Sparkles, RefreshCw, Video, Music, FileText, BookOpen, Layout,
   CheckCircle2, AlertTriangle, XCircle, ExternalLink, ChevronRight,
+  Film, Scissors, SearchCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -147,6 +148,54 @@ const Library = () => {
     enabled: !!user?.id,
   });
 
+  // Saved searches (meaning video)
+  const { data: savedSearches = [], isLoading: savedSearchesLoading } = useQuery({
+    queryKey: ["saved-searches", user?.id],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      const { data, error } = await supabase
+        .from("saved_searches" as any)
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data as any[];
+    },
+    enabled: !!user?.id,
+  });
+
+  // Saved montages
+  const { data: savedMontages = [], isLoading: savedMontagesLoading } = useQuery({
+    queryKey: ["saved-montages", user?.id],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      const { data, error } = await supabase
+        .from("saved_montages" as any)
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data as any[];
+    },
+    enabled: !!user?.id,
+  });
+
+  // Moment bookmarks
+  const { data: momentBookmarks = [], isLoading: momentBookmarksLoading } = useQuery({
+    queryKey: ["moment-bookmarks", user?.id],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      const { data, error } = await supabase
+        .from("moment_bookmarks" as any)
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data as any[];
+    },
+    enabled: !!user?.id,
+  });
+
   // Evidence for selected saved answer
   const { data: selectedEvidence = [] } = useQuery({
     queryKey: ["saved-answer-evidence", selectedSavedId],
@@ -223,6 +272,30 @@ const Library = () => {
     },
   });
 
+  const deleteSavedSearchMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("saved_searches" as any).delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["saved-searches"] }); toast.success("Поиск удалён"); },
+  });
+
+  const deleteSavedMontageMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("saved_montages" as any).delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["saved-montages"] }); toast.success("Монтаж удалён"); },
+  });
+
+  const deleteMomentBookmarkMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("moment_bookmarks" as any).delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["moment-bookmarks"] }); toast.success("Закладка удалена"); },
+  });
+
   const handleRevalidate = async () => {
     if (!selectedSaved || !user || revalidating) return;
     setRevalidating(true);
@@ -275,14 +348,17 @@ const Library = () => {
       <div className="p-6 lg:p-8 space-y-6 max-w-5xl mx-auto">
         <div className="space-y-1">
           <h1 className="text-2xl font-bold text-foreground">Библиотека</h1>
-          <p className="text-sm text-muted-foreground">Плейлисты, закладки, сохранённые ответы и история</p>
+          <p className="text-sm text-muted-foreground">Плейлисты, закладки, поиски, монтажи и история</p>
         </div>
 
         <Tabs value={tab} onValueChange={setTab}>
-          <TabsList>
+          <TabsList className="flex-wrap h-auto gap-1">
             <TabsTrigger value="playlists" className="gap-1.5"><ListVideo className="h-3.5 w-3.5" /> Плейлисты</TabsTrigger>
             <TabsTrigger value="bookmarks" className="gap-1.5"><Bookmark className="h-3.5 w-3.5" /> Закладки</TabsTrigger>
             <TabsTrigger value="saved-answers" className="gap-1.5"><Sparkles className="h-3.5 w-3.5" /> Ответы</TabsTrigger>
+            <TabsTrigger value="saved-searches" className="gap-1.5"><SearchCheck className="h-3.5 w-3.5" /> Поиски</TabsTrigger>
+            <TabsTrigger value="saved-montages" className="gap-1.5"><Scissors className="h-3.5 w-3.5" /> Монтажи</TabsTrigger>
+            <TabsTrigger value="moment-bookmarks" className="gap-1.5"><Film className="h-3.5 w-3.5" /> Моменты</TabsTrigger>
             <TabsTrigger value="history" className="gap-1.5"><History className="h-3.5 w-3.5" /> Просмотры</TabsTrigger>
             <TabsTrigger value="downloads" className="gap-1.5"><Download className="h-3.5 w-3.5" /> Загрузки</TabsTrigger>
           </TabsList>
@@ -655,6 +731,140 @@ const Library = () => {
                       <p className="text-xs text-muted-foreground">{item.content_items?.creator_name}</p>
                       <p className="text-[11px] text-muted-foreground/60">{formatDate(item.downloaded_at)}</p>
                     </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          {/* SAVED SEARCHES */}
+          <TabsContent value="saved-searches" className="space-y-4 mt-4">
+            <p className="text-sm text-muted-foreground">{savedSearches.length} сохранённых поисков</p>
+            {savedSearchesLoading ? (
+              <div className="text-center py-16 text-muted-foreground text-sm">Загрузка...</div>
+            ) : savedSearches.length === 0 ? (
+              <div className="text-center py-16 space-y-3">
+                <SearchCheck className="h-12 w-12 text-muted-foreground/40 mx-auto" />
+                <p className="text-sm text-muted-foreground">Нет сохранённых поисков</p>
+                <p className="text-xs text-muted-foreground">Сохраняйте поисковые запросы на странице результатов</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {savedSearches.map((item: any) => (
+                  <div
+                    key={item.id}
+                    onClick={() => item.query_id ? navigate(`/search/results/${item.query_id}`) : undefined}
+                    className="flex items-center gap-3 p-4 rounded-lg border border-border bg-card hover:border-primary/30 transition-all cursor-pointer group"
+                  >
+                    <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                      <Search className="h-5 w-5 text-primary" />
+                    </div>
+                    <div className="flex-1 min-w-0 space-y-0.5">
+                      <p className="text-sm font-medium text-foreground truncate">
+                        {item.label || item.query_text}
+                      </p>
+                      {item.label && (
+                        <p className="text-xs text-muted-foreground truncate">«{item.query_text}»</p>
+                      )}
+                      <p className="text-[11px] text-muted-foreground/60">{formatDate(item.created_at)}</p>
+                    </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); deleteSavedSearchMutation.mutate(item.id); }}
+                      className="h-7 w-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-all shrink-0"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          {/* SAVED MONTAGES */}
+          <TabsContent value="saved-montages" className="space-y-4 mt-4">
+            <p className="text-sm text-muted-foreground">{savedMontages.length} сохранённых монтажей</p>
+            {savedMontagesLoading ? (
+              <div className="text-center py-16 text-muted-foreground text-sm">Загрузка...</div>
+            ) : savedMontages.length === 0 ? (
+              <div className="text-center py-16 space-y-3">
+                <Scissors className="h-12 w-12 text-muted-foreground/40 mx-auto" />
+                <p className="text-sm text-muted-foreground">Нет сохранённых монтажей</p>
+                <p className="text-xs text-muted-foreground">Создайте и сохраните монтаж из результатов поиска</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {savedMontages.map((item: any) => {
+                  const segments = Array.isArray(item.segments_json) ? item.segments_json : [];
+                  return (
+                    <div
+                      key={item.id}
+                      onClick={() => item.montage_id ? navigate(`/montage/${item.montage_id}`) : undefined}
+                      className="flex items-center gap-3 p-4 rounded-lg border border-border bg-card hover:border-primary/30 transition-all cursor-pointer group"
+                    >
+                      <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                        <Film className="h-5 w-5 text-primary" />
+                      </div>
+                      <div className="flex-1 min-w-0 space-y-0.5">
+                        <p className="text-sm font-medium text-foreground truncate">
+                          {item.label || `Монтаж · ${segments.length} сегментов`}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Цель: {item.target_duration_sec}с · Контекст: {item.lead_in_seconds}с
+                        </p>
+                        <p className="text-[11px] text-muted-foreground/60">{formatDate(item.created_at)}</p>
+                      </div>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); deleteSavedMontageMutation.mutate(item.id); }}
+                        className="h-7 w-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-all shrink-0"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </TabsContent>
+
+          {/* MOMENT BOOKMARKS */}
+          <TabsContent value="moment-bookmarks" className="space-y-4 mt-4">
+            <p className="text-sm text-muted-foreground">{momentBookmarks.length} сохранённых моментов</p>
+            {momentBookmarksLoading ? (
+              <div className="text-center py-16 text-muted-foreground text-sm">Загрузка...</div>
+            ) : momentBookmarks.length === 0 ? (
+              <div className="text-center py-16 space-y-3">
+                <Film className="h-12 w-12 text-muted-foreground/40 mx-auto" />
+                <p className="text-sm text-muted-foreground">Нет сохранённых моментов</p>
+                <p className="text-xs text-muted-foreground">Добавляйте моменты в закладки из результатов поиска</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {momentBookmarks.map((item: any) => (
+                  <div
+                    key={item.id}
+                    onClick={() => navigate(`/product/${item.video_id}?t=${Math.floor(item.start_sec)}`)}
+                    className="flex items-center gap-3 p-4 rounded-lg border border-border bg-card hover:border-primary/30 transition-all cursor-pointer group"
+                  >
+                    <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                      <Play className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                    <div className="flex-1 min-w-0 space-y-0.5">
+                      <p className="text-sm font-medium text-foreground truncate">
+                        {item.video_title || "Видео"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {item.creator_name ? `${item.creator_name} · ` : ""}
+                        {Math.floor(item.start_sec / 60)}:{String(Math.floor(item.start_sec % 60)).padStart(2, "0")} — {Math.floor(item.end_sec / 60)}:{String(Math.floor(item.end_sec % 60)).padStart(2, "0")}
+                      </p>
+                      {item.note && <p className="text-xs text-muted-foreground/80 truncate">{item.note}</p>}
+                      <p className="text-[11px] text-muted-foreground/60">{formatDate(item.created_at)}</p>
+                    </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); deleteMomentBookmarkMutation.mutate(item.id); }}
+                      className="h-7 w-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-all shrink-0"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
                   </div>
                 ))}
               </div>

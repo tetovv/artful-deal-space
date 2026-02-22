@@ -242,10 +242,25 @@ export default function MontageDetail() {
 
       // Update project status
       await supabase.from("montage_projects").update({ status: "saved" }).eq("id", montageId);
+
+      // Save to library (saved_montages)
+      const segmentsJson = activeSegments.map(s => ({
+        id: s.id, source_type: s.source_type, source_id: s.source_id,
+        start_sec: s.start_sec, end_sec: s.end_sec,
+        deep_link: s.deep_link, rationale: s.rationale,
+      }));
+      await supabase.from("saved_montages" as any).upsert({
+        user_id: user!.id,
+        montage_id: montageId,
+        segments_json: segmentsJson,
+        lead_in_seconds: 10,
+        target_duration_sec: targetDuration,
+      }, { onConflict: "montage_id" }).select();
+
       setProject((p: any) => ({ ...p, status: "saved" }));
       setDirty(false);
       console.log("[analytics] montage_saved");
-      toast.success("Монтаж сохранён");
+      toast.success("Монтаж сохранён в библиотеку");
     } catch {
       toast.error("Ошибка сохранения");
     } finally {
