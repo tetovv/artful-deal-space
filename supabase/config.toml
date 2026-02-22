@@ -44,3 +44,6 @@ verify_jwt = false
 
 [functions.goal-playlists]
 verify_jwt = false
+
+[functions.video-meaning-search]
+verify_jwt = false
