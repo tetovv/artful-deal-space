@@ -8,7 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import {
   Search, Loader2, RefreshCw, Sparkles,
-  Video, Mic, Music, FileText, BookOpen, Layout, Layers,
+  Video, Mic, Music, FileText, BookOpen, Layout, Layers, SlidersHorizontal,
 } from "lucide-react";
 import { ContentType } from "@/types";
 import { useContentItems } from "@/hooks/useDbData";
@@ -16,6 +16,13 @@ import { PageTransition } from "@/components/layout/PageTransition";
 import { SelectTabPrompt } from "@/pages/Home";
 import { SmartSearchInline, type ResultCounts } from "@/components/search/SmartSearchInline";
 import type { SmartState } from "@/components/search/SmartSearchInline";
+import {
+  SearchFiltersDrawer,
+  type SearchFilters,
+  DEFAULT_FILTERS,
+  filtersToParams,
+  paramsToFilters,
+} from "@/components/search/SearchFiltersDrawer";
 import { cn } from "@/lib/utils";
 
 const types: ContentType[] = ["video", "podcast", "music", "post", "book", "template"];
@@ -49,13 +56,27 @@ const Explore = () => {
   const [activeType, setActiveType] = useState<ContentType | null>(null);
   const [searchState, setSearchState] = useState<SearchState>(urlQuery ? "loading" : "idle");
   const [error, setError] = useState(false);
+  const [filters, setFilters] = useState<SearchFilters>(() => paramsToFilters(searchParams));
   const [smartMode, setSmartMode] = useState<VideoSearchMode>(
-    urlMode === "smart" || urlMode === "meaning" ? "meaning" : "normal"
+    filters.meaningMode ? "meaning" : "normal"
   );
   const [resultCounts, setResultCounts] = useState<ResultCounts>({});
   const [smartState, setSmartState] = useState<SmartState>("idle");
   const [pulsingTabs, setPulsingTabs] = useState<Set<string>>(new Set());
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
+  // Count active non-default filters for badge
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (filters.sort !== DEFAULT_FILTERS.sort) count++;
+    if (filters.access !== DEFAULT_FILTERS.access) count++;
+    if (filters.family !== DEFAULT_FILTERS.family) count++;
+    if (filters.duration !== DEFAULT_FILTERS.duration) count++;
+    if (filters.timeRange !== DEFAULT_FILTERS.timeRange) count++;
+    if (filters.excludeShorts !== DEFAULT_FILTERS.excludeShorts) count++;
+    if (filters.quoteMode !== DEFAULT_FILTERS.quoteMode) count++;
+    return count;
+  }, [filters]);
   // Callback from SmartSearchInline
   const handleResultCounts = useCallback((counts: ResultCounts, st: SmartState) => {
     setResultCounts(counts);
@@ -63,7 +84,6 @@ const Explore = () => {
     if (st === "results") {
       const tabsWithHits = new Set(Object.entries(counts).filter(([, v]) => v > 0).map(([k]) => k));
       setPulsingTabs(tabsWithHits);
-      // Remove pulse after animation
       const timer = setTimeout(() => setPulsingTabs(new Set()), 1600);
       return () => clearTimeout(timer);
     } else {
@@ -141,18 +161,31 @@ const Explore = () => {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const buildParams = useCallback((q: string, f: SearchFilters) => {
+    const params: Record<string, string> = {};
+    if (q) params.q = q;
+    if (f.meaningMode) params.mode = "meaning";
+    const fp = filtersToParams(f);
+    delete fp.mode; // already handled above
+    Object.assign(params, fp);
+    return params;
+  }, []);
+
   const submitSearch = useCallback(() => {
     const q = inputValue.trim();
     setCommittedQuery(q);
-    if (q) {
-      const params: Record<string, string> = { q };
-      if (isSmartActive) params.mode = "smart";
-      setSearchParams(params, { replace: true });
-    } else {
-      setSearchParams({}, { replace: true });
-    }
+    setSearchParams(buildParams(q, filters), { replace: true });
     setError(false);
-  }, [inputValue, setSearchParams, isSmartActive]);
+  }, [inputValue, setSearchParams, filters, buildParams]);
+
+  const handleApplyFilters = useCallback((newFilters: SearchFilters) => {
+    setFilters(newFilters);
+    // Sync meaning mode from filters
+    setSmartMode(newFilters.meaningMode ? "meaning" : "normal");
+    // Update URL with current query + new filters
+    const q = committedQuery;
+    setSearchParams(buildParams(q, newFilters), { replace: true });
+  }, [committedQuery, setSearchParams, buildParams]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !isLoading) {
@@ -207,18 +240,35 @@ const Explore = () => {
       <div className="p-6 lg:p-8 space-y-6 max-w-7xl mx-auto">
         {/* Search input with button */}
         <div className="space-y-3 max-w-2xl">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder={placeholder}
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onKeyDown={handleKeyDown}
-              className="pl-9 pr-9 bg-card border-border h-11"
-            />
-            {isLoading && (
-              <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
-            )}
+          <div className="flex gap-2 items-start">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder={placeholder}
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={handleKeyDown}
+                className="pl-9 pr-9 bg-card border-border h-11"
+              />
+              {isLoading && (
+                <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+              )}
+            </div>
+            <button
+              onClick={() => setFiltersOpen(true)}
+              className={cn(
+                "relative flex items-center justify-center h-11 w-11 shrink-0 rounded-md border border-border bg-card transition-colors hover:bg-muted/50",
+                activeFilterCount > 0 && "border-primary/50",
+              )}
+              aria-label="Фильтры"
+            >
+              <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
+              {activeFilterCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold leading-none">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
           </div>
           {!committedQuery && (
             <p className="text-xs text-muted-foreground">
@@ -275,7 +325,10 @@ const Explore = () => {
               {(activeType === null || SMART_TYPES.has(activeType)) && (
                 <div className="flex rounded-lg border border-border overflow-hidden ml-auto shrink-0">
                   <button
-                    onClick={() => setSmartMode("normal")}
+                    onClick={() => {
+                      setSmartMode("normal");
+                      setFilters((f) => ({ ...f, meaningMode: false }));
+                    }}
                     className={cn(
                       "px-3 py-1.5 text-xs font-medium transition-colors",
                       smartMode === "normal"
@@ -288,7 +341,7 @@ const Explore = () => {
                   <button
                     onClick={() => {
                       setSmartMode("meaning");
-                      console.log("[analytics] meaning_search_opened");
+                      setFilters((f) => ({ ...f, meaningMode: true }));
                     }}
                     className={cn(
                       "px-3 py-1.5 text-xs font-medium transition-colors border-l border-border",
@@ -443,6 +496,14 @@ const Explore = () => {
           </>
         )}
       </div>
+
+      <SearchFiltersDrawer
+        open={filtersOpen}
+        onOpenChange={setFiltersOpen}
+        activeType={activeType}
+        filters={filters}
+        onApply={handleApplyFilters}
+      />
     </PageTransition>
   );
 };
