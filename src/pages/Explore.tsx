@@ -5,12 +5,14 @@ import { ContentCard } from "@/components/content/ContentCard";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 import { Search, Loader2, RefreshCw, Sparkles } from "lucide-react";
 import { ContentType } from "@/types";
 import { useContentItems } from "@/hooks/useDbData";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { SelectTabPrompt } from "@/pages/Home";
-import { SmartSearchInline } from "@/components/search/SmartSearchInline";
+import { SmartSearchInline, type ResultCounts } from "@/components/search/SmartSearchInline";
+import type { SmartState } from "@/components/search/SmartSearchInline";
 
 const types: (ContentType | "all")[] = ["all", "video", "music", "post", "podcast", "book", "template"];
 
@@ -40,6 +42,24 @@ const Explore = () => {
   const [smartMode, setSmartMode] = useState<VideoSearchMode>(
     urlMode === "smart" || urlMode === "meaning" ? "meaning" : "normal"
   );
+  const [resultCounts, setResultCounts] = useState<ResultCounts>({});
+  const [smartState, setSmartState] = useState<SmartState>("idle");
+  const [pulsingTabs, setPulsingTabs] = useState<Set<string>>(new Set());
+
+  // Callback from SmartSearchInline
+  const handleResultCounts = useCallback((counts: ResultCounts, st: SmartState) => {
+    setResultCounts(counts);
+    setSmartState(st);
+    if (st === "results") {
+      const tabsWithHits = new Set(Object.entries(counts).filter(([, v]) => v > 0).map(([k]) => k));
+      setPulsingTabs(tabsWithHits);
+      // Remove pulse after animation
+      const timer = setTimeout(() => setPulsingTabs(new Set()), 1600);
+      return () => clearTimeout(timer);
+    } else {
+      setPulsingTabs(new Set());
+    }
+  }, []);
 
   const { data: dbItems, isLoading, isError, refetch } = useContentItems();
 
@@ -216,19 +236,29 @@ const Explore = () => {
           {/* Content type chips + smart mode switch */}
           <div className="flex items-center gap-3 flex-wrap max-w-2xl mx-auto">
             <div className="flex gap-1.5 flex-wrap">
-              {types.map((t) => (
-                <button
-                  key={t}
-                  onClick={() => handleTypeChange(t)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                    activeType === t
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-secondary text-secondary-foreground hover:bg-accent"
-                  }`}
-                >
-                  {typeLabels[t] || t}
-                </button>
-              ))}
+              {types.map((t) => {
+                const count = t !== "all" ? resultCounts[t] || 0 : 0;
+                const hasPulse = isSmartActive && pulsingTabs.has(t);
+                const hasCount = isSmartActive && smartState === "results" && count > 0;
+                return (
+                  <button
+                    key={t}
+                    onClick={() => handleTypeChange(t)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors relative ${
+                      activeType === t
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-secondary text-secondary-foreground hover:bg-accent"
+                    } ${hasPulse ? "tab-pulse" : ""}`}
+                  >
+                    {typeLabels[t] || t}
+                    {hasCount && (
+                      <Badge variant="default" className="ml-1.5 h-4 min-w-[1rem] px-1 text-[10px] leading-none">
+                        {count}
+                      </Badge>
+                    )}
+                  </button>
+                );
+              })}
             </div>
 
             {/* Smart mode switch — only for video, podcast, all */}
@@ -265,12 +295,32 @@ const Explore = () => {
 
         {/* ── Smart Search Flow (inline) ── */}
         {isSmartActive && (
-          <SmartSearchInline
-            query={committedQuery}
-            contentType={activeType === "podcast" ? "podcast" : activeType === "video" ? "video" : "all"}
-            onSwitchToNormal={handleSwitchToNormal}
-            standardResults={activeType === "all" ? filtered : undefined}
-          />
+          <>
+            {/* Smart summary for "Все" mode */}
+            {activeType === "all" && smartState === "results" && Object.keys(resultCounts).length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground max-w-2xl mx-auto bg-muted/30 rounded-lg px-4 py-2.5">
+                <span className="font-medium text-foreground">Найдено:</span>
+                {Object.entries(resultCounts)
+                  .filter(([, v]) => v > 0)
+                  .map(([type, count]) => (
+                    <button
+                      key={type}
+                      onClick={() => handleTypeChange(type as ContentType)}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 transition-colors"
+                    >
+                      {typeLabels[type] || type} ({count})
+                    </button>
+                  ))}
+              </div>
+            )}
+            <SmartSearchInline
+              query={committedQuery}
+              contentType={activeType === "podcast" ? "podcast" : activeType === "video" ? "video" : "all"}
+              onSwitchToNormal={handleSwitchToNormal}
+              standardResults={activeType === "all" ? filtered : undefined}
+              onResultCounts={handleResultCounts}
+            />
+          </>
         )}
 
         {/* ── Standard States (only when NOT in smart mode) ── */}
