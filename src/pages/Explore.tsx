@@ -272,13 +272,8 @@ const Explore = () => {
           </div>
         </div>
 
-        {/* Helper text + smart hint */}
-        <div className="space-y-1">
-          {!committedQuery && (
-            <p className="text-xs text-muted-foreground">
-              Нажмите Enter для поиска
-            </p>
-          )}
+        {/* Smart hint */}
+        <div>
           {isSmartActive && (
             <p className="text-xs text-muted-foreground flex items-center gap-1.5">
               <Sparkles className="h-3 w-3 shrink-0 text-primary" />
