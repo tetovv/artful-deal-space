@@ -10,8 +10,12 @@ import { Progress } from "@/components/ui/progress";
 import {
   ArrowLeft, ListMusic, Play, Video, Music, FileText,
   BookOpen, Layout, Clock, AlertTriangle, CheckCircle2,
-  SkipForward, Lock, RefreshCw, Loader2, ArrowRight,
+  SkipForward, Lock, RefreshCw, Loader2, ArrowRight, Save,
 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
 
 /* ── constants ── */
@@ -60,6 +64,9 @@ export default function GoalPlaylistDetail() {
   const [swapping, setSwapping] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [started, setStarted] = useState(false);
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+  const [savingTemplate, setSavingTemplate] = useState(false);
 
   /* ── load data + restore progress ── */
 
@@ -403,9 +410,16 @@ export default function GoalPlaylistDetail() {
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8 space-y-6">
-      <Link to="/playlists/new" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
-        <ArrowLeft className="h-4 w-4" /> Новый плейлист
-      </Link>
+      <div className="flex items-center justify-between">
+        <Link to="/playlists/new" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+          <ArrowLeft className="h-4 w-4" /> Новый плейлист
+        </Link>
+        {playlist && (
+          <Button variant="ghost" size="sm" onClick={() => setShowSaveTemplate(true)}>
+            <Save className="h-3.5 w-3.5 mr-1.5" /> Шаблон
+          </Button>
+        )}
+      </div>
 
       {/* Header */}
       <div className="flex items-center gap-3">
@@ -515,11 +529,16 @@ export default function GoalPlaylistDetail() {
           <p className="text-sm text-muted-foreground">
             Вы прошли все {items.length} элементов за {formatMinutes(totalTime)}.
           </p>
-          <Button asChild variant="outline" size="sm">
-            <Link to="/playlists/new">
-              <ArrowRight className="h-3.5 w-3.5 mr-1.5" /> Создать новый
-            </Link>
-          </Button>
+          <div className="flex gap-2 justify-center">
+            <Button variant="outline" size="sm" onClick={() => setShowSaveTemplate(true)}>
+              <Save className="h-3.5 w-3.5 mr-1.5" /> Сохранить как шаблон
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <Link to="/playlists/new">
+                <ArrowRight className="h-3.5 w-3.5 mr-1.5" /> Создать новый
+              </Link>
+            </Button>
+          </div>
         </Card>
       )}
 
@@ -529,6 +548,54 @@ export default function GoalPlaylistDetail() {
           <p className="text-sm text-muted-foreground">Плейлист пуст.</p>
         </Card>
       )}
+
+      {/* Save as template dialog */}
+      <Dialog open={showSaveTemplate} onOpenChange={setShowSaveTemplate}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Сохранить как шаблон</DialogTitle>
+          </DialogHeader>
+          <Input
+            placeholder="Название шаблона"
+            value={templateName}
+            onChange={e => setTemplateName(e.target.value)}
+          />
+          <p className="text-xs text-muted-foreground">
+            Шаблон сохраняет настройки (цель, время, источники), но не конкретные элементы.
+          </p>
+          <DialogFooter>
+            <Button
+              disabled={!templateName.trim() || savingTemplate}
+              onClick={async () => {
+                if (!playlist || !user) return;
+                setSavingTemplate(true);
+                console.log("[analytics] template_saved");
+                const { error: err } = await supabase
+                  .from("playlist_templates" as any)
+                  .insert({
+                    user_id: user.id,
+                    name: templateName.trim(),
+                    goal_type: playlist.goal_type,
+                    time_budget: playlist.time_budget,
+                    mix_prefs: playlist.mix_prefs || {},
+                    scope: playlist.scope || "platform",
+                  });
+                setSavingTemplate(false);
+                if (err) {
+                  toast.error("Ошибка сохранения");
+                } else {
+                  toast.success("Шаблон сохранён");
+                  setShowSaveTemplate(false);
+                  setTemplateName("");
+                }
+              }}
+            >
+              {savingTemplate ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <Save className="h-4 w-4 mr-1.5" />}
+              Сохранить
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

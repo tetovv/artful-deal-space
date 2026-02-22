@@ -1847,6 +1847,45 @@ export type Database = {
           },
         ]
       }
+      playlist_templates: {
+        Row: {
+          created_at: string
+          goal_type: string
+          id: string
+          mix_prefs: Json
+          name: string
+          scope: string
+          share_slug: string | null
+          time_budget: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          goal_type: string
+          id?: string
+          mix_prefs?: Json
+          name: string
+          scope?: string
+          share_slug?: string | null
+          time_budget: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          goal_type?: string
+          id?: string
+          mix_prefs?: Json
+          name?: string
+          scope?: string
+          share_slug?: string | null
+          time_budget?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       playlists: {
         Row: {
           created_at: string
@@ -2461,6 +2500,48 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      template_run_history: {
+        Row: {
+          generated_playlist_id: string | null
+          id: string
+          run_at: string
+          status: string
+          template_id: string
+          user_id: string
+        }
+        Insert: {
+          generated_playlist_id?: string | null
+          id?: string
+          run_at?: string
+          status?: string
+          template_id: string
+          user_id: string
+        }
+        Update: {
+          generated_playlist_id?: string | null
+          id?: string
+          run_at?: string
+          status?: string
+          template_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "template_run_history_generated_playlist_id_fkey"
+            columns: ["generated_playlist_id"]
+            isOneToOne: false
+            referencedRelation: "goal_playlists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "template_run_history_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "playlist_templates"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       transactions: {
         Row: {
