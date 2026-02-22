@@ -238,9 +238,9 @@ const Explore = () => {
   return (
     <PageTransition>
       <div className="p-6 lg:p-8 space-y-6 max-w-7xl mx-auto">
-        {/* Search input with button */}
-        <div className="space-y-3 max-w-2xl">
-          <div className="flex gap-2 items-start">
+        {/* Row A: Search input + filters — centered */}
+        <div className="flex justify-center">
+          <div className="w-full max-w-3xl flex gap-2 items-start">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -270,23 +270,28 @@ const Explore = () => {
               )}
             </button>
           </div>
+        </div>
+
+        {/* Helper text + smart hint */}
+        <div className="space-y-1">
           {!committedQuery && (
             <p className="text-xs text-muted-foreground">
               Нажмите Enter для поиска
             </p>
           )}
-
-          {/* Smart mode hint */}
           {isSmartActive && (
             <p className="text-xs text-muted-foreground flex items-center gap-1.5">
               <Sparkles className="h-3 w-3 shrink-0 text-primary" />
               Поиск по смыслу ищет конкретные моменты по таймкоду.
             </p>
           )}
+        </div>
 
-          {/* Content type tab bar */}
-          <div>
-            <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide border-b border-border pb-0">
+        {/* Row B: Tabs + Mode toggle — left-aligned, toggle outside scroll */}
+        <div className="flex flex-wrap items-end gap-2 border-b border-border">
+          {/* Scrollable tabs */}
+          <div className="flex-1 min-w-0 overflow-x-auto scrollbar-hide">
+            <div className="flex items-center gap-2 pb-0">
               {types.map((t) => {
                 const Icon = typeIcons[t] || Layers;
                 const isActive = activeType === t;
@@ -320,43 +325,43 @@ const Explore = () => {
                   </button>
                 );
               })}
-
-              {/* Smart mode switch — right-aligned */}
-              {(activeType === null || SMART_TYPES.has(activeType)) && (
-                <div className="flex rounded-lg border border-border overflow-hidden ml-auto shrink-0">
-                  <button
-                    onClick={() => {
-                      setSmartMode("normal");
-                      setFilters((f) => ({ ...f, meaningMode: false }));
-                    }}
-                    className={cn(
-                      "px-3 py-1.5 text-xs font-medium transition-colors",
-                      smartMode === "normal"
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-card text-muted-foreground hover:bg-muted/50",
-                    )}
-                  >
-                    Обычный
-                  </button>
-                  <button
-                    onClick={() => {
-                      setSmartMode("meaning");
-                      setFilters((f) => ({ ...f, meaningMode: true }));
-                    }}
-                    className={cn(
-                      "px-3 py-1.5 text-xs font-medium transition-colors border-l border-border",
-                      smartMode === "meaning"
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-card text-muted-foreground hover:bg-muted/50",
-                    )}
-                  >
-                    <Sparkles className="h-3 w-3 inline mr-1 -mt-0.5" />
-                    По смыслу
-                  </button>
-                </div>
-              )}
             </div>
           </div>
+
+          {/* Mode toggle — outside scroll, never clips */}
+          {(activeType === null || SMART_TYPES.has(activeType)) && (
+            <div className="flex rounded-lg border border-border overflow-hidden shrink-0 mb-1.5">
+              <button
+                onClick={() => {
+                  setSmartMode("normal");
+                  setFilters((f) => ({ ...f, meaningMode: false }));
+                }}
+                className={cn(
+                  "px-3 py-1.5 text-xs font-medium transition-colors",
+                  smartMode === "normal"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-card text-muted-foreground hover:bg-muted/50",
+                )}
+              >
+                Обычный
+              </button>
+              <button
+                onClick={() => {
+                  setSmartMode("meaning");
+                  setFilters((f) => ({ ...f, meaningMode: true }));
+                }}
+                className={cn(
+                  "px-3 py-1.5 text-xs font-medium transition-colors border-l border-border",
+                  smartMode === "meaning"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-card text-muted-foreground hover:bg-muted/50",
+                )}
+              >
+                <Sparkles className="h-3 w-3 inline mr-1 -mt-0.5" />
+                По смыслу
+              </button>
+            </div>
+          )}
         </div>
 
         {/* ── Smart Search Flow (inline) ── */}
