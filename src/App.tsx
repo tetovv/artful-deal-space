@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { ProtectedRoute } from "@/components/layout/ProtectedRoute";
@@ -27,7 +27,6 @@ import Subscriptions from "./pages/Subscriptions";
 import Achievements from "./pages/Achievements";
 import CreatorProposal from "./pages/CreatorProposal";
 import CreatorDealWorkspace from "./pages/CreatorDealWorkspace";
-import Ask from "./pages/Ask";
 import AskResult from "./pages/AskResult";
 import MontageDetail from "./pages/MontageDetail";
 import SharedMontage from "./pages/SharedMontage";
@@ -62,6 +61,12 @@ function MarketplaceGuard() {
     return <Navigate to="/ad-studio" replace />;
   }
   return <Marketplace />;
+}
+
+/** Redirect /ask/:queryId → /search?mode=smart&queryId=:queryId */
+function AskRedirectWithQuery() {
+  const { queryId } = useParams<{ queryId: string }>();
+  return <Navigate to={`/search?mode=smart&queryId=${queryId}`} replace />;
 }
 
 const Protected = ({ children }: { children: React.ReactNode }) => (
@@ -99,8 +104,8 @@ const App = () => (
               <Route path="/my-purchases" element={<Protected><MyPurchases /></Protected>} />
               <Route path="/achievements" element={<Protected><Achievements /></Protected>} />
               {/* legacy redirect removed — now has dedicated page above */}
-              <Route path="/ask" element={<Protected><Ask /></Protected>} />
-              <Route path="/ask/:queryId" element={<Protected><AskResult /></Protected>} />
+              <Route path="/ask" element={<Navigate to="/search?mode=smart" replace />} />
+              <Route path="/ask/:queryId" element={<AskRedirectWithQuery />} />
               <Route path="/montage/:montageId" element={<Protected><MontageDetail /></Protected>} />
               <Route path="/m/:slug" element={<Protected><SharedMontage /></Protected>} />
               <Route path="/playlists/new" element={<Protected><GoalPlaylistWizard /></Protected>} />
