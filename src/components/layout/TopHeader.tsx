@@ -1,4 +1,4 @@
-import { Home, Compass, Palette, Megaphone, Store, Shield, Brain, Settings, Bell, Sun, Moon, LogOut, Menu, X, User, ShoppingBag, Check, CheckCheck, Rss, Library, Wallet, Plus, Minus, ArrowUpRight, ArrowDownLeft, RotateCcw, Receipt, ExternalLink } from "lucide-react";
+import { Home, Compass, Palette, Megaphone, Store, Shield, Brain, Settings, Bell, Sun, Moon, LogOut, Menu, X, User, ShoppingBag, Check, CheckCheck, Rss, Library, Wallet, Plus, Minus, ArrowUpRight, ArrowDownLeft, RotateCcw, Receipt, ExternalLink, Search } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -322,6 +322,7 @@ const allNavItems: NavItem[] = [
   { title: "Предложения", url: "/marketplace", icon: Store, roles: ["creator", "moderator"] },
   
   { title: "AI", url: "/ai-workspace", icon: Brain },
+  { title: "Ask", url: "/ask", icon: Search },
   { title: "Библиотека", url: "/library", icon: Library },
 ];
 

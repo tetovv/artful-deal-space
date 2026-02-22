@@ -27,6 +27,7 @@ import Subscriptions from "./pages/Subscriptions";
 import Achievements from "./pages/Achievements";
 import CreatorProposal from "./pages/CreatorProposal";
 import CreatorDealWorkspace from "./pages/CreatorDealWorkspace";
+import Ask from "./pages/Ask";
 import { RoleGuard } from "@/components/layout/RoleGuard";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useEffect } from "react";
@@ -88,6 +89,7 @@ const App = () => (
               <Route path="/my-purchases" element={<Protected><MyPurchases /></Protected>} />
               <Route path="/achievements" element={<Protected><Achievements /></Protected>} />
               {/* legacy redirect removed — now has dedicated page above */}
+              <Route path="/ask" element={<Protected><Ask /></Protected>} />
               <Route path="/settings" element={<Protected><Settings /></Protected>} />
               <Route path="*" element={<NotFound />} />
             </Routes>
