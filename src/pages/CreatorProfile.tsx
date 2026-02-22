@@ -7,6 +7,7 @@ import { ArrowLeft } from "lucide-react";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { useState, useMemo } from "react";
 import { toast } from "sonner";
+import { useUserRole } from "@/hooks/useUserRole";
 import { useVideoViewCounts } from "@/hooks/useVideoViews";
 import { usePostImpressionCounts } from "@/hooks/usePostImpressions";
 import { useCreatorAnalytics } from "@/hooks/useCreatorAnalytics";
@@ -36,6 +37,7 @@ const CreatorProfile = () => {
   const [proposalOpen, setProposalOpen] = useState(false);
   const [resumePromptOpen, setResumePromptOpen] = useState(false);
 
+  const { isAdvertiser: currentUserIsAdvertiser } = useUserRole();
   const isOwnProfile = id === user?.id || id === "me";
   const profileUserId = isOwnProfile ? user?.id : id;
   const mockCreator = creators.find((c) => c.userId === id);
@@ -277,7 +279,7 @@ const CreatorProfile = () => {
 
             <OffersSection
               offers={creatorOffers}
-              onDeal={!isOwnProfile ? handleDealClick : undefined}
+              onDeal={!isOwnProfile && currentUserIsAdvertiser ? handleDealClick : undefined}
             />
 
             <PortfolioSection items={contentToShow} videoViewCounts={videoViewCounts} postImpressionCounts={postImpressionCounts} />
@@ -309,6 +311,7 @@ const CreatorProfile = () => {
             turnaroundDays={turnaroundDays}
             safeDeal={profileData.safeDeal}
             hasActiveDeal={!!hasActiveDeal}
+            canProposeDeal={currentUserIsAdvertiser}
           />
         </div>
       </div>

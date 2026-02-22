@@ -18,13 +18,14 @@ interface ProfileActionCardProps {
   turnaroundDays?: number | null;
   safeDeal?: boolean;
   hasActiveDeal?: boolean;
+  canProposeDeal?: boolean;
 }
 
 export const ProfileActionCard = ({
   isOwnProfile, isFollowing, hasPaidSub, dealSent,
   followPending, paidSubPending,
   onFollow, onPaidSub, onDeal, onEditProfile,
-  responseHours, dealsCount, turnaroundDays, safeDeal, hasActiveDeal,
+  responseHours, dealsCount, turnaroundDays, safeDeal, hasActiveDeal, canProposeDeal,
 }: ProfileActionCardProps) => (
   <div className="rounded-xl border border-border bg-card p-5 space-y-4 lg:sticky lg:top-6">
     {/* CTAs */}
@@ -34,15 +35,17 @@ export const ProfileActionCard = ({
       </Button>
     ) : (
       <div className="space-y-2">
-        <Button
-          className="w-full glow-primary"
-          size="lg"
-          disabled={dealSent}
-          onClick={onDeal}
-        >
-          <Handshake className="h-4 w-4 mr-2" />
-          {dealSent ? "Заявка отправлена" : "Предложить сделку"}
-        </Button>
+        {canProposeDeal && (
+          <Button
+            className="w-full glow-primary"
+            size="lg"
+            disabled={dealSent}
+            onClick={onDeal}
+          >
+            <Handshake className="h-4 w-4 mr-2" />
+            {dealSent ? "Заявка отправлена" : "Предложить сделку"}
+          </Button>
+        )}
 
         <TooltipProvider>
           <Tooltip>
