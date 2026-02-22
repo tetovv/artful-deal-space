@@ -165,6 +165,147 @@ export type Database = {
           },
         ]
       }
+      ask_access_snapshots: {
+        Row: {
+          created_at: string
+          entitlement_summary: Json
+          id: string
+          query_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          entitlement_summary?: Json
+          id?: string
+          query_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          entitlement_summary?: Json
+          id?: string
+          query_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ask_access_snapshots_query_id_fkey"
+            columns: ["query_id"]
+            isOneToOne: false
+            referencedRelation: "ask_queries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ask_evidence: {
+        Row: {
+          confidence: string
+          created_at: string
+          creator_name: string
+          deep_link: string | null
+          id: string
+          query_id: string
+          snippet: string
+          sort_order: number
+          source_id: string | null
+          source_type: string
+          title: string
+        }
+        Insert: {
+          confidence?: string
+          created_at?: string
+          creator_name?: string
+          deep_link?: string | null
+          id?: string
+          query_id: string
+          snippet?: string
+          sort_order?: number
+          source_id?: string | null
+          source_type: string
+          title?: string
+        }
+        Update: {
+          confidence?: string
+          created_at?: string
+          creator_name?: string
+          deep_link?: string | null
+          id?: string
+          query_id?: string
+          snippet?: string
+          sort_order?: number
+          source_id?: string | null
+          source_type?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ask_evidence_query_id_fkey"
+            columns: ["query_id"]
+            isOneToOne: false
+            referencedRelation: "ask_queries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ask_queries: {
+        Row: {
+          created_at: string
+          id: string
+          include_workplace: boolean
+          question: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          include_workplace?: boolean
+          question: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          include_workplace?: boolean
+          question?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      ask_results: {
+        Row: {
+          answer_text: string
+          created_at: string
+          id: string
+          query_id: string
+          validated_at: string | null
+        }
+        Insert: {
+          answer_text?: string
+          created_at?: string
+          id?: string
+          query_id: string
+          validated_at?: string | null
+        }
+        Update: {
+          answer_text?: string
+          created_at?: string
+          id?: string
+          query_id?: string
+          validated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ask_results_query_id_fkey"
+            columns: ["query_id"]
+            isOneToOne: false
+            referencedRelation: "ask_queries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       attempts: {
         Row: {
           answers: Json
