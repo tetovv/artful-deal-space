@@ -37,8 +37,10 @@ import { ContentCard } from "@/components/content/ContentCard";
 
 /* ── Types ── */
 
-type SmartState = "idle" | "querying" | "clarifying" | "results" | "no_results" | "error" | "index_not_ready";
+export type SmartState = "idle" | "querying" | "clarifying" | "results" | "no_results" | "error" | "index_not_ready";
 type SmartContentType = "video" | "podcast" | "all";
+
+export type ResultCounts = Record<string, number>;
 
 interface SmartSearchInlineProps {
   query: string;
@@ -47,6 +49,8 @@ interface SmartSearchInlineProps {
   onSwitchToNormal: () => void;
   /** Standard keyword results for non-meaning types in "all" mode */
   standardResults?: any[];
+  /** Called when results are computed with per-type counts */
+  onResultCounts?: (counts: ResultCounts, state: SmartState) => void;
 }
 
 /* ── Helpers ── */
@@ -148,7 +152,7 @@ function SourceCard({ moments, onJump, onPaywall }: {
 
 /* ── Main Component ── */
 
-export function SmartSearchInline({ query, contentType, onSwitchToNormal, standardResults }: SmartSearchInlineProps) {
+export function SmartSearchInline({ query, contentType, onSwitchToNormal, standardResults, onResultCounts }: SmartSearchInlineProps) {
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -180,6 +184,32 @@ export function SmartSearchInline({ query, contentType, onSwitchToNormal, standa
     list.push(...meaningResults.moreVideos);
     return list;
   }, [meaningResults]);
+
+  // Emit per-type counts to parent
+  useEffect(() => {
+    if (!onResultCounts) return;
+    if (state === "results" || state === "no_results") {
+      const counts: ResultCounts = {};
+      const meaningCount = allMoments.length;
+      if (contentType === "video") {
+        counts.video = meaningCount;
+      } else if (contentType === "podcast") {
+        counts.podcast = meaningCount;
+      } else {
+        counts.video = meaningCount;
+        counts.podcast = 0;
+      }
+      if (standardResults) {
+        for (const item of standardResults) {
+          const t = item.type || "other";
+          counts[t] = (counts[t] || 0) + 1;
+        }
+      }
+      onResultCounts(counts, state);
+    } else {
+      onResultCounts({}, state);
+    }
+  }, [state, allMoments.length, standardResults, contentType, onResultCounts]);
 
   // Reset when query/contentType changes
   useEffect(() => {
