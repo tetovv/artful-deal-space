@@ -10,9 +10,10 @@ import { Progress } from "@/components/ui/progress";
 import {
   ArrowLeft, Film, Clock, Play, Video, Music, FileText,
   BookOpen, Layout, CheckCircle2, AlertTriangle, XCircle,
-  Minus, Plus, ArrowUp, ArrowDown, Trash2, Lock, Save, RefreshCw, Loader2,
+  Minus, Plus, ArrowUp, ArrowDown, Trash2, Lock, Save, RefreshCw, Loader2, Share2,
 } from "lucide-react";
 import { toast } from "sonner";
+import MontageShareModal from "@/components/montage/MontageShareModal";
 
 const SOURCE_ICONS: Record<string, React.ElementType> = {
   video: Video, audio: Music, podcast: Music, post: FileText, book: BookOpen, template: Layout,
@@ -53,6 +54,8 @@ export default function MontageDetail() {
   const [segments, setSegments] = useState<Segment[]>([]);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [existingShareSlug, setExistingShareSlug] = useState<string | null>(null);
 
   // Fetch montage data with polling for processing state
   useEffect(() => {
@@ -86,6 +89,14 @@ export default function MontageDetail() {
         } else {
           setLoading(false);
           console.log("[analytics] montage_generated");
+          // Check for existing share link
+          const { data: shareData } = await supabase
+            .from("montage_shares" as any)
+            .select("slug")
+            .eq("montage_id", montageId)
+            .limit(1)
+            .maybeSingle();
+          if (shareData) setExistingShareSlug((shareData as any).slug);
           // Check accessibility of segments
           if (data.segments?.length > 0) {
             checkAccessibility(data.segments, session?.access_token);
@@ -275,10 +286,20 @@ export default function MontageDetail() {
           </div>
         </div>
         {isReady && project?.source_query_id && (
-          <Button asChild variant="ghost" size="sm">
-            <Link to={`/ask/${project.source_query_id}`}>
-              <RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Уточнить запрос
-            </Link>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setShareOpen(true)}>
+              <Share2 className="h-3.5 w-3.5 mr-1.5" /> Поделиться
+            </Button>
+            <Button asChild variant="ghost" size="sm">
+              <Link to={`/ask/${project.source_query_id}`}>
+                <RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Уточнить запрос
+              </Link>
+            </Button>
+          </div>
+        )}
+        {isReady && !project?.source_query_id && (
+          <Button variant="outline" size="sm" onClick={() => setShareOpen(true)}>
+            <Share2 className="h-3.5 w-3.5 mr-1.5" /> Поделиться
           </Button>
         )}
       </div>
@@ -497,6 +518,16 @@ export default function MontageDetail() {
             <Link to="/ask">Попробовать снова</Link>
           </Button>
         </Card>
+      )}
+
+      {/* Share modal */}
+      {montageId && (
+        <MontageShareModal
+          open={shareOpen}
+          onOpenChange={setShareOpen}
+          montageId={montageId}
+          existingSlug={existingShareSlug}
+        />
       )}
     </div>
   );

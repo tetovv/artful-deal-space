@@ -1556,6 +1556,73 @@ export type Database = {
           },
         ]
       }
+      montage_shares: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          montage_id: string
+          slug: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          id?: string
+          montage_id: string
+          slug: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          montage_id?: string
+          slug?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "montage_shares_montage_id_fkey"
+            columns: ["montage_id"]
+            isOneToOne: false
+            referencedRelation: "montage_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      montage_viewer_access_log: {
+        Row: {
+          allowed_count: number
+          created_at: string
+          id: string
+          locked_count: number
+          share_id: string
+          viewer_id: string
+        }
+        Insert: {
+          allowed_count?: number
+          created_at?: string
+          id?: string
+          locked_count?: number
+          share_id: string
+          viewer_id: string
+        }
+        Update: {
+          allowed_count?: number
+          created_at?: string
+          id?: string
+          locked_count?: number
+          share_id?: string
+          viewer_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "montage_viewer_access_log_share_id_fkey"
+            columns: ["share_id"]
+            isOneToOne: false
+            referencedRelation: "montage_shares"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           created_at: string
