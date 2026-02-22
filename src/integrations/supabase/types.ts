@@ -2866,6 +2866,7 @@ export type Database = {
       }
       video_search_queries: {
         Row: {
+          clarification_questions: Json | null
           clarifications: Json | null
           created_at: string
           id: string
@@ -2878,6 +2879,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          clarification_questions?: Json | null
           clarifications?: Json | null
           created_at?: string
           id?: string
@@ -2890,6 +2892,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          clarification_questions?: Json | null
           clarifications?: Json | null
           created_at?: string
           id?: string
