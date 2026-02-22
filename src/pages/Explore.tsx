@@ -6,19 +6,33 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Search, Loader2, RefreshCw, Sparkles } from "lucide-react";
+import {
+  Search, Loader2, RefreshCw, Sparkles,
+  Layers, Video, Mic, Music, FileText, BookOpen, Layout,
+} from "lucide-react";
 import { ContentType } from "@/types";
 import { useContentItems } from "@/hooks/useDbData";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { SelectTabPrompt } from "@/pages/Home";
 import { SmartSearchInline, type ResultCounts } from "@/components/search/SmartSearchInline";
 import type { SmartState } from "@/components/search/SmartSearchInline";
+import { cn } from "@/lib/utils";
 
-const types: (ContentType | "all")[] = ["all", "video", "music", "post", "podcast", "book", "template"];
+const types: (ContentType | "all")[] = ["all", "video", "podcast", "music", "post", "book", "template"];
 
 const typeLabels: Record<string, string> = {
   all: "Все",
   ...contentTypeLabels,
+};
+
+const typeIcons: Record<string, React.ComponentType<{ className?: string }>> = {
+  all: Layers,
+  video: Video,
+  podcast: Mic,
+  music: Music,
+  post: FileText,
+  book: BookOpen,
+  template: Layout,
 };
 
 type SearchState = "idle" | "loading" | "results" | "no_results" | "error";
@@ -233,63 +247,75 @@ const Explore = () => {
             </p>
           )}
 
-          {/* Content type chips + smart mode switch */}
-          <div className="flex items-center gap-3 flex-wrap max-w-2xl mx-auto">
-            <div className="flex gap-1.5 flex-wrap">
+          {/* Content type tab bar */}
+          <div className="max-w-2xl mx-auto">
+            <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide border-b border-border pb-0">
               {types.map((t) => {
+                const Icon = typeIcons[t] || Layers;
+                const isActive = activeType === t;
                 const count = t !== "all" ? resultCounts[t] || 0 : 0;
                 const hasPulse = isSmartActive && pulsingTabs.has(t);
                 const hasCount = isSmartActive && smartState === "results" && count > 0;
+
                 return (
                   <button
                     key={t}
                     onClick={() => handleTypeChange(t)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors relative ${
-                      activeType === t
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-secondary text-secondary-foreground hover:bg-accent"
-                    } ${hasPulse ? "tab-pulse" : ""}`}
+                    className={cn(
+                      "relative flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium whitespace-nowrap transition-colors shrink-0",
+                      "border-b-2 -mb-px",
+                      isActive
+                        ? "border-primary text-primary"
+                        : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30",
+                      hasPulse && "tab-pulse",
+                    )}
                   >
-                    {typeLabels[t] || t}
+                    <Icon className="h-4 w-4 shrink-0" />
+                    <span className="min-w-0 truncate">{typeLabels[t] || t}</span>
                     {hasCount && (
-                      <Badge variant="default" className="ml-1.5 h-4 min-w-[1rem] px-1 text-[10px] leading-none">
+                      <Badge
+                        variant="secondary"
+                        className="ml-0.5 h-[18px] min-w-[18px] px-1 text-[10px] leading-none font-semibold rounded-full"
+                      >
                         {count}
                       </Badge>
                     )}
                   </button>
                 );
               })}
-            </div>
 
-            {/* Smart mode switch — only for video, podcast, all */}
-            {activeType !== null && SMART_TYPES.has(activeType) && (
-              <div className="flex rounded-lg border border-border overflow-hidden ml-auto">
-                <button
-                  onClick={() => setSmartMode("normal")}
-                  className={`px-3 py-1 text-xs font-medium transition-colors ${
-                    smartMode === "normal"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-card text-muted-foreground hover:bg-muted/50"
-                  }`}
-                >
-                  Обычный
-                </button>
-                <button
-                  onClick={() => {
-                    setSmartMode("meaning");
-                    console.log("[analytics] meaning_search_opened");
-                  }}
-                  className={`px-3 py-1 text-xs font-medium transition-colors border-l border-border ${
-                    smartMode === "meaning"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-card text-muted-foreground hover:bg-muted/50"
-                  }`}
-                >
-                  <Sparkles className="h-3 w-3 inline mr-1 -mt-0.5" />
-                  По смыслу
-                </button>
-              </div>
-            )}
+              {/* Smart mode switch — right-aligned */}
+              {activeType !== null && SMART_TYPES.has(activeType) && (
+                <div className="flex rounded-lg border border-border overflow-hidden ml-auto shrink-0">
+                  <button
+                    onClick={() => setSmartMode("normal")}
+                    className={cn(
+                      "px-3 py-1.5 text-xs font-medium transition-colors",
+                      smartMode === "normal"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-card text-muted-foreground hover:bg-muted/50",
+                    )}
+                  >
+                    Обычный
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSmartMode("meaning");
+                      console.log("[analytics] meaning_search_opened");
+                    }}
+                    className={cn(
+                      "px-3 py-1.5 text-xs font-medium transition-colors border-l border-border",
+                      smartMode === "meaning"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-card text-muted-foreground hover:bg-muted/50",
+                    )}
+                  >
+                    <Sparkles className="h-3 w-3 inline mr-1 -mt-0.5" />
+                    По смыслу
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
