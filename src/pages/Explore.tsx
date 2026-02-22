@@ -155,7 +155,7 @@ const Explore = () => {
   }, [inputValue, setSearchParams, isSmartActive]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
+    if (e.key === "Enter" && !isLoading) {
       e.preventDefault();
       submitSearch();
     }
@@ -206,33 +206,25 @@ const Explore = () => {
     <PageTransition>
       <div className="p-6 lg:p-8 space-y-6 max-w-7xl mx-auto">
         {/* Search input with button */}
-        <div className="space-y-3">
-          <div className="relative max-w-2xl mx-auto flex gap-0">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder={placeholder}
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onKeyDown={handleKeyDown}
-                className="pl-9 pr-2 bg-card border-border rounded-r-none border-r-0 h-11"
-              />
-            </div>
-            <Button
-              onClick={submitSearch}
-              disabled={isLoading}
-              className="rounded-l-none h-11 px-5 shrink-0"
-            >
-              {isLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <>
-                  <Search className="h-4 w-4 mr-1.5" />
-                  Найти
-                </>
-              )}
-            </Button>
+        <div className="space-y-1.5">
+          <div className="relative max-w-2xl mx-auto">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder={placeholder}
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyDown={handleKeyDown}
+              className="pl-9 pr-9 bg-card border-border h-11"
+            />
+            {isLoading && (
+              <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+            )}
           </div>
+          {!committedQuery && (
+            <p className="text-xs text-muted-foreground max-w-2xl mx-auto text-center">
+              Нажмите Enter для поиска
+            </p>
+          )}
 
           {/* Smart mode hint */}
           {isSmartActive && (
