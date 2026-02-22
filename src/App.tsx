@@ -33,6 +33,8 @@ import MontageDetail from "./pages/MontageDetail";
 import SharedMontage from "./pages/SharedMontage";
 import GoalPlaylistWizard from "./pages/GoalPlaylistWizard";
 import GoalPlaylistDetail from "./pages/GoalPlaylistDetail";
+import PlaylistTemplates from "./pages/PlaylistTemplates";
+import SharedTemplate from "./pages/SharedTemplate";
 import { RoleGuard } from "@/components/layout/RoleGuard";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useEffect } from "react";
@@ -99,6 +101,8 @@ const App = () => (
               <Route path="/montage/:montageId" element={<Protected><MontageDetail /></Protected>} />
               <Route path="/m/:slug" element={<Protected><SharedMontage /></Protected>} />
               <Route path="/playlists/new" element={<Protected><GoalPlaylistWizard /></Protected>} />
+              <Route path="/playlists/templates" element={<Protected><PlaylistTemplates /></Protected>} />
+              <Route path="/playlists/template/:slug" element={<Protected><SharedTemplate /></Protected>} />
               <Route path="/playlists/:playlistId" element={<Protected><GoalPlaylistDetail /></Protected>} />
               <Route path="/settings" element={<Protected><Settings /></Protected>} />
               <Route path="*" element={<NotFound />} />
