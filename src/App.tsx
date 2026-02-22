@@ -28,6 +28,7 @@ import Achievements from "./pages/Achievements";
 import CreatorProposal from "./pages/CreatorProposal";
 import CreatorDealWorkspace from "./pages/CreatorDealWorkspace";
 import Ask from "./pages/Ask";
+import AskResult from "./pages/AskResult";
 import { RoleGuard } from "@/components/layout/RoleGuard";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useEffect } from "react";
@@ -90,6 +91,7 @@ const App = () => (
               <Route path="/achievements" element={<Protected><Achievements /></Protected>} />
               {/* legacy redirect removed — now has dedicated page above */}
               <Route path="/ask" element={<Protected><Ask /></Protected>} />
+              <Route path="/ask/:queryId" element={<Protected><AskResult /></Protected>} />
               <Route path="/settings" element={<Protected><Settings /></Protected>} />
               <Route path="*" element={<NotFound />} />
             </Routes>
