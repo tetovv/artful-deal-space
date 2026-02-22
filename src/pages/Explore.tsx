@@ -8,7 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import {
   Search, Loader2, RefreshCw, Sparkles,
-  Layers, Video, Mic, Music, FileText, BookOpen, Layout,
+  Video, Mic, Music, FileText, BookOpen, Layout, Layers,
 } from "lucide-react";
 import { ContentType } from "@/types";
 import { useContentItems } from "@/hooks/useDbData";
@@ -18,15 +18,13 @@ import { SmartSearchInline, type ResultCounts } from "@/components/search/SmartS
 import type { SmartState } from "@/components/search/SmartSearchInline";
 import { cn } from "@/lib/utils";
 
-const types: (ContentType | "all")[] = ["all", "video", "podcast", "music", "post", "book", "template"];
+const types: ContentType[] = ["video", "podcast", "music", "post", "book", "template"];
 
 const typeLabels: Record<string, string> = {
-  all: "Все",
   ...contentTypeLabels,
 };
 
 const typeIcons: Record<string, React.ComponentType<{ className?: string }>> = {
-  all: Layers,
   video: Video,
   podcast: Mic,
   music: Music,
@@ -38,7 +36,7 @@ const typeIcons: Record<string, React.ComponentType<{ className?: string }>> = {
 type SearchState = "idle" | "loading" | "results" | "no_results" | "error";
 type VideoSearchMode = "normal" | "meaning";
 
-const SMART_TYPES = new Set<string>(["video", "podcast", "all"]);
+const SMART_TYPES = new Set<string>(["video", "podcast"]);
 
 const Explore = () => {
   const navigate = useNavigate();
@@ -48,9 +46,7 @@ const Explore = () => {
 
   const [inputValue, setInputValue] = useState(urlQuery);
   const [committedQuery, setCommittedQuery] = useState(urlQuery);
-  const [activeType, setActiveType] = useState<ContentType | "all" | null>(
-    urlMode === "smart" ? "all" : null
-  );
+  const [activeType, setActiveType] = useState<ContentType | null>(null);
   const [searchState, setSearchState] = useState<SearchState>(urlQuery ? "loading" : "idle");
   const [error, setError] = useState(false);
   const [smartMode, setSmartMode] = useState<VideoSearchMode>(
@@ -78,7 +74,7 @@ const Explore = () => {
   const { data: dbItems, isLoading, isError, refetch } = useContentItems();
 
   // Is smart mode active?
-  const isSmartActive = smartMode === "meaning" && activeType !== null && SMART_TYPES.has(activeType);
+  const isSmartActive = smartMode === "meaning" && (activeType === null || SMART_TYPES.has(activeType));
 
   // Normalize items
   const allItems = useMemo(() => {
@@ -103,14 +99,13 @@ const Explore = () => {
   // Filter for standard (non-smart) mode
   const filtered = useMemo(() => {
     if (!committedQuery && !activeType) return allItems;
-    if (activeType === "all" && !committedQuery) return allItems;
     return allItems.filter((item: any) => {
       const q = committedQuery.toLowerCase();
       const matchSearch = !committedQuery ||
         item.title.toLowerCase().includes(q) ||
         (item.description || "").toLowerCase().includes(q) ||
         (item.tags || []).some((t: string) => t.toLowerCase().includes(q));
-      const matchType = !activeType || activeType === "all" || item.type === activeType;
+      const matchType = !activeType || item.type === activeType;
       return matchSearch && matchType;
     });
   }, [allItems, committedQuery, activeType]);
@@ -172,10 +167,10 @@ const Explore = () => {
     submitSearch();
   };
 
-  const handleTypeChange = (t: ContentType | "all") => {
+  const handleTypeChange = (t: ContentType) => {
     const newType = activeType === t ? null : t;
     setActiveType(newType);
-    // Reset smart mode when switching away from smart-capable types
+    // Reset smart mode when switching to a non-smart-capable type
     if (newType && !SMART_TYPES.has(newType)) {
       setSmartMode("normal");
     }
@@ -253,7 +248,7 @@ const Explore = () => {
               {types.map((t) => {
                 const Icon = typeIcons[t] || Layers;
                 const isActive = activeType === t;
-                const count = t !== "all" ? resultCounts[t] || 0 : 0;
+                const count = resultCounts[t] || 0;
                 const hasPulse = isSmartActive && pulsingTabs.has(t);
                 const hasCount = isSmartActive && smartState === "results" && count > 0;
 
@@ -285,7 +280,7 @@ const Explore = () => {
               })}
 
               {/* Smart mode switch — right-aligned */}
-              {activeType !== null && SMART_TYPES.has(activeType) && (
+              {(activeType === null || SMART_TYPES.has(activeType)) && (
                 <div className="flex rounded-lg border border-border overflow-hidden ml-auto shrink-0">
                   <button
                     onClick={() => setSmartMode("normal")}
@@ -323,7 +318,7 @@ const Explore = () => {
         {isSmartActive && (
           <>
             {/* Smart summary for "Все" mode */}
-            {activeType === "all" && smartState === "results" && Object.keys(resultCounts).length > 0 && (
+            {activeType === null && smartState === "results" && Object.keys(resultCounts).length > 0 && (
               <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground max-w-2xl mx-auto bg-muted/30 rounded-lg px-4 py-2.5">
                 <span className="font-medium text-foreground">Найдено:</span>
                 {Object.entries(resultCounts)
@@ -343,7 +338,7 @@ const Explore = () => {
               query={committedQuery}
               contentType={activeType === "podcast" ? "podcast" : activeType === "video" ? "video" : "all"}
               onSwitchToNormal={handleSwitchToNormal}
-              standardResults={activeType === "all" ? filtered : undefined}
+              standardResults={activeType === null ? filtered : undefined}
               onResultCounts={handleResultCounts}
             />
           </>
