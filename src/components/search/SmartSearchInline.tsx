@@ -3,7 +3,7 @@
  * State machine: idle → querying → clarifying → results → error | no_results
  */
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -293,6 +293,9 @@ export function SmartSearchInline({ query, contentType, onSwitchToNormal, standa
   // Montage
   const [montageOpen, setMontageOpen] = useState(false);
 
+  // AbortController for in-flight requests
+  const abortRef = useRef<AbortController | null>(null);
+
   // Count how many types have hits
   const meaningHasHits = meaningResults?.best !== null;
   const standardHasHits = (standardResults?.length ?? 0) > 0;
@@ -349,24 +352,40 @@ export function SmartSearchInline({ query, contentType, onSwitchToNormal, standa
 
   // Reset when contentType changes
   useEffect(() => {
+    resetAll();
+  }, [contentType]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Full reset helper
+  const resetAll = useCallback(() => {
+    // Cancel any in-flight request
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+    }
     setState("idle");
     setQuestions([]);
     setAnswers({});
     setQueryId(null);
     setMeaningResults(null);
-  }, [contentType]);
+    setResultTab("meaning");
+  }, []);
 
   // Auto-submit when query changes
   useEffect(() => {
     if (query.trim()) {
       handleSubmit(query.trim());
     } else {
-      setState("idle");
+      resetAll();
     }
   }, [query]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSubmit = useCallback(async (q: string) => {
     if (!q || !user) return;
+
+    // Abort previous in-flight request
+    if (abortRef.current) abortRef.current.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     setState("querying");
     console.log("[analytics] smart_search_submitted", { query: q, contentType });
@@ -375,6 +394,7 @@ export function SmartSearchInline({ query, contentType, onSwitchToNormal, standa
     if (contentType === "video" || contentType === "all") {
       const mock = findMockQuery(q);
       if (mock) {
+        if (controller.signal.aborted) return;
         const qid = mockQueryId(mock.queryText);
         setQueryId(qid);
         if (mock.needsClarification && mock.clarificationQuestions) {
@@ -409,6 +429,7 @@ export function SmartSearchInline({ query, contentType, onSwitchToNormal, standa
             {
               method: "POST",
               headers,
+              signal: controller.signal,
               body: JSON.stringify({
                 queryText: q,
                 includePrivateSources: includeWorkplace,
@@ -428,6 +449,9 @@ export function SmartSearchInline({ query, contentType, onSwitchToNormal, standa
           return data;
         }),
       );
+
+      // Guard against stale responses after abort
+      if (controller.signal.aborted) return;
 
       let combinedResults: SearchResults = { best: null, moreVideos: [], montageCandidates: [] };
       let hasClarification = false;
@@ -478,7 +502,8 @@ export function SmartSearchInline({ query, contentType, onSwitchToNormal, standa
       setMeaningResults(combinedResults);
       const hasResults = combinedResults.best !== null || combinedResults.moreVideos.length > 0;
       setState(hasResults ? "results" : "no_results");
-    } catch {
+    } catch (err: any) {
+      if (err?.name === "AbortError") return; // Aborted intentionally
       setState("error");
     }
   }, [user, contentType, includeWorkplace]);
