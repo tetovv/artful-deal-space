@@ -206,8 +206,8 @@ const Explore = () => {
     <PageTransition>
       <div className="p-6 lg:p-8 space-y-6 max-w-7xl mx-auto">
         {/* Search input with button */}
-        <div className="space-y-1.5">
-          <div className="relative max-w-2xl mx-auto">
+        <div className="space-y-3 max-w-2xl">
+          <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder={placeholder}
@@ -221,22 +221,22 @@ const Explore = () => {
             )}
           </div>
           {!committedQuery && (
-            <p className="text-xs text-muted-foreground max-w-2xl mx-auto text-center">
+            <p className="text-xs text-muted-foreground">
               Нажмите Enter для поиска
             </p>
           )}
 
           {/* Smart mode hint */}
           {isSmartActive && (
-            <p className="text-xs text-muted-foreground max-w-2xl mx-auto flex items-center gap-1.5">
+            <p className="text-xs text-muted-foreground flex items-center gap-1.5">
               <Sparkles className="h-3 w-3 shrink-0 text-primary" />
               Поиск по смыслу ищет конкретные моменты по таймкоду.
             </p>
           )}
 
           {/* Content type tab bar */}
-          <div className="max-w-2xl mx-auto">
-            <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide border-b border-border pb-0">
+          <div>
+            <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide border-b border-border pb-0">
               {types.map((t) => {
                 const Icon = typeIcons[t] || Layers;
                 const isActive = activeType === t;
