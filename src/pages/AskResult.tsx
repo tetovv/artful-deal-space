@@ -8,9 +8,10 @@ import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   ArrowLeft, AlertTriangle, Video, Music, FileText, BookOpen, Layout,
-  ExternalLink, Clock, CheckCircle2, XCircle, Shield, BookmarkPlus, Check,
+  ExternalLink, Clock, CheckCircle2, XCircle, Shield, BookmarkPlus, Check, Film,
 } from "lucide-react";
 import { toast } from "sonner";
+import { MontageWizardModal } from "@/components/montage/MontageWizardModal";
 
 const SOURCE_ICONS: Record<string, React.ElementType> = {
   video: Video,
@@ -90,6 +91,7 @@ export default function AskResult() {
   const [evidence, setEvidence] = useState<EvidenceData[]>([]);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [montageOpen, setMontageOpen] = useState(false);
 
   useEffect(() => {
     if (!queryId || !user) return;
@@ -229,19 +231,31 @@ export default function AskResult() {
             </div>
           </Card>
 
-          {/* Save CTA */}
-          <Button
-            onClick={handleSave}
-            disabled={saved || saving}
-            variant={saved ? "outline" : "default"}
-            className="w-full"
-          >
-            {saved ? (
-              <><Check className="h-4 w-4 mr-2" /> Сохранено</>
-            ) : (
-              <><BookmarkPlus className="h-4 w-4 mr-2" /> {saving ? "Сохранение…" : "Сохранить"}</>
-            )}
-          </Button>
+          {/* Action buttons */}
+          <div className="flex gap-2">
+            <Button
+              onClick={handleSave}
+              disabled={saved || saving}
+              variant={saved ? "outline" : "default"}
+              className="flex-1"
+            >
+              {saved ? (
+                <><Check className="h-4 w-4 mr-2" /> Сохранено</>
+              ) : (
+                <><BookmarkPlus className="h-4 w-4 mr-2" /> {saving ? "Сохранение…" : "Сохранить"}</>
+              )}
+            </Button>
+            <Button variant="outline" onClick={() => setMontageOpen(true)}>
+              <Film className="h-4 w-4 mr-2" /> Монтаж
+            </Button>
+          </div>
+
+          <MontageWizardModal
+            open={montageOpen}
+            onOpenChange={setMontageOpen}
+            queryId={queryId}
+            evidenceSourceIds={evidence.map((e) => e.source_id).filter(Boolean) as string[]}
+          />
 
           <div>
             <p className="text-sm font-medium text-foreground mb-3">
