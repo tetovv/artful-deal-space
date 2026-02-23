@@ -247,50 +247,102 @@ async function semanticSearch(
 ) {
   const queryTokens = tokenize(queryText);
 
-  // Fetch published video moments
+  // 1) Fetch indexed moments
   const { data: moments } = await supabase
     .from("moment_index")
     .select(
-      "*, content_items!inner(id, title, creator_name, creator_id, monetization_type, price, status, type)",
+      "*, content_items!inner(id, title, creator_name, creator_id, monetization_type, price, status, type, description, tags)",
     )
     .eq("content_items.status", "published")
     .eq("content_items.type", "video")
-    .limit(100);
+    .limit(200);
 
-  if (!moments || moments.length === 0) {
-    return { best: null, moreVideos: [], montageCandidates: [] };
-  }
+  // 2) Fetch ALL published videos (to find unindexed ones)
+  const { data: allVideos } = await supabase
+    .from("content_items")
+    .select("id, title, creator_name, creator_id, monetization_type, price, status, type, description, tags")
+    .eq("status", "published")
+    .eq("type", "video")
+    .limit(200);
 
   const ent = await buildEntitlements(supabase, userId);
 
-  const enriched = moments.map((m: any) => {
-    const ci = m.content_items;
-    const access = hasAccessToContent(ci, ent.purchasedIds, ent.subscribedCreatorIds);
-    const filtered = applyPreviewPolicy(m, access);
-    return {
-      ...filtered,
-      video_title: ci.title,
-      creator_name: ci.creator_name,
-      score: computeRelevance(queryTokens, m),
-    };
-  });
+  // Score moments from moment_index
+  const indexedVideoIds = new Set<string>();
+  const enriched: any[] = [];
 
-  // Filter out zero-score results (no relevance at all)
+  if (moments && moments.length > 0) {
+    for (const m of moments) {
+      const ci = m.content_items;
+      indexedVideoIds.add(ci.id);
+      const access = hasAccessToContent(ci, ent.purchasedIds, ent.subscribedCreatorIds);
+      const filtered = applyPreviewPolicy(m, access);
+
+      // Score: moment transcript + video title/description/tags
+      let score = computeRelevance(queryTokens, m);
+      // Bonus for title/description match
+      const titleDesc = `${ci.title || ""} ${ci.description || ""} ${(ci.tags || []).join(" ")}`.toLowerCase();
+      for (const token of queryTokens) {
+        if (titleDesc.includes(token)) score += 2;
+      }
+
+      enriched.push({
+        ...filtered,
+        video_title: ci.title,
+        creator_name: ci.creator_name,
+        score,
+      });
+    }
+  }
+
+  // 3) For unindexed videos, create synthetic "whole video" results matched by title/description/tags
+  if (allVideos) {
+    for (const v of allVideos) {
+      if (indexedVideoIds.has(v.id)) continue;
+
+      const searchText = `${v.title || ""} ${v.description || ""} ${(v.tags || []).join(" ")} ${v.creator_name || ""}`.toLowerCase();
+      let score = 0;
+      let matchedTokens = 0;
+      for (const token of queryTokens) {
+        if (searchText.includes(token)) {
+          score += 2;
+          matchedTokens++;
+        }
+      }
+      // Coverage bonus
+      if (queryTokens.length > 0) {
+        score += (matchedTokens / queryTokens.length) * 2;
+      }
+
+      if (score > 0) {
+        const access = hasAccessToContent(v, ent.purchasedIds, ent.subscribedCreatorIds);
+        enriched.push({
+          id: `synth-${v.id}`,
+          video_id: v.id,
+          start_sec: 0,
+          end_sec: 0,
+          transcript_snippet: v.description || v.title || "",
+          entity_tags: [],
+          action_tags: [],
+          emotion_tags: [],
+          visual_caption: null,
+          access: access ? "allowed" : "locked",
+          video_title: v.title,
+          creator_name: v.creator_name,
+          score,
+        });
+      }
+    }
+  }
+
+  // Sort by relevance
+  enriched.sort((a: any, b: any) => b.score - a.score);
+
+  // Filter zero-score
   const relevant = enriched.filter((e: any) => e.score > 0);
-  relevant.sort((a: any, b: any) => b.score - a.score);
 
-  // If no relevant results, fall back to title matching
   if (relevant.length === 0) {
-    const titleMatched = enriched.filter((e: any) => {
-      const title = (e.video_title || "").toLowerCase();
-      return queryTokens.some(t => title.includes(t));
-    });
-    titleMatched.sort((a: any, b: any) => b.score - a.score);
-    return {
-      best: titleMatched[0] || null,
-      moreVideos: titleMatched.slice(1),
-      montageCandidates: titleMatched.filter((e: any) => e.access === "allowed").slice(0, 5),
-    };
+    return { best: null, moreVideos: [], montageCandidates: [] };
   }
 
   return {
@@ -359,7 +411,7 @@ async function handleSearch(supabase: any, userId: string, body: any) {
   // Persist results for moments that exist
   if (results.best) {
     const allResults = [results.best, ...results.moreVideos].filter(
-      (r: any) => r.id,
+      (r: any) => r.id && !String(r.id).startsWith("synth-"),
     );
     const inserts = allResults.map((r: any) => ({
       query_id: query.id,
@@ -610,10 +662,9 @@ Deno.serve(async (req) => {
 
   let userId: string | null = null;
   if (authHeader?.startsWith("Bearer ")) {
-    const token = authHeader.replace("Bearer ", "");
-    const { data, error: claimsErr } = await supabase.auth.getClaims(token);
-    if (!claimsErr && data?.claims?.sub) {
-      userId = data.claims.sub as string;
+    const { data: { user }, error: authErr } = await supabase.auth.getUser();
+    if (!authErr && user) {
+      userId = user.id;
     }
   }
 
