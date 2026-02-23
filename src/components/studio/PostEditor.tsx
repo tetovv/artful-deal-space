@@ -17,7 +17,7 @@ import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
+import { cn, sanitizeStorageName } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { ContentPreview } from "@/components/studio/ContentPreview";
 
@@ -118,7 +118,7 @@ export function PostEditor({ editItem, onClose, onSaved }: PostEditorProps) {
     setSaving(true); setUploading(true); setUploadProgress(10);
     try {
       let thumbnailUrl = editItem?.thumbnail || "";
-      if (imageFile) { setUploadProgress(40); thumbnailUrl = await uploadFileToStorage(imageFile, `${user.id}/posts/${Date.now()}_${imageFile.name}`); setUploadProgress(80); }
+      if (imageFile) { setUploadProgress(40); thumbnailUrl = await uploadFileToStorage(imageFile, `${user.id}/posts/${Date.now()}_${sanitizeStorageName(imageFile.name)}`); setUploadProgress(80); }
       setUploadProgress(90);
 
       let scheduledAtUtc: string | null = null;

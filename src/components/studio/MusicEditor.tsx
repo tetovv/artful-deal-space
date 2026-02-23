@@ -18,7 +18,7 @@ import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
+import { cn, sanitizeStorageName } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { ContentPreview } from "@/components/studio/ContentPreview";
 
@@ -180,11 +180,11 @@ export function MusicEditor({ editItem, onClose, onSaved }: MusicEditorProps) {
 
       if (audioFile) {
         setUploadProgress(30);
-        audioUrl = await uploadFileToStorage(audioFile, `${user.id}/music/${Date.now()}_${audioFile.name}`);
+        audioUrl = await uploadFileToStorage(audioFile, `${user.id}/music/${Date.now()}_${sanitizeStorageName(audioFile.name)}`);
         setUploadProgress(60);
       }
       if (coverFile) {
-        thumbnailUrl = await uploadFileToStorage(coverFile, `${user.id}/music/covers/${Date.now()}_${coverFile.name}`);
+        thumbnailUrl = await uploadFileToStorage(coverFile, `${user.id}/music/covers/${Date.now()}_${sanitizeStorageName(coverFile.name)}`);
         setUploadProgress(80);
       }
 
