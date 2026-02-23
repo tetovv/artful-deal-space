@@ -40,7 +40,7 @@ import { cn } from "@/lib/utils";
 
 /* ── Types ── */
 
-export type SmartState = "idle" | "querying" | "clarifying" | "results" | "no_results" | "error" | "index_not_ready";
+export type SmartState = "idle" | "querying" | "clarifying" | "results" | "no_results" | "error" | "index_not_ready" | "pick_type";
 type SmartContentType = "video" | "podcast" | "all";
 
 export type ResultCounts = Record<string, number>;
@@ -51,6 +51,7 @@ interface SmartSearchInlineProps {
   onSwitchToNormal: () => void;
   standardResults?: any[];
   onResultCounts?: (counts: ResultCounts, state: SmartState) => void;
+  onAutoSelectType?: (type: string) => void;
 }
 
 /* ── Helpers ── */
@@ -272,7 +273,7 @@ function MontageBar({ count, onOpen }: { count: number; onOpen: () => void }) {
 
 /* ── Main Component ── */
 
-export function SmartSearchInline({ query, contentType, onSwitchToNormal, standardResults, onResultCounts }: SmartSearchInlineProps) {
+export function SmartSearchInline({ query, contentType, onSwitchToNormal, standardResults, onResultCounts, onAutoSelectType }: SmartSearchInlineProps) {
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -287,18 +288,16 @@ export function SmartSearchInline({ query, contentType, onSwitchToNormal, standa
   // Results
   const [meaningResults, setMeaningResults] = useState<SearchResults | null>(null);
 
-  // Tabs for "all" mode
-  const [resultTab, setResultTab] = useState<"meaning" | "standard">("meaning");
 
   // Montage
   const [montageOpen, setMontageOpen] = useState(false);
 
+  // Per-type counts for pick_type panel
+  const [pickTypeCounts, setPickTypeCounts] = useState<ResultCounts>({});
+
   // AbortController for in-flight requests
   const abortRef = useRef<AbortController | null>(null);
 
-  // Count how many types have hits
-  const meaningHasHits = meaningResults?.best !== null;
-  const standardHasHits = (standardResults?.length ?? 0) > 0;
 
   const allMoments = useMemo(() => {
     if (!meaningResults) return [];
@@ -367,7 +366,6 @@ export function SmartSearchInline({ query, contentType, onSwitchToNormal, standa
     setAnswers({});
     setQueryId(null);
     setMeaningResults(null);
-    setResultTab("meaning");
   }, []);
 
   // Auto-submit when query changes
@@ -405,7 +403,14 @@ export function SmartSearchInline({ query, contentType, onSwitchToNormal, standa
           setState("clarifying");
         } else {
           setMeaningResults(mock.results);
-          setState(mock.results.best ? "results" : "no_results");
+          const hasRes = !!mock.results.best;
+          if (contentType === "all" && hasRes) {
+            // For mock: auto-select video since mocks are video-based
+            onAutoSelectType?.("video");
+            setState("results");
+          } else {
+            setState(hasRes ? "results" : "no_results");
+          }
         }
         return;
       }
@@ -501,7 +506,32 @@ export function SmartSearchInline({ query, contentType, onSwitchToNormal, standa
 
       setMeaningResults(combinedResults);
       const hasResults = combinedResults.best !== null || combinedResults.moreVideos.length > 0;
-      setState(hasResults ? "results" : "no_results");
+
+      // Gate: when searching "all" types, don't show mixed results
+      if (contentType === "all" && hasResults) {
+        // Compute per-type counts
+        const counts: ResultCounts = {};
+        const meaningCount = (combinedResults.best ? 1 : 0) + combinedResults.moreVideos.length;
+        counts.video = meaningCount;
+        counts.podcast = 0; // podcast meaning search results counted separately if available
+        if (standardResults) {
+          for (const item of standardResults) {
+            const t = item.type || "other";
+            counts[t] = (counts[t] || 0) + 1;
+          }
+        }
+        const typesWithHits = Object.entries(counts).filter(([, v]) => v > 0).map(([k]) => k);
+        if (typesWithHits.length === 1) {
+          // Auto-select the single matching type
+          onAutoSelectType?.(typesWithHits[0]);
+          setState("results"); // will re-render with specific type via parent
+        } else {
+          setPickTypeCounts(counts);
+          setState("pick_type");
+        }
+      } else {
+        setState(hasResults ? "results" : "no_results");
+      }
     } catch (err: any) {
       if (err?.name === "AbortError") return; // Aborted intentionally
       setState("error");
@@ -696,7 +726,58 @@ export function SmartSearchInline({ query, contentType, onSwitchToNormal, standa
     );
   }
 
-  /* ── NO RESULTS ── */
+  /* ── PICK TYPE (multiple types matched, user must choose) ── */
+  if (state === "pick_type") {
+    const typeChipIcons: Record<string, React.ComponentType<{ className?: string }>> = {
+      video: Film,
+      podcast: Mic,
+    };
+    const typeChipLabels: Record<string, string> = {
+      video: "Видео",
+      podcast: "Подкасты",
+      music: "Музыка",
+      post: "Посты",
+      book: "Книги",
+      template: "Шаблоны",
+    };
+    const matchingTypes = Object.entries(pickTypeCounts)
+      .filter(([, v]) => v > 0)
+      .sort(([, a], [, b]) => b - a);
+
+    return (
+      <div className="py-10 space-y-5 animate-fade-in">
+        <div className="flex flex-col items-center gap-3 text-center">
+          <div className="h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center">
+            <Sparkles className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <p className="text-base font-medium text-foreground">Найдено в нескольких типах</p>
+            <p className="text-sm text-muted-foreground mt-1">Выберите тип, чтобы посмотреть результаты</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2 justify-center">
+          {matchingTypes.map(([type, count]) => {
+            const Icon = typeChipIcons[type] || Layers;
+            return (
+              <button
+                key={type}
+                onClick={() => onAutoSelectType?.(type)}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border border-border bg-card hover:bg-muted/50 transition-colors text-sm font-medium text-foreground"
+              >
+                <Icon className="h-4 w-4 text-muted-foreground" />
+                {typeChipLabels[type] || type}
+                <Badge variant="secondary" className="text-[10px] h-[18px] min-w-[18px] px-1 rounded-full">
+                  {count}
+                </Badge>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+
   if (state === "no_results") {
     const words = query.split(/\s+/).filter((w) => w.length > 2);
     const base = words.slice(0, 2).join(" ");
@@ -734,47 +815,15 @@ export function SmartSearchInline({ query, contentType, onSwitchToNormal, standa
     );
   }
 
-  /* ── RESULTS ── */
-  const showTabsForAll = contentType === "all" && (meaningHasHits || standardHasHits);
+  /* ── RESULTS (only rendered for a specific content type, never mixed) ── */
 
   return (
     <div className="space-y-4 animate-fade-in">
-      {/* Tab bar for "all" mode */}
-      {showTabsForAll && (
-        <div className="flex gap-1 border-b border-border pb-0 mb-2">
-          <button
-            onClick={() => setResultTab("meaning")}
-            className={cn(
-              "px-4 py-2 text-sm font-medium border-b-2 transition-colors",
-              resultTab === "meaning"
-                ? "border-primary text-primary"
-                : "border-transparent text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <Sparkles className="h-3.5 w-3.5 inline mr-1.5 -mt-0.5" />
-            По смыслу
-            {meaningHasHits && <Badge variant="secondary" className="ml-1.5 text-[10px] h-4 px-1">{allMoments.length}</Badge>}
-          </button>
-          <button
-            onClick={() => setResultTab("standard")}
-            className={cn(
-              "px-4 py-2 text-sm font-medium border-b-2 transition-colors",
-              resultTab === "standard"
-                ? "border-primary text-primary"
-                : "border-transparent text-muted-foreground hover:text-foreground",
-            )}
-          >
-            Обычные
-            {standardHasHits && <Badge variant="secondary" className="ml-1.5 text-[10px] h-4 px-1">{standardResults?.length}</Badge>}
-          </button>
-        </div>
-      )}
-
       {/* Montage bar — above results, non-sticky, secondary */}
       <MontageBar count={montageCount} onOpen={() => setMontageOpen(true)} />
 
       {/* Meaning results */}
-      {(resultTab === "meaning" || !showTabsForAll) && meaningResults && (
+      {meaningResults && (
         <div className="space-y-5">
           {meaningResults.best && (
             <div>
@@ -807,15 +856,6 @@ export function SmartSearchInline({ query, contentType, onSwitchToNormal, standa
               </div>
             </div>
           )}
-        </div>
-      )}
-
-      {/* Standard results (for "all" mode) */}
-      {resultTab === "standard" && showTabsForAll && standardResults && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {standardResults.map((item: any) => (
-            <ContentCard key={item.id} item={item} />
-          ))}
         </div>
       )}
 
