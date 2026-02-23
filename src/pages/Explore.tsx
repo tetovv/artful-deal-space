@@ -101,7 +101,7 @@ const Explore = () => {
   const handleResultCounts = useCallback((counts: ResultCounts, st: SmartState) => {
     setResultCounts(counts);
     setSmartState(st);
-    if (st === "results") {
+    if (st === "results" || st === "pick_type") {
       const tabsWithHits = new Set(Object.entries(counts).filter(([, v]) => v > 0).map(([k]) => k));
       setPulsingTabs(tabsWithHits);
       const timer = setTimeout(() => setPulsingTabs(new Set()), 1600);
@@ -109,6 +109,13 @@ const Explore = () => {
     } else {
       setPulsingTabs(new Set());
     }
+  }, []);
+
+  const handleAutoSelectType = useCallback((type: string) => {
+    setActiveType(type as ContentType);
+    // Pulse the auto-selected tab briefly
+    setPulsingTabs(new Set([type]));
+    setTimeout(() => setPulsingTabs(new Set()), 1600);
   }, []);
 
   const { data: dbItems, isLoading, isError, refetch } = useContentItems();
@@ -312,7 +319,7 @@ const Explore = () => {
                 const isActive = activeType === t;
                 const count = resultCounts[t] || 0;
                 const hasPulse = isSmartActive && pulsingTabs.has(t);
-                const hasCount = isSmartActive && smartState === "results" && count > 0;
+                const hasCount = isSmartActive && (smartState === "results" || smartState === "pick_type") && count > 0;
 
                 return (
                   <button
@@ -391,6 +398,7 @@ const Explore = () => {
               onSwitchToNormal={handleSwitchToNormal}
               standardResults={activeType === null ? filtered : undefined}
               onResultCounts={handleResultCounts}
+              onAutoSelectType={handleAutoSelectType}
             />
           </>
         )}
