@@ -40,7 +40,7 @@ const typeIcons: Record<string, React.ComponentType<{ className?: string }>> = {
   template: Layout,
 };
 
-type SearchState = "idle" | "loading" | "results" | "no_results" | "error";
+type SearchState = "idle" | "loading" | "results" | "no_results" | "error" | "pick_type";
 type VideoSearchMode = "normal" | "meaning";
 
 const SMART_TYPES = new Set<string>(["video", "podcast"]);
@@ -157,9 +157,25 @@ const Explore = () => {
     });
   }, [allItems, committedQuery, activeType]);
 
+  // Group standard results by type for gating
+  const standardCountsByType = useMemo(() => {
+    if (!committedQuery) return {} as Record<string, number>;
+    const counts: Record<string, number> = {};
+    const q = committedQuery.toLowerCase();
+    for (const item of allItems) {
+      const match = item.title.toLowerCase().includes(q) ||
+        (item.description || "").toLowerCase().includes(q) ||
+        (item.tags || []).some((t: string) => t.toLowerCase().includes(q));
+      if (match) {
+        counts[item.type] = (counts[item.type] || 0) + 1;
+      }
+    }
+    return counts;
+  }, [allItems, committedQuery]);
+
   // Derive state from data (standard mode only)
   useEffect(() => {
-    if (isSmartActive) return; // smart mode handles its own state
+    if (isSmartActive) return;
     if (isError) {
       setSearchState("error");
       setError(true);
@@ -173,12 +189,33 @@ const Explore = () => {
       setSearchState("idle");
       return;
     }
-    if (filtered.length === 0) {
+    const totalHits = Object.values(standardCountsByType).reduce((a, b) => a + b, 0);
+    if (totalHits === 0) {
       setSearchState("no_results");
-    } else {
-      setSearchState("results");
+      setPulsingTabs(new Set());
+      setResultCounts({});
+      return;
     }
-  }, [isLoading, isError, committedQuery, filtered.length, isSmartActive]);
+    // If no type selected, gate by type selection
+    if (!activeType) {
+      const typesWithHits = Object.keys(standardCountsByType);
+      setResultCounts(standardCountsByType);
+      if (typesWithHits.length === 1) {
+        // Auto-select the only matching type
+        setActiveType(typesWithHits[0] as ContentType);
+        setPulsingTabs(new Set(typesWithHits));
+        setTimeout(() => setPulsingTabs(new Set()), 1600);
+        setSearchState("results");
+      } else {
+        // Multiple types — show pick-type panel
+        setPulsingTabs(new Set(typesWithHits));
+        setTimeout(() => setPulsingTabs(new Set()), 1600);
+        setSearchState("pick_type" as SearchState);
+      }
+    } else {
+      setSearchState(filtered.length === 0 ? "no_results" : "results");
+    }
+  }, [isLoading, isError, committedQuery, standardCountsByType, activeType, isSmartActive, filtered.length]);
 
   // Auto-run search from URL on mount
   useEffect(() => {
@@ -318,8 +355,8 @@ const Explore = () => {
                 const Icon = typeIcons[t] || Layers;
                 const isActive = activeType === t;
                 const count = resultCounts[t] || 0;
-                const hasPulse = isSmartActive && pulsingTabs.has(t);
-                const hasCount = isSmartActive && (smartState === "results" || smartState === "pick_type") && count > 0;
+                const hasPulse = pulsingTabs.has(t);
+                const hasCount = ((isSmartActive && (smartState === "results" || smartState === "pick_type")) || (!isSmartActive && searchState === ("pick_type" as SearchState))) && count > 0;
 
                 return (
                   <button
@@ -482,6 +519,37 @@ const Explore = () => {
                       {s}
                     </button>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {/* Pick type (standard mode, multiple types matched) */}
+            {searchState === ("pick_type" as SearchState) && (
+              <div className="flex justify-center py-8">
+                <div className="w-full max-w-[560px] rounded-xl border border-border bg-card p-5 sm:p-6 space-y-4 animate-fade-in text-center">
+                  <Layers className="h-8 w-8 mx-auto text-primary/60" />
+                  <p className="text-base font-medium text-foreground">Найдено в нескольких типах</p>
+                  <div className="flex flex-wrap gap-2 justify-center">
+                    {Object.entries(resultCounts)
+                      .filter(([, v]) => v > 0)
+                      .map(([t, count]) => {
+                        const Icon = typeIcons[t] || Layers;
+                        return (
+                          <button
+                            key={t}
+                            onClick={() => setActiveType(t as ContentType)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border bg-muted/30 text-sm font-medium text-foreground hover:bg-primary/10 hover:border-primary/40 transition-colors"
+                          >
+                            <Icon className="h-3.5 w-3.5" />
+                            {typeLabels[t] || t}
+                            <Badge variant="secondary" className="ml-0.5 h-[18px] min-w-[18px] px-1 text-[10px] leading-none font-semibold rounded-full">
+                              {count}
+                            </Badge>
+                          </button>
+                        );
+                      })}
+                  </div>
+                  <p className="text-xs text-muted-foreground">Выберите тип, чтобы посмотреть результаты</p>
                 </div>
               </div>
             )}
