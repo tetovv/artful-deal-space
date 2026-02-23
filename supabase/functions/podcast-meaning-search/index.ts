@@ -113,15 +113,52 @@ function needsClarification(queryText: string, preferences: Record<string, strin
   return { needed: hasCritical && questions.length > 0, questions };
 }
 
-/* ── mock search ── */
+/* ── text relevance scoring ── */
 
-async function mockSearch(supabase: any, _queryText: string, includePrivate: boolean, userId: string) {
+function tokenize(text: string): string[] {
+  return text.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/).filter(w => w.length > 2);
+}
+
+function computeRelevance(queryTokens: string[], moment: Record<string, any>): number {
+  const snippet = ((moment.transcript_snippet as string) || "").toLowerCase();
+  const caption = ((moment.visual_caption as string) || "").toLowerCase();
+  const entities = (moment.entity_tags || []).map((t: any) => (typeof t === "string" ? t : t.label || "").toLowerCase());
+  const actions = (moment.action_tags || []).map((t: any) => (typeof t === "string" ? t : t.label || "").toLowerCase());
+  const emotions = (moment.emotion_tags || []).map((t: any) => (typeof t === "string" ? t : t.label || "").toLowerCase());
+
+  const allText = [snippet, caption, ...entities, ...actions, ...emotions].join(" ");
+
+  let score = 0;
+  let matchedTokens = 0;
+
+  for (const token of queryTokens) {
+    if (snippet.includes(token)) {
+      score += 3;
+      matchedTokens++;
+    } else if (caption.includes(token)) {
+      score += 2;
+      matchedTokens++;
+    } else if (allText.includes(token)) {
+      score += 1;
+      matchedTokens++;
+    }
+  }
+
+  const coverage = queryTokens.length > 0 ? matchedTokens / queryTokens.length : 0;
+  score += coverage * 2;
+
+  return score;
+}
+
+async function semanticSearch(supabase: any, queryText: string, includePrivate: boolean, userId: string) {
+  const queryTokens = tokenize(queryText);
+
   const { data: moments } = await supabase
     .from("moment_index")
     .select("*, content_items!inner(id, title, creator_name, creator_id, monetization_type, price, status, type)")
     .eq("content_items.status", "published")
     .eq("content_items.type", "podcast")
-    .limit(20);
+    .limit(100);
 
   if (!moments || moments.length === 0) {
     return { best: null, moreVideos: [], montageCandidates: [] };
@@ -135,14 +172,29 @@ async function mockSearch(supabase: any, _queryText: string, includePrivate: boo
       ...applyPreviewPolicy(m, access),
       video_title: ci.title,
       creator_name: ci.creator_name,
-      score: Math.random(),
+      score: computeRelevance(queryTokens, m),
     };
   });
-  enriched.sort((a: any, b: any) => b.score - a.score);
+
+  const relevant = enriched.filter((e: any) => e.score > 0);
+  relevant.sort((a: any, b: any) => b.score - a.score);
+
+  if (relevant.length === 0) {
+    const titleMatched = enriched.filter((e: any) => {
+      const title = (e.video_title || "").toLowerCase();
+      return queryTokens.some(t => title.includes(t));
+    });
+    return {
+      best: titleMatched[0] || null,
+      moreVideos: titleMatched.slice(1),
+      montageCandidates: titleMatched.filter((e: any) => e.access === "allowed").slice(0, 5),
+    };
+  }
+
   return {
-    best: enriched[0] || null,
-    moreVideos: enriched.slice(1),
-    montageCandidates: enriched.filter((e: any) => e.access === "allowed").slice(0, 5),
+    best: relevant[0] || null,
+    moreVideos: relevant.slice(1),
+    montageCandidates: relevant.filter((e: any) => e.access === "allowed").slice(0, 5),
   };
 }
 
@@ -177,7 +229,7 @@ async function handleSearch(supabase: any, userId: string, body: any) {
     return json({ needsClarification: true, queryId: query.id, questions: clarification.questions });
   }
 
-  const results = await mockSearch(supabase, queryText, includePrivate, userId);
+  const results = await semanticSearch(supabase, queryText, includePrivate, userId);
 
   if (results.best) {
     const all = [results.best, ...results.moreVideos].filter((r: any) => r.id);
@@ -204,7 +256,7 @@ async function handleClarify(supabase: any, userId: string, body: any) {
   const clarifications = [...((existing.clarifications as any[]) || []), { answers: answersJson, at: new Date().toISOString() }];
   await supabase.from("video_search_queries").update({ clarifications, status: "completed" }).eq("id", queryId);
 
-  const results = await mockSearch(supabase, existing.query_text, existing.include_private_sources, userId);
+  const results = await semanticSearch(supabase, existing.query_text, existing.include_private_sources, userId);
   return json({ queryId, results });
 }
 
