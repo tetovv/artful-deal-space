@@ -94,7 +94,6 @@ const Explore = () => {
     if (filters.family !== DEFAULT_FILTERS.family) count++;
     if (filters.duration !== DEFAULT_FILTERS.duration) count++;
     if (filters.timeRange !== DEFAULT_FILTERS.timeRange) count++;
-    if (filters.excludeShorts !== DEFAULT_FILTERS.excludeShorts) count++;
     if (filters.quoteMode !== DEFAULT_FILTERS.quoteMode) count++;
     return count;
   }, [filters]);
