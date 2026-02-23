@@ -18,7 +18,7 @@ import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
+import { cn, sanitizeStorageName } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { ContentPreview } from "@/components/studio/ContentPreview";
 
@@ -157,8 +157,8 @@ export function PodcastEditor({ editItem, onClose, onSaved }: PodcastEditorProps
     try {
       let audioUrl = editItem?.video_url || "";
       let thumbnailUrl = editItem?.thumbnail || "";
-      if (audioFile) { setUploadProgress(30); audioUrl = await uploadFileToStorage(audioFile, `${user.id}/podcasts/${Date.now()}_${audioFile.name}`); setUploadProgress(60); }
-      if (coverFile) { thumbnailUrl = await uploadFileToStorage(coverFile, `${user.id}/podcasts/covers/${Date.now()}_${coverFile.name}`); setUploadProgress(80); }
+      if (audioFile) { setUploadProgress(30); audioUrl = await uploadFileToStorage(audioFile, `${user.id}/podcasts/${Date.now()}_${sanitizeStorageName(audioFile.name)}`); setUploadProgress(60); }
+      if (coverFile) { thumbnailUrl = await uploadFileToStorage(coverFile, `${user.id}/podcasts/covers/${Date.now()}_${sanitizeStorageName(coverFile.name)}`); setUploadProgress(80); }
       setUploadProgress(90);
 
       let scheduledAtUtc: string | null = null;

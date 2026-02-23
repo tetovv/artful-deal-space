@@ -20,7 +20,7 @@ import { Slider } from "@/components/ui/slider";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
+import { cn, sanitizeStorageName } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { ContentPreview } from "@/components/studio/ContentPreview";
 
@@ -439,17 +439,17 @@ export function VideoEditor({ editItem, onClose, onSaved }: VideoEditorProps) {
 
       if (videoFile) {
         setUploadProgress(20);
-        videoUrl = await uploadFile(videoFile, `${user.id}/videos/${Date.now()}_${videoFile.name}`);
+        videoUrl = await uploadFile(videoFile, `${user.id}/videos/${Date.now()}_${sanitizeStorageName(videoFile.name)}`);
         setUploadProgress(60);
       }
 
       if (thumbnailFile) {
-        thumbnailUrl = await uploadFile(thumbnailFile, `${user.id}/thumbnails/${Date.now()}_${thumbnailFile.name}`);
+        thumbnailUrl = await uploadFile(thumbnailFile, `${user.id}/thumbnails/${Date.now()}_${sanitizeStorageName(thumbnailFile.name)}`);
         setUploadProgress(75);
       }
 
       if (subtitleFile) {
-        subtitlesUrl = await uploadFile(subtitleFile, `${user.id}/subtitles/${Date.now()}_${subtitleFile.name}`);
+        subtitlesUrl = await uploadFile(subtitleFile, `${user.id}/subtitles/${Date.now()}_${sanitizeStorageName(subtitleFile.name)}`);
       }
 
       setUploadProgress(85);

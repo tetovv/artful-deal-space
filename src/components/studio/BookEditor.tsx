@@ -18,7 +18,7 @@ import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
+import { cn, sanitizeStorageName } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { ContentPreview } from "@/components/studio/ContentPreview";
 
@@ -240,13 +240,13 @@ export function BookEditor({ editItem, onClose, onSaved }: BookEditorProps) {
 
       if (coverFile) {
         setUploadProgress(30);
-        thumbnailUrl = await uploadFile(coverFile, `${user.id}/books/covers/${Date.now()}_${coverFile.name}`);
+        thumbnailUrl = await uploadFile(coverFile, `${user.id}/books/covers/${Date.now()}_${sanitizeStorageName(coverFile.name)}`);
         setUploadProgress(50);
       }
 
       if (bookFile) {
         setUploadProgress(60);
-        bookUrl = await uploadFile(bookFile, `${user.id}/books/files/${Date.now()}_${bookFile.name}`);
+        bookUrl = await uploadFile(bookFile, `${user.id}/books/files/${Date.now()}_${sanitizeStorageName(bookFile.name)}`);
         setUploadProgress(85);
       }
 
