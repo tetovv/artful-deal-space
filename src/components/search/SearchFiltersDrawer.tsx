@@ -22,7 +22,6 @@ export interface SearchFilters {
   meaningMode: boolean;
   duration: "any" | "short" | "medium" | "full";
   timeRange: "any" | "12m";
-  excludeShorts: boolean;
   quoteMode: boolean;
 }
 
@@ -33,7 +32,6 @@ export const DEFAULT_FILTERS: SearchFilters = {
   meaningMode: false,
   duration: "any",
   timeRange: "any",
-  excludeShorts: false,
   quoteMode: false,
 };
 
@@ -46,7 +44,6 @@ export function filtersToParams(f: SearchFilters): Record<string, string> {
   if (f.meaningMode) p.mode = "meaning";
   if (f.duration !== "any") p.dur = f.duration;
   if (f.timeRange !== "any") p.time = f.timeRange;
-  if (f.excludeShorts) p.noshorts = "1";
   if (f.quoteMode) p.quote = "1";
   return p;
 }
@@ -59,7 +56,6 @@ export function paramsToFilters(p: URLSearchParams): SearchFilters {
     meaningMode: p.get("mode") === "meaning" || p.get("mode") === "smart",
     duration: (p.get("dur") as SearchFilters["duration"]) || "any",
     timeRange: (p.get("time") as SearchFilters["timeRange"]) || "any",
-    excludeShorts: p.get("noshorts") === "1",
     quoteMode: p.get("quote") === "1",
   };
 }
@@ -257,12 +253,6 @@ export function SearchFiltersDrawer({
                 value={draft.timeRange}
                 options={timeOptions}
                 onChange={(v) => update("timeRange", v)}
-              />
-              <ToggleRow
-                label="Исключить шортсы"
-                description="Не показывать короткие клипы"
-                checked={draft.excludeShorts}
-                onChange={(v) => update("excludeShorts", v)}
               />
             </>
           )}

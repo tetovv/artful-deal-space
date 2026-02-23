@@ -461,7 +461,7 @@ const QUERIES: MockQueryDef[] = [
 
   /* 10 ─ Negative constraint → direct but few results */
   {
-    queryText: "без шортсов, не из этого шоу",
+    queryText: "не из этого шоу, только длинные",
     needsClarification: false,
     results: {
       best: moment({
@@ -477,7 +477,7 @@ const QUERIES: MockQueryDef[] = [
       montageCandidates: [],
     },
     queryData: {
-      query_text: "без шортсов, не из этого шоу",
+      query_text: "не из этого шоу, только длинные",
       preferences: {},
       include_private_sources: false,
     },
