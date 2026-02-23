@@ -181,7 +181,7 @@ function SourceCard({ moments, isBest, onJump, onPaywall }: {
   );
 }
 
-/* ── Clarification Panel (inline, compact) ── */
+/* ── Clarification Panel (centered card, max ~720px) ── */
 
 function ClarificationPanel({
   query,
@@ -199,52 +199,59 @@ function ClarificationPanel({
   onSkip: () => void;
 }) {
   return (
-    <div className="rounded-xl border border-border bg-card p-4 sm:p-5 space-y-4 max-w-2xl">
-      <div className="flex items-center gap-2.5">
-        <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-          <Sparkles className="h-4 w-4 text-primary" />
-        </div>
-        <div className="min-w-0">
-          <h3 className="text-sm font-semibold text-foreground">Уточним запрос</h3>
-          <p className="text-xs text-muted-foreground truncate">«{query}»</p>
-        </div>
-      </div>
-
-      <div className="space-y-3">
-        {questions.slice(0, 2).map((q) => (
-          <div key={q.id} className="space-y-2">
-            <div>
-              <p className="text-sm font-medium text-foreground">{q.text}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">{q.reason}</p>
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {q.options.map((opt) => (
-                <button
-                  key={opt.value}
-                  onClick={() => onAnswerChange(q.id, opt.value)}
-                  className={cn(
-                    "px-3 py-1.5 rounded-full border text-xs transition-colors",
-                    answers[q.id] === opt.value
-                      ? "border-primary bg-primary/10 text-primary font-medium"
-                      : "border-border text-muted-foreground hover:bg-muted/50",
-                  )}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
+    <div className="flex justify-center py-6">
+      <div className="w-full max-w-[720px] rounded-xl border border-border bg-card p-5 sm:p-6 space-y-5 animate-fade-in">
+        {/* Header */}
+        <div className="flex items-center gap-3">
+          <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+            <Sparkles className="h-4 w-4 text-primary" />
           </div>
-        ))}
-      </div>
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold text-foreground">Уточним запрос</h3>
+            <p className="text-xs text-muted-foreground truncate">«{query}»</p>
+          </div>
+        </div>
 
-      <div className="flex items-center gap-3 pt-1">
-        <Button size="sm" className="h-9 px-5" onClick={onSubmit}>
-          Продолжить
-        </Button>
-        <Button size="sm" variant="ghost" className="h-9 text-muted-foreground" onClick={onSkip}>
-          <SkipForward className="h-3.5 w-3.5 mr-1.5" />
-          Пропустить
-        </Button>
+        {/* Questions */}
+        <div className="space-y-4">
+          {questions.slice(0, 2).map((q) => (
+            <div key={q.id} className="space-y-2">
+              <div>
+                <p className="text-sm font-medium text-foreground">{q.text}</p>
+                {q.reason && (
+                  <p className="text-xs text-muted-foreground mt-0.5">{q.reason}</p>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {q.options.map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => onAnswerChange(q.id, opt.value)}
+                    className={cn(
+                      "px-3 py-1.5 rounded-full border text-xs transition-colors",
+                      answers[q.id] === opt.value
+                        ? "border-primary bg-primary/10 text-primary font-medium"
+                        : "border-border text-muted-foreground hover:bg-muted/50",
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Actions — right-aligned: Skip (text) then Continue (primary) */}
+        <div className="flex items-center justify-end gap-3 pt-1 border-t border-border">
+          <Button size="sm" variant="ghost" className="h-9 text-xs text-muted-foreground" onClick={onSkip}>
+            <SkipForward className="h-3.5 w-3.5 mr-1.5" />
+            Пропустить
+          </Button>
+          <Button size="sm" className="h-9 px-5 text-xs" onClick={onSubmit}>
+            Продолжить
+          </Button>
+        </div>
       </div>
     </div>
   );
@@ -542,12 +549,10 @@ export function SmartSearchInline({ query, contentType, onSwitchToNormal, standa
     if (!queryId || !user) return;
     setState("querying");
 
-    // "Skip" sends explicit defaults; "Continue" sends user selections
-    const finalAnswers = skip
-      ? { skip: true }
-      : answers;
-
-    console.log("[analytics] smart_search_clarification_answered", { skipped: skip, answers: finalAnswers });
+    console.log("[analytics] smart_search_clarification_answered", {
+      skipped: skip,
+      answers: skip ? null : answers,
+    });
 
     if (skip) {
       toast({
@@ -572,17 +577,15 @@ export function SmartSearchInline({ query, contentType, onSwitchToNormal, standa
       };
 
       const endpoint = contentType === "podcast" ? "podcast-meaning-search" : "video-meaning-search";
+
+      // Different payloads for Continue vs Skip
+      const body = skip
+        ? { queryId, skip: true, applyDefaults: true, answersJson: null }
+        : { queryId, answersJson: answers };
+
       const res = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${endpoint}/clarify`,
-        {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
-            queryId,
-            answersJson: skip ? {} : finalAnswers,
-            skip: skip ? true : undefined,
-          }),
-        },
+        { method: "POST", headers, body: JSON.stringify(body) },
       );
 
       if (!res.ok) throw new Error();
@@ -594,7 +597,7 @@ export function SmartSearchInline({ query, contentType, onSwitchToNormal, standa
     } catch {
       setState("error");
     }
-  }, [queryId, user, questions, answers, contentType]);
+  }, [queryId, user, answers, contentType]);
 
   const handleJump = (videoId: string, sec: number) => {
     navigate(`/product/${videoId}?t=${Math.floor(sec)}`);
